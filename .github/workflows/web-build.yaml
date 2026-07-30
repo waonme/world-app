@@ -3,7 +3,7 @@ name: WebBuild
 on:
   push:
     tags: [ 'v*.*.*' ]
-    branches: [ 'main' ]
+    branches: [ 'main', 'dev' ]
 
 env:
   REGISTRY: ghcr.io
