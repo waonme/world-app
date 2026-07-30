@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: concrnt/concrnt-web
+  IMAGE_NAME: ${{ github.repository_owner }}/concrnt-web
 
 jobs:
   build:
@@ -100,7 +100,7 @@ jobs:
 
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: concrnt/concrnt-web
+      IMAGE_NAME: ${{ github.repository_owner }}/concrnt-web
 
     steps:
       - name: Download digests
