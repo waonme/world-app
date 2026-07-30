@@ -14,20 +14,21 @@ interface Props {
 
 const baseStyle: CSSProperties = {
     flexShrink: 0,
-    color: 'rgb(41, 46, 36)',
+    color: CssVar.contentText,
     fontSize: '16px',
     height: '24px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: '16px',
+    borderRadius: CssVar.roundFull,
     padding: '0 4px',
     width: 'fit-content'
 }
 
 const variantStyles = {
     contained: {
-        backgroundColor: 'rgba(0, 0, 0, 0.08)',
+        // 本文色の透過で地を作る(テーマ非依存)
+        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
         border: '1px solid transparent'
     },
     outlined: {

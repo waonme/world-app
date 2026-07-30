@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import * as mfm from 'mfm-js'
 import { Codeblock } from './Codeblock'
+import { CssVar } from '../types/Theme'
 import { Link } from './Link'
 import { type EmojiLite } from './CfmRenderer'
 import { CCImage } from '../contexts/CCImage'
@@ -246,7 +247,7 @@ const Search = ({ query }: { query: string }): ReactNode => {
                     width: '100%',
                     height: '40px',
                     fontSize: '16px',
-                    border: 'solid 1px #ddd',
+                    border: `solid 1px ${CssVar.divider}`,
                     borderRadius: '4px 0 0 4px',
                     boxSizing: 'border-box',
                     overflow: 'hidden',
@@ -267,7 +268,7 @@ const Search = ({ query }: { query: string }): ReactNode => {
                     flexShrink: 0,
                     margin: 0,
                     padding: '0 16px',
-                    border: 'solid 1px #ddd',
+                    border: `solid 1px ${CssVar.divider}`,
                     borderLeft: 'none',
                     borderRadius: '0 4px 4px 0',
                     background: 'none',
@@ -608,9 +609,9 @@ const RenderMfm = ({ ast, emojis }: RenderMfmProps): ReactNode => {
                 <span
                     style={{
                         fontFamily: 'Source Code Pro, monospace',
-                        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                        borderRadius: 1,
-                        border: '0.5px solid #ddd',
+                        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
+                        borderRadius: CssVar.round(0.5),
+                        border: `1px solid ${CssVar.divider}`,
                         padding: '0 0.5rem',
                         margin: '0 0.2rem'
                     }}
@@ -632,7 +633,7 @@ const RenderMfm = ({ ast, emojis }: RenderMfmProps): ReactNode => {
             return <Codeblock language="">{ast.props.formula}</Codeblock>
         case 'quote':
             return (
-                <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: '4px solid #ccc' }}>
+                <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: `4px solid ${CssVar.divider}` }}>
                     <RenderMfm ast={ast.children} emojis={emojis} />
                 </blockquote>
             )

@@ -170,15 +170,29 @@ const Spoiler = ({ children }: { children: ReactNode }) => {
     return (
         <span
             style={{
-                color: open ? 'text.disabled' : 'transparent',
-                backgroundColor: open ? 'transparent' : 'text.primary'
+                // 閉状態は本文色のバーで塗りつぶす
+                backgroundColor: open ? 'transparent' : CssVar.contentText,
+                cursor: open ? 'inherit' : 'pointer'
             }}
-            onClick={(e) => {
-                setOpen(!open)
+            onClickCapture={(e) => {
+                if (open) return
+                // colorの継承で隠す方式では画像(絵文字)や自前のcolorを持つリンクが透けるため
+                // opacityで隠す。opacityはヒットテストに影響しないので、隠れたリンクへの
+                // クリックはcapture段で握って遷移を止め、開示に変える
+                e.preventDefault()
                 e.stopPropagation()
+                setOpen(true)
             }}
         >
-            {children}
+            <span
+                aria-hidden={open ? undefined : true}
+                style={{
+                    opacity: open ? 1 : 0,
+                    userSelect: open ? 'auto' : 'none'
+                }}
+            >
+                {children}
+            </span>
         </span>
     )
 }
@@ -251,7 +265,7 @@ const RenderAst = ({ ast, emojis, imageNodes, oneline }: RenderAstProps): ReactN
                 )
             }
             return (
-                <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: '4px solid #ccc' }}>
+                <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: `4px solid ${CssVar.divider}` }}>
                     <RenderAst ast={ast.body} emojis={emojis} imageNodes={imageNodes} oneline={oneline} />
                 </blockquote>
             )
@@ -323,9 +337,9 @@ const RenderAst = ({ ast, emojis, imageNodes, oneline }: RenderAstProps): ReactN
                 <span
                     style={{
                         fontFamily: 'Source Code Pro, monospace',
-                        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                        borderRadius: 1,
-                        border: '0.5px solid #ddd',
+                        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
+                        borderRadius: CssVar.round(0.5),
+                        border: `1px solid ${CssVar.divider}`,
                         padding: '0 0.5rem',
                         margin: '0 0.2rem'
                     }}

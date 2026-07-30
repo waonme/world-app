@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Suspense, lazy } from 'react'
+import { CssVar } from '../types/Theme'
 
 // TODO: Load on plugin loaded
 // import abap from 'react-syntax-highlighter/dist/cjs/languages/prism/abap'
@@ -316,7 +317,7 @@ export function Codeblock(props: CodeblockProps): ReactNode {
     return (
         <div
             style={{
-                borderRadius: 1,
+                borderRadius: CssVar.round(0.5),
                 overflow: 'hidden'
             }}
         >
