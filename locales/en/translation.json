@@ -524,7 +524,6 @@
             "inspector": "Inspector"
         },
         "muteNotice": {
-            "mutedByBlock": "Post from a blocked user",
             "mutedByUser": "Post from a muted user",
             "mutedByWord": "Post with a muted word",
             "mutedByTimeline": "Post in a muted timeline",
