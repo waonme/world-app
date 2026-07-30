@@ -60,7 +60,8 @@ export const MessageContainer = (props: Props): ReactNode | null => {
     const mute = outerMute ?? targetMute
 
     if (mute) {
-        if (mute.entry?.hidePlaceholder) return null
+        // ブロックはミュートより強い意思表示なので、noticeも出さず完全に非表示にする
+        if (mute.reason === 'block' || mute.entry?.hidePlaceholder) return null
         const muteKey = muteMatchKey(mute)
         if (revealedMuteKey !== muteKey) {
             const matched = targetMute && target ? target : message

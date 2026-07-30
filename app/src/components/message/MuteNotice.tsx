@@ -15,14 +15,13 @@ export const MuteNotice = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'components.muteNotice' })
     const { client } = useClient()
 
+    // reason 'block' はMessageContainerが完全非表示にするため、ここには来ない
     const reasonLabel =
-        props.mute.reason === 'block'
-            ? t('mutedByBlock')
-            : props.mute.reason === 'user'
-              ? t('mutedByUser')
-              : props.mute.reason === 'word'
-                ? t('mutedByWord')
-                : t('mutedByTimeline')
+        props.mute.reason === 'user'
+            ? t('mutedByUser')
+            : props.mute.reason === 'word'
+              ? t('mutedByWord')
+              : t('mutedByTimeline')
 
     return (
         <div

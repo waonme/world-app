@@ -477,7 +477,6 @@
             "inspector": "インスペクター"
         },
         "muteNotice": {
-            "mutedByBlock": "ブロック中のユーザーの投稿",
             "mutedByUser": "ユーザーミュートした投稿",
             "mutedByWord": "ワードミュートした投稿",
             "mutedByTimeline": "タイムラインミュートした投稿",
