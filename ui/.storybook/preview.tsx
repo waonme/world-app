@@ -69,8 +69,8 @@ const preview: Preview = {
                                 '--round': themeData.round,
                                 '--accent': themeData.accent ?? themeData.content.link,
                                 '--danger': themeData.danger ?? '#d32f2f',
-                                '--text-secondary': 'rgb(from var(--content-text) r g b / 0.7)',
-                                '--text-disabled': 'rgb(from var(--content-text) r g b / 0.45)',
+                                '--text-secondary': 'color-mix(in srgb, var(--content-text) 70%, transparent)',
+                                '--text-disabled': 'color-mix(in srgb, var(--content-text) 45%, transparent)',
                                 '--scrim': 'rgba(0, 0, 0, 0.5)',
                                 '--shadow-1': '0 2px 8px rgba(0, 0, 0, 0.2)',
                                 '--shadow-2': '0 4px 8px rgba(0, 0, 0, 0.2)'

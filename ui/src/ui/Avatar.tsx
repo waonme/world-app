@@ -19,7 +19,7 @@ export const Avatar = (props: Props) => {
                         width: '40px',
                         height: '40px',
                         borderRadius: '4px',
-                        backgroundColor: `rgb(from ${CssVar.contentText} r g b / 0.08)`,
+                        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
                         ...props.style
                     }}
                 />

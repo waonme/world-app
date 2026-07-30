@@ -45,9 +45,10 @@ export const CssVar = {
     space: (mul: number) => `calc(var(--space) * ${mul})`,
     round: (mul: number) => `calc(var(--round) * ${mul})`,
     // 操作状態は色相を変えず透過率で表す。hover 8% / pressed 12% / selected 15%
-    stateHover: (color: string) => `rgb(from ${color} r g b / 0.08)`,
-    statePressed: (color: string) => `rgb(from ${color} r g b / 0.12)`,
-    stateSelected: (color: string) => `rgb(from ${color} r g b / 0.15)`
+    // color-mixは元色のアルファを乗算的に保つ(半透明テーマでも破綻しない)
+    stateHover: (color: string) => `color-mix(in srgb, ${color} 8%, transparent)`,
+    statePressed: (color: string) => `color-mix(in srgb, ${color} 12%, transparent)`,
+    stateSelected: (color: string) => `color-mix(in srgb, ${color} 15%, transparent)`
 }
 
 // Loose shape of a v1 (MUI-based) Concrnt theme, as shared/stored by the v1 client.

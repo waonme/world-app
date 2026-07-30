@@ -72,7 +72,7 @@ export const GfmRenderer = (props: GfmRendererProps): ReactNode => {
                             <span
                                 style={{
                                     fontFamily: 'Source Code Pro, monospace',
-                                    backgroundColor: `rgb(from ${CssVar.contentText} r g b / 0.08)`,
+                                    backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
                                     borderRadius: CssVar.round(0.5),
                                     border: `1px solid ${CssVar.divider}`,
                                     padding: '0 0.5rem',

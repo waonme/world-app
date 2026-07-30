@@ -170,16 +170,29 @@ const Spoiler = ({ children }: { children: ReactNode }) => {
     return (
         <span
             style={{
-                // 閉状態は本文色で塗りつぶし、文字は透明にして隠す
-                color: open ? 'inherit' : 'transparent',
-                backgroundColor: open ? 'transparent' : CssVar.contentText
+                // 閉状態は本文色のバーで塗りつぶす
+                backgroundColor: open ? 'transparent' : CssVar.contentText,
+                cursor: open ? 'inherit' : 'pointer'
             }}
-            onClick={(e) => {
-                setOpen(!open)
+            onClickCapture={(e) => {
+                if (open) return
+                // colorの継承で隠す方式では画像(絵文字)や自前のcolorを持つリンクが透けるため
+                // opacityで隠す。opacityはヒットテストに影響しないので、隠れたリンクへの
+                // クリックはcapture段で握って遷移を止め、開示に変える
+                e.preventDefault()
                 e.stopPropagation()
+                setOpen(true)
             }}
         >
-            {children}
+            <span
+                aria-hidden={open ? undefined : true}
+                style={{
+                    opacity: open ? 1 : 0,
+                    userSelect: open ? 'auto' : 'none'
+                }}
+            >
+                {children}
+            </span>
         </span>
     )
 }
@@ -324,7 +337,7 @@ const RenderAst = ({ ast, emojis, imageNodes, oneline }: RenderAstProps): ReactN
                 <span
                     style={{
                         fontFamily: 'Source Code Pro, monospace',
-                        backgroundColor: `rgb(from ${CssVar.contentText} r g b / 0.08)`,
+                        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
                         borderRadius: CssVar.round(0.5),
                         border: `1px solid ${CssVar.divider}`,
                         padding: '0 0.5rem',

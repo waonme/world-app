@@ -28,7 +28,7 @@ const baseStyle: CSSProperties = {
 const variantStyles = {
     contained: {
         // 本文色の透過で地を作る(テーマ非依存)
-        backgroundColor: `rgb(from ${CssVar.contentText} r g b / 0.08)`,
+        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
         border: '1px solid transparent'
     },
     outlined: {

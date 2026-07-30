@@ -55,8 +55,14 @@ export const ThemeProvider = (props: Props) => {
         // 派生トークン。テーマ側にスロットが無くても既存テーマJSONのまま成立する
         document.documentElement.style.setProperty('--accent', theme.accent ?? theme.content.link)
         document.documentElement.style.setProperty('--danger', theme.danger ?? '#d32f2f')
-        document.documentElement.style.setProperty('--text-secondary', 'rgb(from var(--content-text) r g b / 0.7)')
-        document.documentElement.style.setProperty('--text-disabled', 'rgb(from var(--content-text) r g b / 0.45)')
+        document.documentElement.style.setProperty(
+            '--text-secondary',
+            'color-mix(in srgb, var(--content-text) 70%, transparent)'
+        )
+        document.documentElement.style.setProperty(
+            '--text-disabled',
+            'color-mix(in srgb, var(--content-text) 45%, transparent)'
+        )
         document.documentElement.style.setProperty('--scrim', 'rgba(0, 0, 0, 0.5)')
         document.documentElement.style.setProperty('--shadow-1', '0 2px 8px rgba(0, 0, 0, 0.2)')
         document.documentElement.style.setProperty('--shadow-2', '0 4px 8px rgba(0, 0, 0, 0.2)')
