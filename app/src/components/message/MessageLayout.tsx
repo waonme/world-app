@@ -1,4 +1,5 @@
 import { ReactNode } from 'react'
+import { CssVar } from '../../types/Theme'
 
 interface Props {
     onClick?: () => void
@@ -14,7 +15,7 @@ export const MessageLayout = (props: Props) => {
             style={{
                 display: 'flex',
                 flexDirection: 'row',
-                gap: '8px',
+                gap: CssVar.space(2),
                 overflow: 'hidden'
             }}
             onClick={(e) => {
@@ -27,7 +28,7 @@ export const MessageLayout = (props: Props) => {
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '4px',
+                    gap: CssVar.space(1),
                     flex: 1,
                     overflow: 'hidden'
                 }}
@@ -38,10 +39,14 @@ export const MessageLayout = (props: Props) => {
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        gap: '8px'
+                        gap: CssVar.space(2)
                     }}
                 >
-                    {props.headerLeft}
+                    {/* 名前行は本文よりわずかに小さく(v1: 0.95rem)。時刻等のメタは各自の指定に任せる。
+                        flex:1+minWidth:0 が無いと shrink-to-fit になり、width:100% の子(スケルトン)が幅0に潰れる */}
+                    <div style={{ fontSize: '0.95rem', overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                        {props.headerLeft}
+                    </div>
                     {props.headerRight}
                 </div>
                 {props.children}

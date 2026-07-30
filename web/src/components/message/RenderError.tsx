@@ -62,7 +62,11 @@ export const RenderError = ({ error }: FallbackProps) => {
     }
 
     return (
-        <div>
+        <div
+            style={{
+                overflow: 'hidden'
+            }}
+        >
             {message}
             <pre
                 style={{

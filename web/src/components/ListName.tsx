@@ -1,9 +1,11 @@
 import { Suspense, use, useMemo } from 'react'
 import { Text } from '@concrnt/ui'
+import type { CSSProperties } from 'react'
 import { useClient } from '../contexts/Client'
 
 interface Props {
     uri: string
+    style?: CSSProperties
 }
 
 export const ListName = (props: Props) => {
@@ -15,14 +17,14 @@ export const ListName = (props: Props) => {
     )
 
     return (
-        <Suspense key={props.uri} fallback={<Text>Loading...</Text>}>
-            <Inner textPromise={textPromise} />
+        <Suspense key={props.uri} fallback={<Text style={props.style}>Loading...</Text>}>
+            <Inner textPromise={textPromise} style={props.style} />
         </Suspense>
     )
 }
 
-const Inner = ({ textPromise }: { textPromise: Promise<string> }) => {
+const Inner = ({ textPromise, style }: { textPromise: Promise<string>; style?: CSSProperties }) => {
     const text = use(textPromise)
 
-    return <Text>{text}</Text>
+    return <Text style={style}>{text}</Text>
 }

@@ -21,6 +21,7 @@ import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
+import { CssVar } from '../../types/Theme'
 
 interface Props {
     message: Message<any>
@@ -158,7 +159,7 @@ export const MessageActions = (props: Props) => {
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
-                {likeState.ownLike ? <MdStar size={20} color="gold" /> : <MdStarOutline size={20} />}
+                {likeState.ownLike ? <MdStar size={20} color={CssVar.accent} /> : <MdStarOutline size={20} />}
                 <span style={{ marginLeft: '4px' }}>{likeState.count}</span>
             </Button>
             {/* リアクションボタン */}

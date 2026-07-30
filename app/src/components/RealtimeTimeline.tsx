@@ -373,15 +373,15 @@ export const RealtimeTimeline = (props: Props) => {
                             pointerEvents: newArrivals.length > 0 ? 'auto' : 'none',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 12px',
+                            gap: CssVar.space(1),
+                            padding: `${CssVar.space(1)} ${CssVar.space(3)}`,
                             border: 'none',
-                            borderRadius: '100px',
-                            backgroundColor: CssVar.contentLink,
-                            color: '#fff',
+                            borderRadius: CssVar.roundFull,
+                            backgroundColor: CssVar.uiBackground,
+                            color: CssVar.uiText,
                             cursor: 'pointer',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                            fontSize: '14px'
+                            boxShadow: CssVar.shadow1,
+                            fontSize: '0.875rem'
                         }}
                     >
                         <MdArrowUpward size={16} />
@@ -393,7 +393,7 @@ export const RealtimeTimeline = (props: Props) => {
                                         marginLeft: i > 0 ? '-6px' : '0',
                                         borderRadius: '50%',
                                         overflow: 'hidden',
-                                        border: '1.5px solid #fff',
+                                        border: `1.5px solid ${CssVar.uiText}`,
                                         width: '22px',
                                         height: '22px',
                                         flexShrink: 0
@@ -417,14 +417,14 @@ export const RealtimeTimeline = (props: Props) => {
                                         width: '22px',
                                         height: '22px',
                                         borderRadius: '50%',
-                                        backgroundColor: 'rgba(255,255,255,0.3)',
-                                        border: '1.5px solid #fff',
+                                        backgroundColor: `color-mix(in srgb, ${CssVar.uiText} 30%, transparent)`,
+                                        border: `1.5px solid ${CssVar.uiText}`,
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        fontSize: '10px',
+                                        fontSize: '0.75rem',
                                         fontWeight: 'bold',
-                                        color: '#fff',
+                                        color: CssVar.uiText,
                                         flexShrink: 0
                                     }}
                                 >
@@ -439,8 +439,8 @@ export const RealtimeTimeline = (props: Props) => {
                     style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '8px',
-                        padding: '8px 0',
+                        gap: CssVar.space(2),
+                        padding: `${CssVar.space(2)} 0`,
                         overflowX: 'hidden',
                         overflowY: 'auto',
                         overscrollBehaviorY: 'none',
@@ -461,9 +461,9 @@ export const RealtimeTimeline = (props: Props) => {
                     {!hasMoreData && (
                         <div
                             style={{
-                                padding: '8px',
-                                fontSize: '12px',
-                                color: '#888',
+                                padding: CssVar.space(2),
+                                fontSize: '0.75rem',
+                                color: CssVar.textSecondary,
                                 width: '100%',
                                 height: '100px',
                                 display: 'flex',
@@ -500,7 +500,7 @@ const Cell = memo<CellProps>(({ item }: CellProps) => {
                     </Suspense>
                 </div>
             </ErrorBoundary>
-            <Divider />
+            <Divider style={{ margin: `0 ${CssVar.space(2)}` }} />
         </>
     )
 })
