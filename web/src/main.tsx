@@ -27,6 +27,7 @@ import { NotificationsView } from './views/Notifications'
 import { ContactsView } from './views/Contacts'
 import { SettingsView } from './views/Settings'
 import { NotificationSettingsView } from './views/NotificationSettings'
+import { MuteSettingsView } from './views/MuteSettings'
 import { ThemeSettingsView } from './views/ThemeSettings'
 import { LanguageSettingsView } from './views/LanguageSettings'
 import { MediaSettingsView } from './views/MediaSettings'
@@ -206,6 +207,14 @@ const AuthedRoutes = () => (
                                                                     element={
                                                                         <SettingsBackProvider>
                                                                             <NotificationSettingsView />
+                                                                        </SettingsBackProvider>
+                                                                    }
+                                                                />
+                                                                <Route
+                                                                    path="settings/mute"
+                                                                    element={
+                                                                        <SettingsBackProvider>
+                                                                            <MuteSettingsView />
                                                                         </SettingsBackProvider>
                                                                     }
                                                                 />

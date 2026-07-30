@@ -16,6 +16,7 @@ import { MdMoreHoriz } from 'react-icons/md'
 import { MdAddReaction } from 'react-icons/md'
 import { Drawer } from '../../ui/Drawer'
 import { useEmojiPicker } from '../../contexts/EmojiPicker'
+import { MuteDurationSelect } from '../MuteDurationSelect'
 import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
 import { useStack } from '../../layouts/Stack'
@@ -39,6 +40,7 @@ export const MessageActions = (props: Props) => {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [reportOpen, setReportOpen] = useState(false)
     const [inspectorOpen, setInspectorOpen] = useState(false)
+    const [muteDurationOpen, setMuteDurationOpen] = useState(false)
     const emojiPicker = useEmojiPicker()
     const qt = useQueryTimelineContext()
     const { push } = useStack()
@@ -238,6 +240,19 @@ export const MessageActions = (props: Props) => {
                     <ListItem key="delete" onClick={() => setDeleteConfirmOpen(true)}>
                         <Text>{t('deletePost')}</Text>
                     </ListItem>,
+                    ...(props.message.author !== client?.ccid
+                        ? [
+                              <ListItem
+                                  key="muteAuthor"
+                                  onClick={() => {
+                                      setMenuOpen(false)
+                                      setMuteDurationOpen(true)
+                                  }}
+                              >
+                                  <Text>{t('muteAuthor')}</Text>
+                              </ListItem>
+                          ]
+                        : []),
                     <ListItem key="abuse" onClick={() => setReportOpen(true)}>
                         {t('report')}
                     </ListItem>,
@@ -251,6 +266,16 @@ export const MessageActions = (props: Props) => {
                         <Text>{t('inspector')}</Text>
                     </ListItem>
                 ]}
+            />
+            <MuteDurationSelect
+                open={muteDurationOpen}
+                onClose={() => setMuteDurationOpen(false)}
+                onSelect={(expiresAt) => {
+                    client
+                        ?.mute({ type: 'user', target: props.message.author, expiresAt })
+                        .then(() => hapticSuccess())
+                        .catch(console.error)
+                }}
             />
             <Confirm
                 open={deleteConfirmOpen}

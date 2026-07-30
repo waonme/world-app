@@ -29,6 +29,7 @@ import { ProfileSchema, Schemas, semantics, User } from '@concrnt/worldlib'
 import { CssVar } from '../types/Theme'
 import { AcknowledgeButton } from '../components/AcknowledgeButton'
 import { AcknowledgeListView } from './AcknowledgeList'
+import { MuteDurationSelect } from '../components/MuteDurationSelect'
 import { useStack } from '../layouts/Stack'
 import { useSubscribe } from '../hooks/useSubscribe'
 import { ProfileName } from '../components/ProfileName'
@@ -167,11 +168,17 @@ const Body = (props: BodyProps) => {
     const [blocks] = useSubscribe(client.blocks)
     const isBlocking = blocks.includes(props.ccid)
 
+    const [mutes] = useSubscribe(client.mutes)
+    const userMuteEntry = mutes.find((entry) => entry.type === 'user' && entry.target === props.ccid)
+    const isMuting = Boolean(userMuteEntry && !userMuteEntry.reroutesOnly)
+    const isRerouteMuting = Boolean(userMuteEntry?.reroutesOnly)
+
     const [tab, setTab] = useState<'posts' | 'media' | 'activity'>('posts')
 
     const [menuOpen, setMenuOpen] = useState(false)
     const [blockConfirmOpen, setBlockConfirmOpen] = useState(false)
     const [unblockConfirmOpen, setUnblockConfirmOpen] = useState(false)
+    const [muteDurationOpen, setMuteDurationOpen] = useState(false)
     const [profileEditorOpen, setProfileEditorOpen] = useState(false)
 
     const target = useMemo(() => {
@@ -199,6 +206,46 @@ const Body = (props: BodyProps) => {
     const selectOptions = useMemo(() => {
         const options: ReactNode[] = []
         if (!isMe) {
+            if (isMuting) {
+                options.push(
+                    <ListItem
+                        onClick={() => {
+                            setMenuOpen(false)
+                            client.unmute('user', props.ccid).catch(console.error)
+                        }}
+                    >
+                        <Text>{t('unmute')}</Text>
+                    </ListItem>
+                )
+            } else {
+                options.push(
+                    <ListItem
+                        onClick={() => {
+                            setMenuOpen(false)
+                            setMuteDurationOpen(true)
+                        }}
+                    >
+                        <Text>{t('mute')}</Text>
+                    </ListItem>
+                )
+                // 本人の投稿は見たいがリルートだけ要らない、のトグル
+                options.push(
+                    <ListItem
+                        onClick={() => {
+                            setMenuOpen(false)
+                            if (isRerouteMuting) {
+                                client.unmute('user', props.ccid).catch(console.error)
+                            } else {
+                                client
+                                    .mute({ type: 'user', target: props.ccid, reroutesOnly: true })
+                                    .catch(console.error)
+                            }
+                        }}
+                    >
+                        <Text>{isRerouteMuting ? t('showReroutes') : t('hideReroutes')}</Text>
+                    </ListItem>
+                )
+            }
             if (isBlocking) {
                 options.push(
                     <ListItem
@@ -222,7 +269,7 @@ const Body = (props: BodyProps) => {
             }
         }
         return options
-    }, [isBlocking, isMe, t])
+    }, [isBlocking, isMuting, isRerouteMuting, isMe, t, client, props.ccid])
 
     return (
         <>
@@ -426,6 +473,13 @@ const Body = (props: BodyProps) => {
                 }
             />
             <Select open={menuOpen} onClose={() => setMenuOpen(false)} options={selectOptions} />
+            <MuteDurationSelect
+                open={muteDurationOpen}
+                onClose={() => setMuteDurationOpen(false)}
+                onSelect={(expiresAt) => {
+                    client.mute({ type: 'user', target: props.ccid, expiresAt }).catch(console.error)
+                }}
+            />
             <Confirm
                 open={unblockConfirmOpen}
                 onClose={() => setUnblockConfirmOpen(false)}

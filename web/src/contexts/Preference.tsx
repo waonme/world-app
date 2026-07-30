@@ -7,6 +7,8 @@ export interface Preference {
     themeName: string
     themeVariant: 'classic' | 'world'
     developerMode: boolean
+    // ブロック中ユーザーの投稿もミュート扱いで非表示にする
+    muteBlockedUsers?: boolean
     // プロフィール名 -> リストURIの並び順
     listOrder?: Record<string, string[]>
 }
@@ -15,6 +17,7 @@ export const defaultPreference: Preference = {
     themeName: 'blue',
     themeVariant: 'classic',
     developerMode: false,
+    muteBlockedUsers: true,
     listOrder: {}
 }
 

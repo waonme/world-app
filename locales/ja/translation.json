@@ -43,6 +43,7 @@
             "lists": "リスト",
             "media": "メディア",
             "notifications": "通知",
+            "mute": "ミュート",
             "migration": "引っ越し",
             "v1import": "v1からの移行",
             "devTools": "開発者ツール",
@@ -59,6 +60,20 @@
         },
         "languageSettings": {
             "title": "言語"
+        },
+        "muteSettings": {
+            "title": "ミュート",
+            "muteBlockedUsers": "ブロック中のユーザーも非表示",
+            "muteBlockedUsersDesc": "ブロックしたユーザーの投稿をタイムラインから隠します。",
+            "users": "ユーザーミュート",
+            "words": "ワードミュート",
+            "timelines": "タイムラインミュート",
+            "noEntries": "まだありません",
+            "add": "追加",
+            "wordPlaceholder": "ミュートしたい単語",
+            "until": "{{date}} まで",
+            "indefinite": "無期限",
+            "reroutesOnly": "リルートのみ"
         },
         "themeSettings": {
             "title": "テーマ設定",
@@ -288,6 +303,10 @@
             "unblockConfirmTitle": "本当にこのユーザーのブロックを解除しますか？",
             "unblockConfirmDescription": "ブロックを解除すると、このユーザーはあなたに対しリプライを送ったり、リアクションをつけたりすることが出来るようになります。",
             "unblock": "ブロック解除",
+            "mute": "ミュート",
+            "unmute": "ミュート解除",
+            "hideReroutes": "リルートを非表示",
+            "showReroutes": "リルートを再表示",
             "noDescription": "説明はまだありません",
             "following": "{{n}} フォロー",
             "followers": "{{n}} フォロワー"
@@ -500,8 +519,25 @@
             "confirmDelete": "本当にこの投稿を削除しますか？",
             "delete": "削除",
             "deletePost": "投稿を削除",
+            "muteAuthor": "作者をミュート",
             "report": "通報",
             "inspector": "インスペクター"
+        },
+        "muteNotice": {
+            "mutedByBlock": "ブロック中のユーザーの投稿",
+            "mutedByUser": "ユーザーミュートした投稿",
+            "mutedByWord": "ワードミュートした投稿",
+            "mutedByTimeline": "タイムラインミュートした投稿",
+            "show": "表示",
+            "unmute": "解除"
+        },
+        "muteDurationSelect": {
+            "title": "ミュートする期間",
+            "for1hour": "1時間",
+            "for1day": "24時間",
+            "for1week": "1週間",
+            "for1month": "1ヶ月",
+            "indefinite": "無期限"
         },
         "collapsibleBody": {
             "showMore": "もっと見る"
@@ -675,7 +711,9 @@
         },
         "timelineSettings": {
             "schema": "スキーマ",
-            "attributes": "属性"
+            "attributes": "属性",
+            "muteTimeline": "このタイムラインをミュート",
+            "unmuteTimeline": "ミュートを解除"
         },
         "listSettings": {
             "title": "リスト設定",

@@ -22,5 +22,7 @@ export const semantics = {
 
     subkey: (owner: string, ckid: string) => `cckv://${owner}/keys/${ckid}`,
     blocks: (owner: string) => `cckv://${owner}/.concrnt/blocking`,
-    block: (owner: string, target: string) => `cckv://${owner}/.concrnt/blocking/${target}`
+    block: (owner: string, target: string) => `cckv://${owner}/.concrnt/blocking/${target}`,
+    mutes: (owner: string) => `cckv://${owner}/concrnt.world/mutes`,
+    mute: (owner: string, muteId: string) => `cckv://${owner}/concrnt.world/mutes/${muteId}`
 }
