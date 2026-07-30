@@ -11,7 +11,7 @@ interface Props {
 const defaultTheme: Theme = {
     content: {
         text: '#000000',
-        link: '#000000',
+        link: '#1e6476',
         background: '#ffffff'
     },
     ui: {
@@ -51,6 +51,15 @@ export const ThemeProvider = (props: Props) => {
         document.documentElement.style.setProperty('--divider', theme.divider)
         document.documentElement.style.setProperty('--space', theme.space)
         document.documentElement.style.setProperty('--round', theme.round)
+
+        // 派生トークン。テーマ側にスロットが無くても既存テーマJSONのまま成立する
+        document.documentElement.style.setProperty('--accent', theme.accent ?? theme.content.link)
+        document.documentElement.style.setProperty('--danger', theme.danger ?? '#d32f2f')
+        document.documentElement.style.setProperty('--text-secondary', 'rgb(from var(--content-text) r g b / 0.7)')
+        document.documentElement.style.setProperty('--text-disabled', 'rgb(from var(--content-text) r g b / 0.45)')
+        document.documentElement.style.setProperty('--scrim', 'rgba(0, 0, 0, 0.5)')
+        document.documentElement.style.setProperty('--shadow-1', '0 2px 8px rgba(0, 0, 0, 0.2)')
+        document.documentElement.style.setProperty('--shadow-2', '0 4px 8px rgba(0, 0, 0, 0.2)')
 
         // ブラウザ上部/PWAステータスバーの色をテーマに追従させる
         let themeColorMeta = document.querySelector('meta[name="theme-color"]')

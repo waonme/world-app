@@ -7,6 +7,7 @@ import { Codeblock } from './Codeblock'
 import { Link } from './Link'
 import { Text } from './Text'
 import { Divider } from './Divider'
+import { CssVar } from '../types/Theme'
 import { useCfmActions } from '../contexts/CfmActions'
 import { CCImage } from '../contexts/CCImage'
 
@@ -14,7 +15,7 @@ export interface GfmRendererProps {
     messagebody: string
 }
 
-const tableBorder = '1px solid #ccc'
+const tableBorder = `1px solid ${CssVar.divider}`
 
 export const GfmRenderer = (props: GfmRendererProps): ReactNode => {
     const { openMedias } = useCfmActions()
@@ -40,7 +41,9 @@ export const GfmRenderer = (props: GfmRendererProps): ReactNode => {
                     ul: ({ children }) => <ul style={{ margin: '0.5em 0', paddingLeft: '1.5em' }}>{children}</ul>,
                     ol: ({ children }) => <ol style={{ margin: '0.5em 0', paddingLeft: '1.5em' }}>{children}</ol>,
                     blockquote: ({ children }) => (
-                        <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: '4px solid #ccc' }}>
+                        <blockquote
+                            style={{ margin: 0, paddingLeft: '1rem', borderLeft: `4px solid ${CssVar.divider}` }}
+                        >
                             {children}
                         </blockquote>
                     ),
@@ -69,9 +72,9 @@ export const GfmRenderer = (props: GfmRendererProps): ReactNode => {
                             <span
                                 style={{
                                     fontFamily: 'Source Code Pro, monospace',
-                                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                                    borderRadius: 1,
-                                    border: '0.5px solid #ddd',
+                                    backgroundColor: `rgb(from ${CssVar.contentText} r g b / 0.08)`,
+                                    borderRadius: CssVar.round(0.5),
+                                    border: `1px solid ${CssVar.divider}`,
                                     padding: '0 0.5rem',
                                     margin: '0 0.2rem'
                                 }}

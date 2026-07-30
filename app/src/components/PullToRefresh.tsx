@@ -1,4 +1,5 @@
 import { RefObject, useEffect, useEffectEvent, useRef, useState } from 'react'
+import { CssVar } from '../types/Theme'
 import { ReactNode } from 'react'
 import { MdArrowDownward, MdSync } from 'react-icons/md'
 
@@ -67,7 +68,7 @@ export const PullToRefresh = (props: Props): ReactNode => {
                     height: `${ptrEnabled ? PTR_HEIGHT : loaderSize}px`,
                     width: '100%',
                     position: 'relative',
-                    color: 'text.secondary',
+                    color: CssVar.textSecondary,
                     display: 'flex',
                     transition: 'height 0.2s ease-in-out',
                     overflow: 'hidden'

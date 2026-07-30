@@ -28,7 +28,7 @@ body {
 
 :root {
   --content-text: #000000;
-  --content-link: #000000;
+  --content-link: #1e6476;
   --content-background: #ffffff;
 
   --ui-text: #ffffff;
@@ -41,4 +41,13 @@ body {
 
   --space: 4px;
   --round: 4px;
+
+  /* 派生トークン(ThemeProviderが上書きする。ここは初期描画用フォールバック) */
+  --accent: var(--content-link);
+  --danger: #d32f2f;
+  --text-secondary: rgb(from var(--content-text) r g b / 0.7);
+  --text-disabled: rgb(from var(--content-text) r g b / 0.45);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-2: 0 4px 8px rgba(0, 0, 0, 0.2);
 }

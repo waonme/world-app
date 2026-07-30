@@ -170,8 +170,9 @@ const Spoiler = ({ children }: { children: ReactNode }) => {
     return (
         <span
             style={{
-                color: open ? 'text.disabled' : 'transparent',
-                backgroundColor: open ? 'transparent' : 'text.primary'
+                // 閉状態は本文色で塗りつぶし、文字は透明にして隠す
+                color: open ? 'inherit' : 'transparent',
+                backgroundColor: open ? 'transparent' : CssVar.contentText
             }}
             onClick={(e) => {
                 setOpen(!open)
@@ -251,7 +252,7 @@ const RenderAst = ({ ast, emojis, imageNodes, oneline }: RenderAstProps): ReactN
                 )
             }
             return (
-                <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: '4px solid #ccc' }}>
+                <blockquote style={{ margin: 0, paddingLeft: '1rem', borderLeft: `4px solid ${CssVar.divider}` }}>
                     <RenderAst ast={ast.body} emojis={emojis} imageNodes={imageNodes} oneline={oneline} />
                 </blockquote>
             )
@@ -323,9 +324,9 @@ const RenderAst = ({ ast, emojis, imageNodes, oneline }: RenderAstProps): ReactN
                 <span
                     style={{
                         fontFamily: 'Source Code Pro, monospace',
-                        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                        borderRadius: 1,
-                        border: '0.5px solid #ddd',
+                        backgroundColor: `rgb(from ${CssVar.contentText} r g b / 0.08)`,
+                        borderRadius: CssVar.round(0.5),
+                        border: `1px solid ${CssVar.divider}`,
                         padding: '0 0.5rem',
                         margin: '0 0.2rem'
                     }}
