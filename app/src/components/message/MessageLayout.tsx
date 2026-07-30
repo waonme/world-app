@@ -42,8 +42,11 @@ export const MessageLayout = (props: Props) => {
                         gap: CssVar.space(2)
                     }}
                 >
-                    {/* 名前行は本文よりわずかに小さく(v1: 0.95rem)。時刻等のメタは各自の指定に任せる */}
-                    <div style={{ fontSize: '0.95rem', overflow: 'hidden' }}>{props.headerLeft}</div>
+                    {/* 名前行は本文よりわずかに小さく(v1: 0.95rem)。時刻等のメタは各自の指定に任せる。
+                        flex:1+minWidth:0 が無いと shrink-to-fit になり、width:100% の子(スケルトン)が幅0に潰れる */}
+                    <div style={{ fontSize: '0.95rem', overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                        {props.headerLeft}
+                    </div>
                     {props.headerRight}
                 </div>
                 {props.children}

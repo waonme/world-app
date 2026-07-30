@@ -189,6 +189,7 @@ const ContainedTimelines = (props: { list: List; onComplete?: () => void }) => {
                 <Tab
                     selected={tab === 'community'}
                     groupId="list-settings-timelines"
+                    selectedColor={activeColor}
                     style={tabStyle(tab === 'community')}
                     onClick={() => setTab('community')}
                 >
@@ -197,6 +198,7 @@ const ContainedTimelines = (props: { list: List; onComplete?: () => void }) => {
                 <Tab
                     selected={tab === 'user'}
                     groupId="list-settings-timelines"
+                    selectedColor={activeColor}
                     style={tabStyle(tab === 'user')}
                     onClick={() => setTab('user')}
                 >

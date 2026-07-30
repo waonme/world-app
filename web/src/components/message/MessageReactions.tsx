@@ -115,7 +115,7 @@ export const MessageReactions = (props: Props) => {
                             backgroundColor: isOwn ? CssVar.stateSelected(CssVar.accent) : 'transparent',
                             cursor: 'pointer',
                             color: CssVar.contentText,
-                            fontSize: '0.75rem'
+                            fontSize: '0.875rem'
                         }}
                     >
                         <CCImage

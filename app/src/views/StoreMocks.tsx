@@ -538,6 +538,7 @@ const MockSearchExplorer = () => {
                 <Tab
                     selected={tab === 'communities'}
                     groupId="store-mock-search-explorer"
+                    selectedColor={activeColor}
                     style={tabStyle(tab === 'communities')}
                     onClick={() => setTab('communities')}
                 >
@@ -546,6 +547,7 @@ const MockSearchExplorer = () => {
                 <Tab
                     selected={tab === 'users'}
                     groupId="store-mock-search-explorer"
+                    selectedColor={activeColor}
                     style={tabStyle(tab === 'users')}
                     onClick={() => setTab('users')}
                 >

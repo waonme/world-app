@@ -110,6 +110,7 @@ export const MessageReactions = (props: Props) => {
                             hapticLight()
                             push(<PostView uri={props.message.uri} initialTab="reactions" initialReaction={imageUrl} />)
                         }}
+                        pressedStyle={{ backgroundColor: CssVar.statePressed(CssVar.contentText) }}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -120,7 +121,7 @@ export const MessageReactions = (props: Props) => {
                             backgroundColor: isOwn ? CssVar.stateSelected(CssVar.accent) : 'transparent',
                             cursor: 'pointer',
                             color: CssVar.contentText,
-                            fontSize: '0.75rem'
+                            fontSize: '0.875rem'
                         }}
                     >
                         <CCImage
