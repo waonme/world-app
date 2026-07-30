@@ -51,7 +51,13 @@ export const isMuteEntryExpired = (entry: MuteEntry, now: Date = new Date()): bo
 
 // 開示状態のキー。マッチしたルール自体が変わったときだけ再度隠す
 export const muteMatchKey = (match: MuteMatch): string =>
-    [match.reason, match.value, match.entry?.expiresAt ?? '', match.entry?.scope ?? ''].join('\u0000')
+    [
+        match.reason,
+        match.value,
+        match.entry?.expiresAt ?? '',
+        match.entry?.scope ?? '',
+        match.entry?.reroutesOnly ? 'reroutesOnly' : ''
+    ].join('\u0000')
 
 export const findMute = (
     target: MuteTarget,

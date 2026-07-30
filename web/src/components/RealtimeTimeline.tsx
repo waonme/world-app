@@ -73,6 +73,9 @@ export const RealtimeTimeline = (props: Props) => {
         isMutedMessageRef.current = async (msg: Message<any>) => {
             if (!client) return false
             const [mutes, blocks] = await Promise.all([client.mutes.value(), client.blocks.value()])
+            const options = { blocks: muteBlockedUsers ? blocks : undefined, viewContext: muteViewContext }
+            // セル側(MessageContainer)と同じく、associationの参照先も判定する
+            const target = msg.associationTarget
             return Boolean(
                 findMute(
                     {
@@ -82,8 +85,20 @@ export const RealtimeTimeline = (props: Props) => {
                         isReroute: msg.schema === Schemas.rerouteMessage
                     },
                     mutes,
-                    { blocks: muteBlockedUsers ? blocks : undefined, viewContext: muteViewContext }
-                )
+                    options
+                ) ??
+                (target
+                    ? findMute(
+                          {
+                              author: target.author,
+                              body: typeof target.value?.body === 'string' ? target.value.body : undefined,
+                              timelines: target.distributes,
+                              isReroute: target.schema === Schemas.rerouteMessage
+                          },
+                          mutes,
+                          options
+                      )
+                    : undefined)
             )
         }
     }, [client, muteBlockedUsers, muteViewContext])

@@ -64,7 +64,7 @@
         "muteSettings": {
             "title": "ミュート",
             "muteBlockedUsers": "ブロック中のユーザーも非表示",
-            "muteBlockedUsersDesc": "ブロックしたユーザーの投稿をタイムラインから隠します。",
+            "muteBlockedUsersDesc": "ブロックしたユーザーの投稿を非表示にします。",
             "users": "ユーザーミュート",
             "words": "ワードミュート",
             "timelines": "タイムラインミュート",

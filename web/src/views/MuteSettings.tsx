@@ -27,8 +27,13 @@ export const MuteSettingsView = () => {
     const wordEntries = mutes.filter((entry) => entry.type === 'word')
     const timelineEntries = mutes.filter((entry) => entry.type === 'timeline')
 
-    const expiryLabel = (entry: MuteEntry): string =>
-        entry.expiresAt ? t('until', { date: new Date(entry.expiresAt).toLocaleString() }) : t('indefinite')
+    const expiryLabel = (entry: MuteEntry): string => {
+        if (!entry.expiresAt) return t('indefinite')
+        const expires = new Date(entry.expiresAt)
+        // 不正な日付は無期限として扱う(判定側 isMuteEntryExpired と同じ扱い)
+        if (Number.isNaN(expires.getTime())) return t('indefinite')
+        return t('until', { date: expires.toLocaleString() })
+    }
 
     const entryRow = (entry: MuteEntry, label: React.ReactNode): React.ReactNode => (
         <div
