@@ -1,8 +1,10 @@
-import { ReactNode, use } from 'react'
+import { ReactNode, use, useState } from 'react'
 
 import { useClient } from '../../contexts/Client'
 import { Text } from '@concrnt/ui'
-import { ApNoteSchema, AtprotoRecordSchema, Message, Schemas } from '@concrnt/worldlib'
+import { ApNoteSchema, AtprotoRecordSchema, Message, Schemas, muteMatchKey, type MuteMatch } from '@concrnt/worldlib'
+import { useMuteCheck } from '../../contexts/Mute'
+import { MuteNotice } from './MuteNotice'
 import { MarkdownMessage } from './MarkdownMessage'
 import { GfmMessage } from './GfmMessage'
 import { MfmMessage } from './MfmMessage'
@@ -30,11 +32,51 @@ interface Props {
 
 export const MessageContainer = (props: Props): ReactNode | null => {
     const { client } = useClient()
+    const checkMute = useMuteCheck()
+    const [revealedMuteKey, setRevealedMuteKey] = useState<string>()
 
     const sourceDomain = props.source ? new URL(props.source).hostname : undefined
     const message = props.content ? JSON.parse(props.content) : use(client!.getMessage<any>(props.uri!, sourceDomain))
 
     if (!message) return <div>Message not found</div>
+
+    // 本体と、associationが参照している先(いいねされた投稿など)の両方を判定する
+    const target = message.associationTarget
+    const outerMute = checkMute({
+        author: message.author,
+        body: typeof message.value?.body === 'string' ? message.value.body : undefined,
+        timelines: message.distributes,
+        isReroute: message.schema === Schemas.rerouteMessage
+    })
+    const targetMute: MuteMatch | undefined =
+        !outerMute && target
+            ? checkMute({
+                  author: target.author,
+                  body: typeof target.value?.body === 'string' ? target.value.body : undefined,
+                  timelines: target.distributes,
+                  isReroute: target.schema === Schemas.rerouteMessage
+              })
+            : undefined
+    const mute = outerMute ?? targetMute
+
+    if (mute) {
+        if (mute.entry?.hidePlaceholder) return null
+        const muteKey = muteMatchKey(mute)
+        if (revealedMuteKey !== muteKey) {
+            const matched = targetMute && target ? target : message
+            return (
+                <>
+                    {/* リプライがミュートされても会話の文脈(リプライ先)は残す */}
+                    {!props.oneline &&
+                        message.schema === Schemas.replyMessage &&
+                        typeof message.value?.targetURI === 'string' && (
+                            <MessageContainer oneline uri={message.value.targetURI} />
+                        )}
+                    <MuteNotice message={matched} mute={mute} onReveal={() => setRevealedMuteKey(muteKey)} />
+                </>
+            )
+        }
+    }
 
     if (props.oneline) {
         return <OnelineMessage message={message} />

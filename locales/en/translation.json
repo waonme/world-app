@@ -43,6 +43,7 @@
             "lists": "Lists",
             "media": "Media",
             "notifications": "Notifications",
+            "mute": "Mute",
             "migration": "Migration",
             "v1import": "Import from v1",
             "devTools": "Developer Tools",
@@ -59,6 +60,20 @@
         },
         "languageSettings": {
             "title": "Language"
+        },
+        "muteSettings": {
+            "title": "Mute",
+            "muteBlockedUsers": "Also hide blocked users",
+            "muteBlockedUsersDesc": "Hide posts from users you have blocked.",
+            "users": "Muted users",
+            "words": "Muted words",
+            "timelines": "Muted timelines",
+            "noEntries": "Nothing here yet",
+            "add": "Add",
+            "wordPlaceholder": "Word to mute",
+            "until": "until {{date}}",
+            "indefinite": "Indefinite",
+            "reroutesOnly": "reroutes only"
         },
         "themeSettings": {
             "title": "Theme",
@@ -286,6 +301,10 @@
             "unblockConfirmTitle": "Are you sure you want to unblock this user?",
             "unblockConfirmDescription": "Unblocking will allow this user to reply to you and react to your posts again.",
             "unblock": "Unblock",
+            "mute": "Mute",
+            "unmute": "Unmute",
+            "hideReroutes": "Hide reroutes",
+            "showReroutes": "Show reroutes",
             "noDescription": "No description yet",
             "following": "{{n}} Following",
             "followers": "{{n}} Followers"
@@ -453,8 +472,25 @@
             "confirmDelete": "Really delete this post?",
             "delete": "Delete",
             "deletePost": "Delete post",
+            "muteAuthor": "Mute author",
             "report": "Report",
             "inspector": "Inspector"
+        },
+        "muteNotice": {
+            "mutedByBlock": "Post from a blocked user",
+            "mutedByUser": "Post from a muted user",
+            "mutedByWord": "Post with a muted word",
+            "mutedByTimeline": "Post in a muted timeline",
+            "show": "Show",
+            "unmute": "Unmute"
+        },
+        "muteDurationSelect": {
+            "title": "Mute duration",
+            "for1hour": "1 hour",
+            "for1day": "24 hours",
+            "for1week": "1 week",
+            "for1month": "1 month",
+            "indefinite": "Indefinite"
         },
         "collapsibleBody": {
             "showMore": "Show more"
@@ -606,7 +642,9 @@
         },
         "timelineSettings": {
             "schema": "Schema",
-            "attributes": "Attributes"
+            "attributes": "Attributes",
+            "muteTimeline": "Mute this timeline",
+            "unmuteTimeline": "Unmute"
         },
         "listSettings": {
             "title": "List Settings",

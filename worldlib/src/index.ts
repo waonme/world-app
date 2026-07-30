@@ -1,5 +1,6 @@
 export * from './client'
 export * from './message'
+export * from './mute'
 export * from './list'
 export * from './user'
 export * from './timeline'
