@@ -81,6 +81,10 @@ export class Client {
 
     messageCache: Record<string, Cache<Promise<Message<any> | null>>> = {}
 
+    // blocks/mutesの読み込み失敗時、空リストを成功として恒久キャッシュしないための再試行タイマー
+    private blocksRetryTimer: ReturnType<typeof setTimeout> | null = null
+    private mutesRetryTimer: ReturnType<typeof setTimeout> | null = null
+
     knownCommunities = new CachedPromise<Timeline[]>(async () => {
         const results = await this.api.queryAll(
             {
@@ -141,6 +145,13 @@ export class Client {
                 )
                 .catch((e) => {
                     console.error('Failed to load blocks:', e)
+                    // 空リストのままにせず、少し置いて再読込する
+                    if (!this.blocksRetryTimer) {
+                        this.blocksRetryTimer = setTimeout(() => {
+                            this.blocksRetryTimer = null
+                            this.blocks.reload()
+                        }, 30 * 1000)
+                    }
                     return []
                 })
             return results.map((sd) => sd.cckv.substring(prefix.length))
@@ -164,6 +175,13 @@ export class Client {
             )
             .catch((e) => {
                 console.error('Failed to load mutes:', e)
+                // 空リストのままにせず、少し置いて再読込する
+                if (!this.mutesRetryTimer) {
+                    this.mutesRetryTimer = setTimeout(() => {
+                        this.mutesRetryTimer = null
+                        this.mutes.reload()
+                    }, 30 * 1000)
+                }
                 return []
             })
         const entries: MuteEntry[] = []
