@@ -13,6 +13,9 @@ import { ScrollViewProps } from '../types/ScrollView'
 import { useClient } from '../contexts/Client'
 import { useRefWithUpdate } from '../hooks/useRefWithUpdate'
 import { TimelineItemWithUpdate, TimelineReader } from '@concrnt/client'
+import { findMute, Schemas, type Message } from '@concrnt/worldlib'
+import { useMuteScope } from '../contexts/Mute'
+import { usePreference } from '../contexts/Preference'
 import { MessageContainer } from './message'
 import { Avatar, CssVar, Divider } from '@concrnt/ui'
 import { ErrorBoundary } from 'react-error-boundary'
@@ -57,6 +60,30 @@ export const RealtimeTimeline = (props: Props) => {
     useEffect(() => {
         newArrivalsRef.current = newArrivals
     }, [newArrivals])
+
+    // 新着バッジからミュート対象を除外する判定。
+    // reader再構築を避けるため、ハンドラからはrefを介して常に最新の判定を呼ぶ
+    const [muteBlockedUsers] = usePreference('muteBlockedUsers')
+    const muteViewContext = useMuteScope()
+    const isMutedMessageRef = useRef<(msg: Message<any>) => Promise<boolean>>(async () => false)
+    useEffect(() => {
+        isMutedMessageRef.current = async (msg: Message<any>) => {
+            if (!client) return false
+            const [mutes, blocks] = await Promise.all([client.mutes.value(), client.blocks.value()])
+            return Boolean(
+                findMute(
+                    {
+                        author: msg.author,
+                        body: typeof msg.value?.body === 'string' ? msg.value.body : undefined,
+                        timelines: msg.distributes,
+                        isReroute: msg.schema === Schemas.rerouteMessage
+                    },
+                    mutes,
+                    { blocks: muteBlockedUsers ? blocks : undefined, viewContext: muteViewContext }
+                )
+            )
+        }
+    }, [client, muteBlockedUsers, muteViewContext])
 
     // 呼び出し側が毎レンダー新規配列を渡しても、内容が同じならreaderを作り直さないための内容キー
     const timelinesKey = props.timelines.join('|')
@@ -110,8 +137,9 @@ export const RealtimeTimeline = (props: Props) => {
                 if (!existing.haltUpdate) return
                 if (!item.href) return
 
-                client.getMessage(item.href).then((msg) => {
+                client.getMessage(item.href).then(async (msg) => {
                     if (!msg) return
+                    if (await isMutedMessageRef.current(msg)) return
                     const icon = msg.authorProfile?.avatar
                     if (!icon) return
                     setNewArrivals((prev) => {
@@ -150,9 +178,11 @@ export const RealtimeTimeline = (props: Props) => {
                         if (!t.haltUpdate) return
                         if (!item.href) return
 
-                        client.getMessage(item.href).then((msg) => {
+                        client.getMessage(item.href).then(async (msg) => {
                             if (isCancelled) return
                             if (!msg) return
+                            if (await isMutedMessageRef.current(msg)) return
+                            if (isCancelled) return
                             const icon = msg.authorProfile?.avatar
                             if (!icon) return
                             setNewArrivals((prev) => {

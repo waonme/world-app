@@ -17,7 +17,8 @@ import {
     MdPalette,
     MdPermMedia,
     MdRestore,
-    MdTerminal
+    MdTerminal,
+    MdVolumeOff
 } from 'react-icons/md'
 import { SiActivitypub, SiBluesky } from 'react-icons/si'
 import { Fragment, useState } from 'react'
@@ -143,6 +144,13 @@ export const SettingsView = () => {
                         onClick={() => navigate('/settings/notifications')}
                     >
                         {t('notifications')}
+                    </ListItem>
+                    <ListItem
+                        startIcon={<MdVolumeOff size={24} />}
+                        endIcon={<MdChevronRight size={24} />}
+                        onClick={() => navigate('/settings/mute')}
+                    >
+                        {t('mute')}
                     </ListItem>
                     <ListItem
                         startIcon={<MdLuggage size={24} />}

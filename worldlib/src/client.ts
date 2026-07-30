@@ -26,6 +26,7 @@ import { Timeline } from './timeline'
 import { semantics } from './semantics'
 import { Schemas } from './schemas'
 import { CachedPromise } from './cachedPromise'
+import { isMuteEntryExpired, muteEntryId, normalizeMuteWord, type MuteEntry, type MuteType } from './mute'
 
 const cacheLifetime = 5 * 60 * 1000
 interface Cache<T> {
@@ -113,15 +114,60 @@ export class Client {
     })
 
     blocks = new CachedPromise<string[]>(async () => {
+        // ゲストクライアントにはブロックはない。ミュート判定から毎メッセージで参照されるため、
+        // 読み込み失敗でもrejectさせない
+        if (!this.ccid) return []
         const prefix = semantics.blocks(this.ccid) + '/'
-        const results = await this.api.queryAll(
-            {
-                prefix: prefix
-            },
-            undefined,
-            { cache: true }
-        )
+        const results = await this.api
+            .queryAll(
+                {
+                    prefix: prefix
+                },
+                undefined,
+                { cache: true }
+            )
+            .catch((e) => {
+                console.error('Failed to load blocks:', e)
+                return []
+            })
         return results.map((sd) => sd.cckv.substring(prefix.length))
+    })
+
+    mutes = new CachedPromise<MuteEntry[]>(async () => {
+        // ゲストクライアントにはミュートはない。また、読み込み失敗でタイムライン全体を
+        // 巻き込まないよう、このPromiseはrejectさせない
+        if (!this.ccid) return []
+        const prefix = semantics.mutes(this.ccid) + '/'
+        const results = await this.api
+            .queryAll(
+                {
+                    prefix: prefix,
+                    schema: Schemas.mute
+                },
+                undefined,
+                { cache: true }
+            )
+            .catch((e) => {
+                console.error('Failed to load mutes:', e)
+                return []
+            })
+        const entries: MuteEntry[] = []
+        for (const sd of results) {
+            let entry: MuteEntry
+            try {
+                entry = (JSON.parse(sd.document) as Document<MuteEntry>).value
+            } catch (_) {
+                continue
+            }
+            if (typeof entry?.type !== 'string' || typeof entry?.target !== 'string') continue
+            if (isMuteEntryExpired(entry)) {
+                // 期限切れは読み込みついでに掃除する
+                this.api.delete(sd.cckv).catch(() => {})
+                continue
+            }
+            entries.push(entry)
+        }
+        return entries
     })
 
     pinnedLists = new CachedPromise<PinnedListItemClass[]>(async () => {
@@ -394,6 +440,35 @@ export class Client {
         const blockUri = semantics.block(this.ccid, target)
         await this.api.delete(blockUri)
         this.blocks.reload()
+    }
+
+    async mute(entry: MuteEntry): Promise<void> {
+        const normalized: MuteEntry =
+            entry.type === 'word' ? { ...entry, target: normalizeMuteWord(entry.target) } : entry
+        if (normalized.target.length === 0) return
+        const document: Document<MuteEntry> = {
+            kind: 'record',
+            key: semantics.mute(this.ccid, muteEntryId(normalized.type, normalized.target)),
+            schema: Schemas.mute,
+            value: normalized,
+            author: this.ccid,
+            createdAt: new Date(),
+            // ミュートリストは他者から読めてはいけない
+            policy: {
+                entries: [
+                    {
+                        url: 'https://policy.concrnt.world/private.json'
+                    }
+                ]
+            }
+        }
+        await this.api.commit(document)
+        this.mutes.reload()
+    }
+
+    async unmute(type: MuteType, target: string): Promise<void> {
+        await this.api.delete(semantics.mute(this.ccid, muteEntryId(type, target)))
+        this.mutes.reload()
     }
 
     async requestReadAccess(

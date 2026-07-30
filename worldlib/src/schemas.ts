@@ -28,6 +28,8 @@ export const Schemas = {
 
     list: 'https://schema.concrnt.world/s/list.json',
 
+    mute: 'https://schema.concrnt.world/s/mute.json',
+
     pinnedLists: 'https://schema.concrnt.world/utils/pinnedLists.json',
 
     empty: 'https://schema.concrnt.world/empty.json',

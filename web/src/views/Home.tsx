@@ -22,6 +22,7 @@ import { ListName } from '../components/ListName'
 import { ProfileEditor } from '../components/ProfileEditor'
 import { useSubscribe } from '../hooks/useSubscribe'
 import { usePreference } from '../contexts/Preference'
+import { MuteScopeProvider } from '../contexts/Mute'
 import { sortByListOrder } from '../utils/listOrder'
 import { Composer } from '../components/Composer'
 import { FAB } from '../components/FAB'
@@ -243,5 +244,9 @@ const Timeline = (props: { list: List; excludeSelf?: boolean; ref?: ScrollViewRe
         [self, items, props.excludeSelf]
     )
 
-    return <RealtimeTimeline ref={props.ref} timelines={timelines} headElement={props.headElement} />
+    return (
+        <MuteScopeProvider context="home">
+            <RealtimeTimeline ref={props.ref} timelines={timelines} headElement={props.headElement} />
+        </MuteScopeProvider>
+    )
 }
