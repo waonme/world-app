@@ -127,7 +127,11 @@ export const MessageContainer = (props: Props): ReactNode | null => {
             return <LegacyNoteMessage message={message} forceExpanded={props.forceExpanded} />
         default:
             return (
-                <div>
+                <div
+                    style={{
+                        overflow: 'hidden'
+                    }}
+                >
                     <Text>Unsupported message schema: {message.schema}</Text>
                     <pre
                         style={{

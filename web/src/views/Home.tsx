@@ -149,7 +149,7 @@ const HomeMain = ({
             {sortedPins.length > 1 && (
                 <Tabs
                     style={{
-                        color: CssVar.contentLink,
+                        // リストが多いときは横スクロール(タブ幅を潰さない)
                         overflowX: 'auto',
                         justifyContent: 'flex-start'
                     }}
@@ -166,11 +166,18 @@ const HomeMain = ({
                             groupId="home-timeline-tabs"
                             style={{
                                 color: CssVar.contentText,
-                                width: '120px',
-                                flexShrink: 0
+                                flexShrink: 0,
+                                maxWidth: '10rem'
                             }}
                         >
-                            <ListName uri={tab.uri} />
+                            <ListName
+                                uri={tab.uri}
+                                style={{
+                                    overflow: 'hidden',
+                                    whiteSpace: 'nowrap',
+                                    textOverflow: 'ellipsis'
+                                }}
+                            />
                         </Tab>
                     ))}
                 </Tabs>

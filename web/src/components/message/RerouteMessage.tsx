@@ -15,6 +15,7 @@ import { MessageContainer } from './main'
 import { TimeDiff } from '../TimeDiff'
 import { RenderError } from './RenderError'
 import { ErrorBoundary } from 'react-error-boundary'
+import { CssVar } from '../../types/Theme'
 
 export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
     const { t } = useTranslation('', { keyPrefix: 'components.rerouteMessage' })
@@ -32,9 +33,9 @@ export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '12px',
-                            opacity: 0.7
+                            gap: CssVar.space(1),
+                            fontSize: '0.75rem',
+                            color: CssVar.textSecondary
                         }}
                     >
                         <MdRepeat size={14} />
@@ -63,7 +64,7 @@ export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
                         } as React.CSSProperties
                     }
                 >
-                    <MdMoreHoriz size={15} />
+                    <MdMoreHoriz size={16} />
                 </IconButton>
                 <Select
                     open={menuOpen}

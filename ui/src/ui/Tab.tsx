@@ -12,7 +12,8 @@ interface Props {
 }
 
 const pressedStyle: CSSProperties = {
-    backgroundColor: `rgb(from ${CssVar.backdropText} r g b / 0.08)`
+    // 置かれる面の文字色に追従する押下ハイライト
+    backgroundColor: 'color-mix(in srgb, currentcolor 12%, transparent)'
 }
 
 const indicatorInlineInset = `calc(${CssVar.space(1)} / 2)`
@@ -25,12 +26,14 @@ export const Tab = (props: Props) => {
             style={{
                 flex: 1,
                 width: '100%',
-                padding: '0.5rem',
+                padding: CssVar.space(2),
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
                 borderRadius: CssVar.round(1),
-                ...props.style
+                ...props.style,
+                // 選択状態は accent で示す(style.color は非選択時の文字色)
+                color: props.selected ? CssVar.accent : props.style?.color
             }}
             onClick={props.onClick}
             pressedStyle={pressedStyle}
@@ -52,7 +55,8 @@ export const Tab = (props: Props) => {
                         style={{
                             position: 'absolute',
                             height: indicatorHeight,
-                            backgroundColor: props.style?.color ?? CssVar.backdropText,
+                            backgroundColor: CssVar.accent,
+                            borderRadius: CssVar.roundFull,
                             bottom: 0,
                             left: 0,
                             right: 0

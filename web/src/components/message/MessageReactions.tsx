@@ -5,7 +5,7 @@ import { CssVar } from '../../types/Theme'
 import { hapticLight } from '../../utils/haptics'
 import { startTransition } from 'react'
 import { ReactionState } from './Footer'
-import { CCImage } from '@concrnt/ui'
+import { ButtonBase, CCImage } from '@concrnt/ui'
 
 interface Props {
     message: Message<any>
@@ -92,30 +92,30 @@ export const MessageReactions = (props: Props) => {
             style={{
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: '6px'
+                gap: CssVar.space(1)
             }}
         >
             {Object.entries(reactionCounts).map(([imageUrl, count]) => {
                 const isOwn = !!ownReactions[imageUrl]
                 return (
-                    <button
+                    <ButtonBase
                         key={imageUrl}
                         onClick={(e) => {
                             e.stopPropagation()
                             handleReactionClick(imageUrl)
                         }}
+                        pressedStyle={{ backgroundColor: CssVar.statePressed(CssVar.contentText) }}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 8px',
+                            gap: CssVar.space(1),
+                            padding: `${CssVar.space(0.5)} ${CssVar.space(2)}`,
                             borderRadius: CssVar.round(1),
-                            border: isOwn ? `1.5px solid ${CssVar.contentLink}` : `1px solid ${CssVar.divider}`,
-                            backgroundColor: isOwn ? `rgb(from ${CssVar.contentLink} r g b / 0.15)` : 'transparent',
+                            border: isOwn ? `1.5px solid ${CssVar.accent}` : `1px solid ${CssVar.divider}`,
+                            backgroundColor: isOwn ? CssVar.stateSelected(CssVar.accent) : 'transparent',
                             cursor: 'pointer',
                             color: CssVar.contentText,
-                            fontSize: '13px',
-                            WebkitTapHighlightColor: 'transparent'
+                            fontSize: '0.75rem'
                         }}
                     >
                         <CCImage
@@ -129,7 +129,7 @@ export const MessageReactions = (props: Props) => {
                             }}
                         />
                         <span>{count}</span>
-                    </button>
+                    </ButtonBase>
                 )
             })}
         </div>

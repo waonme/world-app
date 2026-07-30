@@ -13,7 +13,7 @@ export const Loading = (props: Props): ReactNode => {
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 1
+                gap: CssVar.space(2)
             }}
         >
             <ConcrntLogo

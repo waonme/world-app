@@ -20,6 +20,7 @@ import { MuteDurationSelect } from '../MuteDurationSelect'
 import { useEmojiPicker } from '../../contexts/EmojiPicker'
 import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
+import { CssVar } from '../../types/Theme'
 
 interface Props {
     message: Message<any>
@@ -40,6 +41,7 @@ export const MessageActions = (props: Props) => {
     const [reportOpen, setReportOpen] = useState(false)
     const [inspectorOpen, setInspectorOpen] = useState(false)
     const [muteDurationOpen, setMuteDurationOpen] = useState(false)
+    const messageHref = props.message.key ?? props.message.uri
     const emojiPicker = useEmojiPicker()
     const qt = useQueryTimelineContext()
     const menuAnchor = useAnchor()
@@ -120,7 +122,7 @@ export const MessageActions = (props: Props) => {
                             })
                             if (likeState.ownLike) {
                                 await likeState.ownLike.delete(client)
-                                qt.update(props.message.key)
+                                qt.update(messageHref)
                             }
                         })
                     } else {
@@ -138,13 +140,13 @@ export const MessageActions = (props: Props) => {
                                 }
                             })
                             await props.message.favorite(client)
-                            qt.update(props.message.key)
+                            qt.update(messageHref)
                         })
                     }
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
-                {likeState.ownLike ? <MdStar size={20} color="gold" /> : <MdStarOutline size={20} />}
+                {likeState.ownLike ? <MdStar size={20} color={CssVar.accent} /> : <MdStarOutline size={20} />}
                 <span style={{ marginLeft: '4px' }}>{likeState.count}</span>
             </Button>
             {/* リアクションボタン */}
