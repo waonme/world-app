@@ -1,28 +1,64 @@
 import { useEffect, useState } from 'react'
 import { useClient } from '../contexts/Client'
 import { View } from '../components/View'
+import { Button } from '@concrnt/ui'
 import { ApNote } from './ApNote'
 import { ApPerson } from './ApPerson'
 import { ApObject } from '../utils/activitypub'
+import { invalidateActivitypubObject, resolveActivitypubObject } from '@concrnt/worldlib'
 
 interface Props {
     uri: string
 }
 
+interface ResolveState {
+    key: string
+    object?: ApObject
+    failed: boolean
+}
+
 export const ApView = (props: Props) => {
     const { client } = useClient()
-    const [ld, setLd] = useState<ApObject>()
+    const [retryKey, setRetryKey] = useState(0)
+    const [resolveState, setResolveState] = useState<ResolveState>({ key: '', failed: false })
+    const requestKey = `${props.uri}\n${retryKey}`
 
     useEffect(() => {
-        client.api
-            .callConcrntApi<ApObject>(client.server.domain, 'net.concrnt.activitypub.resolve', { uri: props.uri })
-            .then(async (res) => setLd(new ApObject(res)))
-            .catch((err) => {
-                console.log(err)
+        let cancelled = false
+
+        resolveActivitypubObject<ApObject>(client.api, client.server.domain, props.uri, { force: retryKey > 0 })
+            .then(async (res) => {
+                if (!cancelled) setResolveState({ key: requestKey, object: new ApObject(res), failed: false })
             })
-    }, [props.uri, client])
+            .catch((err) => {
+                console.warn(`Failed to resolve ActivityPub object: ${props.uri}`, err)
+                if (!cancelled) setResolveState({ key: requestKey, failed: true })
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [props.uri, client, retryKey, requestKey])
+
+    const currentState = resolveState.key === requestKey ? resolveState : undefined
+    const ld = currentState?.object
 
     if (!ld) {
+        if (currentState?.failed) {
+            return (
+                <View>
+                    <p>ActivityPub object could not be loaded.</p>
+                    <Button
+                        onClick={() => {
+                            invalidateActivitypubObject(client.server.domain, props.uri)
+                            setRetryKey((key) => key + 1)
+                        }}
+                    >
+                        Retry
+                    </Button>
+                </View>
+            )
+        }
         return <View></View>
     }
 

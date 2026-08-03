@@ -1,12 +1,12 @@
-import { Suspense, use, useMemo } from 'react'
+import { Suspense, use, useMemo, useState } from 'react'
 import { ApObject } from '../../utils/activitypub'
 import { MessageLayout } from './MessageLayout'
-import { Avatar, CfmRenderer, CssVar, Text } from '@concrnt/ui'
+import { Avatar, Button, CfmRenderer, CssVar, Text } from '@concrnt/ui'
 import { TimeDiff } from '../TimeDiff'
 import { useNavigate } from 'react-router-dom'
 import { useClient } from '../../contexts/Client'
 import { MessageSkeleton } from './MessageSkeleton'
-import { ApNoteSchema, Message } from '@concrnt/worldlib'
+import { ApNoteSchema, invalidateActivitypubObject, Message, resolveActivitypubObject } from '@concrnt/worldlib'
 import { MessageFooter } from './Footer'
 import { CollapsibleBody } from './CollapsibleBody'
 
@@ -19,20 +19,32 @@ interface Props {
 
 export const ActivitypubNote = (props: Props) => {
     const { client } = useClient()
+    const [retryKey, setRetryKey] = useState(0)
 
     const notePromise = useMemo(() => {
-        return client.api
-            .callConcrntApi<ApObject>(client.server.domain, 'net.concrnt.activitypub.resolve', { uri: props.noteURL })
+        return resolveActivitypubObject<ApObject>(client.api, client.server.domain, props.noteURL, {
+            force: retryKey > 0
+        })
             .then(async (res) => new ApObject(res))
-            .catch(() => null)
-    }, [client, props.noteURL])
+            .catch((error) => {
+                console.warn(`Failed to resolve ActivityPub note: ${props.noteURL}`, error)
+                return null
+            })
+    }, [client, props.noteURL, retryKey])
 
     const authorPromise = useMemo(() => {
-        return client.api
-            .callConcrntApi<ApObject>(client.server.domain, 'net.concrnt.activitypub.resolve', { uri: props.actorURL })
+        return resolveActivitypubObject<ApObject>(client.api, client.server.domain, props.actorURL)
             .then(async (res) => new ApObject(res))
-            .catch(() => null)
+            .catch((error) => {
+                console.warn(`Failed to resolve ActivityPub actor: ${props.actorURL}`, error)
+                return null
+            })
     }, [client, props.actorURL])
+
+    const retry = () => {
+        invalidateActivitypubObject(client.server.domain, props.noteURL)
+        setRetryKey((key) => key + 1)
+    }
 
     return (
         <Suspense fallback={<MessageSkeleton />}>
@@ -41,6 +53,7 @@ export const ActivitypubNote = (props: Props) => {
                 authorPromise={authorPromise}
                 message={props.message}
                 forceExpanded={props.forceExpanded}
+                onRetry={retry}
             />
         </Suspense>
     )
@@ -51,6 +64,7 @@ const Note = (props: {
     authorPromise: Promise<ApObject | null>
     message?: Message<ApNoteSchema>
     forceExpanded?: boolean
+    onRetry: () => void
 }) => {
     const navigate = useNavigate()
 
@@ -61,10 +75,14 @@ const Note = (props: {
         return (
             <div
                 style={{
-                    padding: CssVar.space(2)
+                    padding: CssVar.space(2),
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: CssVar.space(2)
                 }}
             >
-                <Text>Note not found</Text>
+                <Text>Note could not be loaded.</Text>
+                <Button onClick={props.onRetry}>Retry</Button>
             </div>
         )
     }

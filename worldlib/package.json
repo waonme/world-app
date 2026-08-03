@@ -16,7 +16,8 @@
         "build": "npm run build:cjs && npm run build:esm",
         "build:cjs": "tsc -p tsconfig.cjs.json",
         "build:esm": "tsc -p tsconfig.esm.json",
-        "test:profile": "npm run build:cjs && node --test test/message-profile.test.cjs"
+        "test:profile": "npm run build:cjs && node --test test/message-profile.test.cjs",
+        "test:activitypub": "npm run build:cjs && node --test test/activitypub-resolve.test.cjs"
     },
     "author": "",
     "license": "ISC",
