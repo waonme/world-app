@@ -5,6 +5,21 @@ export interface ApImage {
     url: string
     name: string | null
     sensitive: boolean
+    mediaType?: string
+}
+
+export interface ApLink {
+    type?: 'Link'
+    href: string
+    mediaType?: string
+}
+
+export interface ActivitypubMedia {
+    mediaURL: string
+    mediaType: string
+    altText?: string
+    blurhash?: string
+    flag?: string
 }
 
 // APブリッジ(activitypub.concrnt.world)のフォローレコードキー。
@@ -25,7 +40,7 @@ export class ApObject {
     endpoints?: {
         sharedInbox: string
     }
-    url?: string
+    url?: string | ApLink | Array<string | ApLink>
     preferredUsername?: string
     name?: string
     summary?: string
@@ -42,6 +57,9 @@ export class ApObject {
         publicKeyPem: string
     }
     attachment?: ApObject | ApObject[]
+    mediaType?: string
+    sensitive?: boolean
+    blurhash?: string
     attributedTo?: string
     content?: string
     _misskey_content?: string
@@ -76,5 +94,40 @@ export class ApObject {
         if (!this.attachment) return []
         if (Array.isArray(this.attachment)) return this.attachment
         return [this.attachment]
+    }
+
+    getAttachmentMedias(): ActivitypubMedia[] {
+        const attachments = this.getAttachments()
+        if (attachments.length === 0 && this.type === 'Note') {
+            return this.getImages().map((image) => ({
+                mediaURL: image.url,
+                mediaType: image.mediaType ?? 'image/*',
+                ...(image.name ? { altText: image.name } : {}),
+                ...(image.sensitive ? { flag: 'sensitive' } : {})
+            }))
+        }
+
+        return attachments.flatMap((attachment) => {
+            const urls = Array.isArray(attachment.url) ? attachment.url : [attachment.url]
+            const target = urls.find((url): url is string | ApLink => url != null)
+            if (!target) return []
+
+            const mediaURL = typeof target === 'string' ? target : target.href
+            const mediaType =
+                attachment.mediaType ??
+                (typeof target === 'string' ? undefined : target.mediaType) ??
+                ({ Image: 'image/*', Video: 'video/*', Audio: 'audio/*' }[attachment.type] ||
+                    'application/octet-stream')
+
+            return [
+                {
+                    mediaURL,
+                    mediaType,
+                    ...(attachment.name ? { altText: attachment.name } : {}),
+                    ...(attachment.blurhash ? { blurhash: attachment.blurhash } : {}),
+                    ...(attachment.sensitive || this.sensitive ? { flag: 'sensitive' } : {})
+                }
+            ]
+        })
     }
 }
