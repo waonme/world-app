@@ -32,7 +32,6 @@ interface Props {
 export const GuestPostView = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'web.guestPost' })
     const { client } = useClient()
-    const navigate = useNavigate()
     const [tab, setTab] = useState<PostTab>('replies')
 
     // --- Replies / Reroutes / Favorites ---
@@ -222,7 +221,7 @@ export const GuestPostView = (props: Props) => {
                                     key={reroute.ccfs}
                                     ccid={reroute.author}
                                     date={reroute.createdAt}
-                                    onClick={() => navigate('/profile/' + reroute.author)}
+                                    profileOverride={reroute.value.profileOverride}
                                 >
                                     {t('rerouted')}
                                 </AssociationUserItem>
@@ -242,7 +241,7 @@ export const GuestPostView = (props: Props) => {
                                     key={fav.ccfs}
                                     ccid={fav.author}
                                     date={fav.createdAt}
-                                    onClick={() => navigate('/profile/' + fav.author)}
+                                    profileOverride={fav.value.profileOverride}
                                 >
                                     {t('favorited')}
                                 </AssociationUserItem>
@@ -323,7 +322,7 @@ export const GuestPostView = (props: Props) => {
                                                 key={member.ccfs}
                                                 ccid={member.author}
                                                 date={member.createdAt}
-                                                onClick={() => navigate('/profile/' + member.author)}
+                                                profileOverride={member.value.profileOverride}
                                             />
                                         ))}
                                 </>
@@ -363,12 +362,13 @@ const RestrictedFallback = () => {
 interface AssociationUserItemProps {
     ccid: string
     date: Date
+    profileOverride?: { username?: string; avatar?: string; link?: string }
     children?: React.ReactNode
-    onClick?: () => void
 }
 
 const AssociationUserItem = (props: AssociationUserItemProps) => {
     const { client } = useClient()
+    const navigate = useNavigate()
     const [user, setUser] = useState<User | null>(null)
 
     useEffect(() => {
@@ -384,11 +384,23 @@ const AssociationUserItem = (props: AssociationUserItemProps) => {
                 padding: `${CssVar.space(1)} 0`,
                 cursor: 'pointer'
             }}
-            onClick={props.onClick}
+            onClick={() => {
+                if (props.profileOverride?.link) {
+                    navigate('/activitypub/view/' + encodeURIComponent(props.profileOverride.link))
+                } else {
+                    navigate('/profile/' + props.ccid)
+                }
+            }}
         >
-            <Avatar ccid={props.ccid} src={user?.profile.avatar} style={{ width: '32px', height: '32px' }} />
+            <Avatar
+                ccid={props.ccid}
+                src={props.profileOverride?.avatar ?? user?.profile.avatar}
+                style={{ width: '32px', height: '32px' }}
+            />
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 'bold' }}>{user?.profile.username || 'Anonymous'}</span>
+                <span style={{ fontWeight: 'bold' }}>
+                    {props.profileOverride?.username ?? user?.profile.username ?? 'Anonymous'}
+                </span>
                 {props.children && <span style={{ opacity: 0.7 }}>{props.children}</span>}
             </div>
             <TimeDiff date={props.date instanceof Date ? props.date : new Date(props.date)} />

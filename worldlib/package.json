@@ -15,7 +15,8 @@
     "scripts": {
         "build": "npm run build:cjs && npm run build:esm",
         "build:cjs": "tsc -p tsconfig.cjs.json",
-        "build:esm": "tsc -p tsconfig.esm.json"
+        "build:esm": "tsc -p tsconfig.esm.json",
+        "test:profile": "npm run build:cjs && node --test test/message-profile.test.cjs"
     },
     "author": "",
     "license": "ISC",
