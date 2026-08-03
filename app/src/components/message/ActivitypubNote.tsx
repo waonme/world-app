@@ -10,6 +10,7 @@ import { MessageSkeleton } from './MessageSkeleton'
 import { ApNoteSchema, invalidateActivitypubObject, Message, resolveActivitypubObject } from '@concrnt/worldlib'
 import { MessageFooter } from './Footer'
 import { CollapsibleBody } from './CollapsibleBody'
+import { MediaGallery } from '../MediaGallery/main'
 
 interface Props {
     actorURL: string
@@ -88,6 +89,8 @@ const Note = (props: {
         )
     }
 
+    const medias = note.getAttachmentMedias()
+
     return (
         <MessageLayout
             onClick={() => {
@@ -116,6 +119,7 @@ const Note = (props: {
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
                 <CfmRenderer messagebody={note.content ?? ''} emojiDict={{}} />
+                {medias.length > 0 && <MediaGallery medias={medias} />}
             </CollapsibleBody>
             {props.message && <MessageFooter message={props.message} />}
         </MessageLayout>
