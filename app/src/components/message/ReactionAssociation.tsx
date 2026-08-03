@@ -5,6 +5,7 @@ import { CCImage, Avatar, CfmRenderer } from '@concrnt/ui'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
 import { ProfileView } from '../../views/Profile'
+import { ApView } from '../../views/ApView'
 import { MdEmojiEmotions } from 'react-icons/md'
 import { MessageLayout } from './MessageLayout'
 
@@ -43,7 +44,7 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
             >
                 <Avatar
                     ccid={message.author}
-                    src={reactionAuthor?.profile.avatar}
+                    src={message.authorProfile?.avatar}
                     style={{ width: '16px', height: '16px' }}
                 />
                 {reaction?.imageUrl ? (
@@ -62,13 +63,15 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                 <span
                     onClick={(e) => {
                         e.stopPropagation()
-                        if (reactionAuthor) {
+                        if (message.value.profileOverride?.link) {
+                            push(<ApView uri={message.value.profileOverride.link} />)
+                        } else if (reactionAuthor) {
                             push(<ProfileView ccid={reactionAuthor.ccid} />)
                         }
                     }}
                     style={{ cursor: 'pointer' }}
                 >
-                    {t('userReacted', { name: reactionAuthor?.profile.username ?? '' })}
+                    {t('userReacted', { name: message.authorProfile?.username ?? '' })}
                 </span>
             </div>
 
@@ -81,10 +84,10 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                                 push(<ProfileView ccid={targetMessage.author} />)
                             }}
                         >
-                            <Avatar ccid={targetMessage.author} src={targetMessage.authorUser?.profile.avatar} />
+                            <Avatar ccid={targetMessage.author} src={targetMessage.authorProfile?.avatar} />
                         </div>
                     }
-                    headerLeft={<div style={{ fontWeight: 'bold' }}>{targetMessage.authorUser?.profile.username}</div>}
+                    headerLeft={<div style={{ fontWeight: 'bold' }}>{targetMessage.authorProfile?.username}</div>}
                 >
                     <CfmRenderer messagebody={targetMessage.value.body} emojiDict={targetMessage.value.emojis ?? {}} />
                 </MessageLayout>

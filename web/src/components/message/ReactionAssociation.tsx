@@ -41,7 +41,7 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
             >
                 <Avatar
                     ccid={message.author}
-                    src={reactionAuthor?.profile.avatar}
+                    src={message.authorProfile?.avatar}
                     style={{ width: '16px', height: '16px' }}
                 />
                 {reaction?.imageUrl ? (
@@ -60,13 +60,15 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                 <span
                     onClick={(e) => {
                         e.stopPropagation()
-                        if (reactionAuthor) {
+                        if (message.value.profileOverride?.link) {
+                            navigate('/activitypub/view/' + encodeURIComponent(message.value.profileOverride.link))
+                        } else if (reactionAuthor) {
                             navigate('/profile/' + reactionAuthor.ccid)
                         }
                     }}
                     style={{ cursor: 'pointer' }}
                 >
-                    {t('userReacted', { name: reactionAuthor?.profile.username ?? '' })}
+                    {t('userReacted', { name: message.authorProfile?.username ?? '' })}
                 </span>
             </div>
 
@@ -79,10 +81,10 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                                 navigate('/profile/' + targetMessage.author)
                             }}
                         >
-                            <Avatar ccid={targetMessage.author} src={targetMessage.authorUser?.profile.avatar} />
+                            <Avatar ccid={targetMessage.author} src={targetMessage.authorProfile?.avatar} />
                         </div>
                     }
-                    headerLeft={<div style={{ fontWeight: 'bold' }}>{targetMessage.authorUser?.profile.username}</div>}
+                    headerLeft={<div style={{ fontWeight: 'bold' }}>{targetMessage.authorProfile?.username}</div>}
                 >
                     <CfmRenderer messagebody={targetMessage.value.body} emojiDict={targetMessage.value.emojis ?? {}} />
                 </MessageLayout>

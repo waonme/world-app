@@ -35,6 +35,7 @@ import { useStack } from '../layouts/Stack'
 import { PostView } from '../views/Post'
 import { ProfileView } from '../views/Profile'
 import { BskyView } from '../views/BskyView'
+import { ApView } from '../views/ApView'
 import { PullToRefresh } from './PullToRefresh'
 
 // 通知を集約した表示単位
@@ -441,7 +442,7 @@ const SummarisedLike = (props: { items: Message<LikeAssociationSchema>[] }) => {
     // 集約グループ内の全 Message は同じ associationTarget を指している前提
     // （集約キーが `${associationTarget.uri}${KEY_SUFFIX_LIKE}` のため）
     const target = props.items[0].associationTarget
-    const firstAuthor = props.items[0].authorUser
+    const firstAuthor = props.items[0].authorProfile
 
     return (
         <div
@@ -489,14 +490,16 @@ const SummarisedLike = (props: { items: Message<LikeAssociationSchema>[] }) => {
                             key={item.uri}
                             onClick={(e) => {
                                 e.stopPropagation()
-                                if (item.authorUser) {
+                                if (item.value.profileOverride?.link) {
+                                    push(<ApView uri={item.value.profileOverride.link} />)
+                                } else if (item.authorUser) {
                                     push(<ProfileView ccid={item.authorUser.ccid} />)
                                 }
                             }}
                         >
                             <Avatar
                                 ccid={item.author}
-                                src={item.authorUser?.profile.avatar}
+                                src={item.authorProfile?.avatar}
                                 style={{ width: '32px', height: '32px' }}
                             />
                         </div>
@@ -506,11 +509,11 @@ const SummarisedLike = (props: { items: Message<LikeAssociationSchema>[] }) => {
                 {/* 文言 */}
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
                     {props.items.length === 1 ? (
-                        <span>{t('favorite', { name: firstAuthor?.profile.username ?? t('unknown') })}</span>
+                        <span>{t('favorite', { name: firstAuthor?.username ?? t('unknown') })}</span>
                     ) : (
                         <span>
                             {t('favoriteMany', {
-                                name: firstAuthor?.profile.username ?? t('unknown'),
+                                name: firstAuthor?.username ?? t('unknown'),
                                 others: props.items.length - 1
                             })}
                         </span>
@@ -591,13 +594,13 @@ const FollowNotification = (props: { item: Message<FollowAckSchema> }) => {
                 <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', flexWrap: 'wrap' }}>
                     <Avatar
                         ccid={props.item.author}
-                        src={author?.profile.avatar}
+                        src={props.item.authorProfile?.avatar}
                         style={{ width: '32px', height: '32px' }}
                     />
                 </div>
 
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
-                    <span>{t('follow', { name: author?.profile.username ?? t('unknown') })}</span>
+                    <span>{t('follow', { name: props.item.authorProfile?.username ?? t('unknown') })}</span>
                 </div>
             </div>
         </div>
@@ -741,7 +744,7 @@ const ReadAccessRequestNotification = (props: { item: Message<ReadAccessRequestA
                 <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', flexWrap: 'wrap' }}>
                     <Avatar
                         ccid={props.item.author}
-                        src={author?.profile.avatar}
+                        src={props.item.authorProfile?.avatar}
                         style={{ width: '32px', height: '32px' }}
                     />
                 </div>
@@ -749,7 +752,7 @@ const ReadAccessRequestNotification = (props: { item: Message<ReadAccessRequestA
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
                     <span>
                         {t('readAccessRequest', {
-                            name: author?.profile.username ?? t('unknown'),
+                            name: props.item.authorProfile?.username ?? t('unknown'),
                             target: targetLabel
                         })}
                     </span>
@@ -812,7 +815,7 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
     const { push } = useStack()
 
     const target = props.items[0].associationTarget
-    const firstAuthor = props.items[0].authorUser
+    const firstAuthor = props.items[0].authorProfile
 
     // imageUrl ごとに再グルーピング（同じ投稿に対する異なる絵文字リアクションをまとめる）
     const reactions: Record<string, Message<ReactionAssociationSchema>[]> = {}
@@ -888,14 +891,16 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
                                     key={item.uri}
                                     onClick={(e) => {
                                         e.stopPropagation()
-                                        if (item.authorUser) {
+                                        if (item.value.profileOverride?.link) {
+                                            push(<ApView uri={item.value.profileOverride.link} />)
+                                        } else if (item.authorUser) {
                                             push(<ProfileView ccid={item.authorUser.ccid} />)
                                         }
                                     }}
                                 >
                                     <Avatar
                                         ccid={item.author}
-                                        src={item.authorUser?.profile.avatar}
+                                        src={item.authorProfile?.avatar}
                                         style={{ width: '20px', height: '20px' }}
                                     />
                                 </div>
@@ -907,11 +912,11 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
                 {/* 文言 */}
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
                     {props.items.length === 1 ? (
-                        <span>{t('reaction', { name: firstAuthor?.profile.username ?? t('unknown') })}</span>
+                        <span>{t('reaction', { name: firstAuthor?.username ?? t('unknown') })}</span>
                     ) : (
                         <span>
                             {t('reactionMany', {
-                                name: firstAuthor?.profile.username ?? t('unknown'),
+                                name: firstAuthor?.username ?? t('unknown'),
                                 others: props.items.length - 1
                             })}
                         </span>

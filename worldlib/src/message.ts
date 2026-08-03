@@ -68,6 +68,12 @@ export class Message<T> implements Document<T> {
         const message = new Message<T>(uri, res)
         message.hint = hint
         message.authorUser = await User.load(client, message.author, hint).catch(() => undefined)
+        // Start from the record author's main profile. A keyed subprofile and
+        // finally a bridge-provided profileOverride can replace it below.
+        message.authorProfile = {
+            ...message.authorProfile,
+            ...message.authorUser?.profile
+        }
 
         const key = message.key
         //  `cckv://${owner}/concrnt.world/profiles/${profile}/posts/${postId}`,

@@ -7,6 +7,7 @@ import { useStack } from '../../layouts/Stack'
 import { useClient } from '../../contexts/Client'
 import { PostView } from '../../views/Post'
 import { ProfileView } from '../../views/Profile'
+import { ApView } from '../../views/ApView'
 import { MdReply } from 'react-icons/md'
 import { MessageLayout } from './MessageLayout'
 
@@ -71,7 +72,7 @@ export const ReplyAssociation = (props: MessageProps<ReplyAssociationSchema>) =>
                 >
                     <Avatar
                         ccid={targetMessage.author}
-                        src={targetMessage.authorUser?.profile.avatar}
+                        src={targetMessage.authorProfile?.avatar}
                         style={{ width: '16px', height: '16px' }}
                     />
                     <span>{targetMessage.value.body}</span>
@@ -90,18 +91,20 @@ export const ReplyAssociation = (props: MessageProps<ReplyAssociationSchema>) =>
                         <div
                             onClick={(e) => {
                                 e.stopPropagation()
-                                if (replyAuthor) {
+                                if (message.value.profileOverride?.link) {
+                                    push(<ApView uri={message.value.profileOverride.link} />)
+                                } else if (replyAuthor) {
                                     push(<ProfileView ccid={replyAuthor.ccid} />)
                                 }
                             }}
                         >
-                            <Avatar ccid={message.author} src={replyAuthor?.profile.avatar} />
+                            <Avatar ccid={message.author} src={message.authorProfile?.avatar} />
                         </div>
                     }
-                    headerLeft={<div style={{ fontWeight: 'bold' }}>{replyAuthor?.profile.username}</div>}
+                    headerLeft={<div style={{ fontWeight: 'bold' }}>{message.authorProfile?.username}</div>}
                 >
                     <Chip headElement={<MdReply size={12} />}>
-                        {targetMessage?.authorUser?.profile.username || 'Unknown'}
+                        {targetMessage?.authorProfile?.username || 'Unknown'}
                     </Chip>
                     <CfmRenderer messagebody={replyMessage.value.body} emojiDict={{}} />
                 </MessageLayout>
