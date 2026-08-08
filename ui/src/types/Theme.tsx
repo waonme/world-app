@@ -17,11 +17,6 @@ export interface Theme {
     meta?: any
     space: string
     round: string
-    // 「注目」を担うアクセント色(選択インジケータ・新着・強調)。省略時は content.link から導出。
-    // 既存テーマJSONを壊さないため optional
-    accent?: string
-    // 破壊的操作・エラーの色。省略時は既定値
-    danger?: string
 }
 
 export const CssVar = {
@@ -33,22 +28,8 @@ export const CssVar = {
     backdropText: 'var(--backdrop-text)',
     backdropBackground: 'var(--backdrop-background)',
     divider: 'var(--divider)',
-    accent: 'var(--accent)',
-    danger: 'var(--danger)',
-    // 本文色の透過で作る派生テキスト階層。独立グレースケールは持たない(v1からの原則)
-    textSecondary: 'var(--text-secondary)',
-    textDisabled: 'var(--text-disabled)',
-    scrim: 'var(--scrim)',
-    shadow1: 'var(--shadow-1)',
-    shadow2: 'var(--shadow-2)',
-    roundFull: '9999px',
     space: (mul: number) => `calc(var(--space) * ${mul})`,
-    round: (mul: number) => `calc(var(--round) * ${mul})`,
-    // 操作状態は色相を変えず透過率で表す。hover 8% / pressed 12% / selected 15%
-    // color-mixは元色のアルファを乗算的に保つ(半透明テーマでも破綻しない)
-    stateHover: (color: string) => `color-mix(in srgb, ${color} 8%, transparent)`,
-    statePressed: (color: string) => `color-mix(in srgb, ${color} 12%, transparent)`,
-    stateSelected: (color: string) => `color-mix(in srgb, ${color} 15%, transparent)`
+    round: (mul: number) => `calc(var(--round) * ${mul})`
 }
 
 // Loose shape of a v1 (MUI-based) Concrnt theme, as shared/stored by the v1 client.
@@ -79,11 +60,8 @@ export const migrateTheme = (input: any): Theme => {
 
     return {
         content: {
-            // v1では secondary.main がリンク・タブ選択・通知dotを担うアクセント。
-            // text.secondary は組み込みテーマだと本文色と同値のことがある(例: blue)ため、
-            // secondary.main を優先して拾う
-            link: palette.secondary?.main ?? palette.text?.secondary ?? contentText,
             text: contentText,
+            link: palette.text?.secondary ?? contentText,
             background: palette.background?.paper ?? '#ffffff'
         },
         ui: {

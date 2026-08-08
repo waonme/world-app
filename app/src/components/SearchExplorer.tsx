@@ -90,7 +90,6 @@ export const SearchExplorer = () => {
                 <Tab
                     selected={tab === 'communities'}
                     groupId="search-explorer"
-                    selectedColor={activeColor}
                     style={tabStyle(tab === 'communities')}
                     onClick={() => setTab('communities')}
                 >
@@ -99,7 +98,6 @@ export const SearchExplorer = () => {
                 <Tab
                     selected={tab === 'users'}
                     groupId="search-explorer"
-                    selectedColor={activeColor}
                     style={tabStyle(tab === 'users')}
                     onClick={() => setTab('users')}
                 >

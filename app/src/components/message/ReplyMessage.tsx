@@ -8,6 +8,7 @@ import { PostView } from '../../views/Post'
 import { Avatar, CfmRenderer, CssVar } from '@concrnt/ui'
 
 import { MessageLayout } from './MessageLayout'
+import { MessageAuthor } from './MessageAuthor'
 import { MessageContainer } from './main'
 import { RenderError } from './RenderError'
 import { ErrorBoundary } from 'react-error-boundary'
@@ -33,6 +34,7 @@ export const ReplyMessage = (props: MessageProps<ReplyMessageSchema>) => {
                 <MessageContainer oneline uri={props.message.value.targetURI} />
             </ErrorBoundary>
             <MessageLayout
+                detail={props.detail}
                 onClick={() => {
                     push(<PostView uri={props.message.uri} />)
                 }}
@@ -46,15 +48,7 @@ export const ReplyMessage = (props: MessageProps<ReplyMessageSchema>) => {
                         <Avatar ccid={props.message.author} src={props.message.authorProfile?.avatar} />
                     </div>
                 }
-                headerLeft={
-                    <div
-                        style={{
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        {props.message.authorProfile?.username || 'Anonymous'}
-                    </div>
-                }
+                headerLeft={<MessageAuthor message={props.message} />}
                 headerRight={<TimeDiff date={props.message.createdAt} />}
             >
                 {props.message.value.replyToMessageAuthor && (
@@ -68,7 +62,7 @@ export const ReplyMessage = (props: MessageProps<ReplyMessageSchema>) => {
                         />
                     </AutoSummary>
                 </CollapsibleBody>
-                <MessageFooter message={props.message} />
+                <MessageFooter message={props.message} rerouted={props.rerouted} />
             </MessageLayout>
         </div>
     )

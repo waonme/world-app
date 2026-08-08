@@ -49,6 +49,8 @@ const Inner = (props: InnerProps) => {
         return <>Timeline not found.</>
     }
 
+    const isMe = client.ccid === timeline.author
+
     return (
         <div
             style={{
@@ -113,16 +115,18 @@ const Inner = (props: InnerProps) => {
                 >
                     <Text>Subscriptions</Text>
                 </Tab>
-                <Tab
-                    selected={tab === 'settings'}
-                    onClick={() => setTab('settings')}
-                    groupId="timeline-settings"
-                    style={{
-                        color: CssVar.contentText
-                    }}
-                >
-                    <Text>Settings</Text>
-                </Tab>
+                {isMe && (
+                    <Tab
+                        selected={tab === 'settings'}
+                        onClick={() => setTab('settings')}
+                        groupId="timeline-settings"
+                        style={{
+                            color: CssVar.contentText
+                        }}
+                    >
+                        <Text>Settings</Text>
+                    </Tab>
+                )}
             </Tabs>
             <div
                 style={{

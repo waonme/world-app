@@ -8,6 +8,7 @@ import { PostView } from '../../views/Post'
 import { Avatar, GfmRenderer } from '@concrnt/ui'
 
 import { MessageLayout } from './MessageLayout'
+import { MessageAuthor } from './MessageAuthor'
 import { TimeDiff } from '../TimeDiff'
 import { MessageFooter } from './Footer'
 import { AutoSummary } from '../AutoSummary'
@@ -20,6 +21,7 @@ export const GfmMessage = (props: MessageProps<GfmMessageSchema>) => {
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
                 push(<PostView uri={message.uri} />)
             }}
@@ -33,23 +35,15 @@ export const GfmMessage = (props: MessageProps<GfmMessageSchema>) => {
                     <Avatar ccid={message.author} src={message.authorProfile?.avatar} />
                 </div>
             }
-            headerLeft={
-                <div
-                    style={{
-                        fontWeight: 'bold'
-                    }}
-                >
-                    {message.authorProfile?.username || 'Anonymous'}
-                </div>
-            }
+            headerLeft={<MessageAuthor message={message} />}
             headerRight={<TimeDiff date={message.createdAt} />}
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
                 <AutoSummary body={message.value.body ?? ''}>
-                    <GfmRenderer messagebody={message.value.body} />
+                    <GfmRenderer messagebody={message.value.body} emojiDict={message.value.emojis} />
                 </AutoSummary>
             </CollapsibleBody>
-            <MessageFooter message={message} />
+            <MessageFooter message={message} rerouted={props.rerouted} />
         </MessageLayout>
     )
 }

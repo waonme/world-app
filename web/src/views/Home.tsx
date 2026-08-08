@@ -149,7 +149,7 @@ const HomeMain = ({
             {sortedPins.length > 1 && (
                 <Tabs
                     style={{
-                        // リストが多いときは横スクロール(タブ幅を潰さない)
+                        color: CssVar.contentLink,
                         overflowX: 'auto',
                         justifyContent: 'flex-start'
                     }}
@@ -166,18 +166,11 @@ const HomeMain = ({
                             groupId="home-timeline-tabs"
                             style={{
                                 color: CssVar.contentText,
-                                flexShrink: 0,
-                                maxWidth: '10rem'
+                                width: '120px',
+                                flexShrink: 0
                             }}
                         >
-                            <ListName
-                                uri={tab.uri}
-                                style={{
-                                    overflow: 'hidden',
-                                    whiteSpace: 'nowrap',
-                                    textOverflow: 'ellipsis'
-                                }}
-                            />
+                            <ListName pin={tab} />
                         </Tab>
                     ))}
                 </Tabs>
@@ -193,6 +186,15 @@ const TimelineWrap = (props: { pin: PinnedListItemClass; ref?: ScrollViewRef }) 
     const [list] = useSubscribe(props.pin.list)
     const [knownCommunities] = useSubscribe(client.knownCommunities)
     const isMobile = useIsMobile()
+
+    // インラインエディタの投稿先。リストのデフォルトを初期値にしつつ、その場で編集できるようにする
+    const [destinations, setDestinations] = useState<string[]>(props.pin.defaultPostTimelines)
+    // タブでリストを切り替えたらそのリストのデフォルト投稿先に戻す
+    const [prevPinUri, setPrevPinUri] = useState(props.pin.uri)
+    if (prevPinUri !== props.pin.uri) {
+        setPrevPinUri(props.pin.uri)
+        setDestinations(props.pin.defaultPostTimelines)
+    }
 
     if (!list) return <Text>{t('listNotFound')}</Text>
 
@@ -210,7 +212,9 @@ const TimelineWrap = (props: { pin: PinnedListItemClass; ref?: ScrollViewRef }) 
                                 <Composer
                                     mode="normal"
                                     autoGrow
-                                    destinations={props.pin.defaultPostTimelines}
+                                    destinations={destinations}
+                                    setDestinations={setDestinations}
+                                    defaultDestinations={props.pin.defaultPostTimelines}
                                     options={knownCommunities}
                                     initialProfile={props.pin.defaultProfile}
                                 />

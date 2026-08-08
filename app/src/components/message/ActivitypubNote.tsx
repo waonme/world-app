@@ -1,100 +1,141 @@
-import { Suspense, use, useMemo, useState } from 'react'
-import { ApObject } from '../../utils/activitypub'
+import { Suspense, use, useMemo } from 'react'
+import { ApObject, resolveApObject } from '../../utils/activitypub'
 import { useStack } from '../../layouts/Stack'
 import { MessageLayout } from './MessageLayout'
-import { Avatar, Button, CfmRenderer, CssVar, Text } from '@concrnt/ui'
+import { Avatar, CssVar, GfmRenderer, MfmRenderer, Text, type EmojiLite } from '@concrnt/ui'
 import { TimeDiff } from '../TimeDiff'
 import { ApView } from '../../views/ApView'
 import { useClient } from '../../contexts/Client'
 import { MessageSkeleton } from './MessageSkeleton'
-import { ApNoteSchema, invalidateActivitypubObject, Message, resolveActivitypubObject } from '@concrnt/worldlib'
+import { NotFoundError } from '@concrnt/client'
+import { ApNoteSchema, Message, RerouteMessageSchema } from '@concrnt/worldlib'
 import { MessageFooter } from './Footer'
 import { CollapsibleBody } from './CollapsibleBody'
 import { MediaGallery } from '../MediaGallery/main'
+import { usePreference } from '../../contexts/Preference'
+import { MdLock, MdMail, MdOpenInNew } from 'react-icons/md'
+import { useTranslation } from 'react-i18next'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { PostView } from '../../views/Post'
 
 interface Props {
-    actorURL: string
+    actorURL?: string
     noteURL: string
     message?: Message<ApNoteSchema>
     forceExpanded?: boolean
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
 }
 
 export const ActivitypubNote = (props: Props) => {
     const { client } = useClient()
-    const [retryKey, setRetryKey] = useState(0)
 
     const notePromise = useMemo(() => {
-        return resolveActivitypubObject<ApObject>(client.api, client.server.domain, props.noteURL, {
-            force: retryKey > 0
-        })
-            .then(async (res) => new ApObject(res))
-            .catch((error) => {
-                console.warn(`Failed to resolve ActivityPub note: ${props.noteURL}`, error)
-                return null
-            })
-    }, [client, props.noteURL, retryKey])
+        return resolveApObject(client, props.noteURL).catch((e) => (e instanceof Error ? e : new Error(String(e))))
+    }, [client, props.noteURL])
 
     const authorPromise = useMemo(() => {
-        return resolveActivitypubObject<ApObject>(client.api, client.server.domain, props.actorURL)
-            .then(async (res) => new ApObject(res))
-            .catch((error) => {
-                console.warn(`Failed to resolve ActivityPub actor: ${props.actorURL}`, error)
-                return null
-            })
-    }, [client, props.actorURL])
-
-    const retry = () => {
-        invalidateActivitypubObject(client.server.domain, props.noteURL)
-        setRetryKey((key) => key + 1)
-    }
+        if (props.actorURL) return resolveApObject(client, props.actorURL).catch(() => null)
+        // actorURL不明(裸URLのAnnounce等)の場合はノート解決後のattributedToから辿る
+        return notePromise.then((n) =>
+            n && !(n instanceof Error) && n.attributedTo
+                ? resolveApObject(client, n.attributedTo).catch(() => null)
+                : null
+        )
+    }, [client, props.actorURL, notePromise])
 
     return (
         <Suspense fallback={<MessageSkeleton />}>
             <Note
                 notePromise={notePromise}
                 authorPromise={authorPromise}
+                noteURL={props.noteURL}
                 message={props.message}
                 forceExpanded={props.forceExpanded}
-                onRetry={retry}
+                detail={props.detail}
+                rerouted={props.rerouted}
             />
         </Suspense>
     )
 }
 
 const Note = (props: {
-    notePromise: Promise<ApObject | null>
+    notePromise: Promise<ApObject | Error | null>
     authorPromise: Promise<ApObject | null>
+    noteURL: string
     message?: Message<ApNoteSchema>
     forceExpanded?: boolean
-    onRetry: () => void
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
 }) => {
+    const { t } = useTranslation('', { keyPrefix: 'components.activitypubNote' })
     const { push } = useStack()
+    const [devmode] = usePreference('developerMode')
 
     const note = use(props.notePromise)
     const author = use(props.authorPromise)
 
-    if (!note) {
+    if (!note || note instanceof Error) {
+        // nullはnegative cacheヒット(=404由来)。404以外のエラーは接続系として文言を分ける
+        const unreachable = note instanceof Error && !(note instanceof NotFoundError)
         return (
             <div
                 style={{
-                    padding: CssVar.space(2),
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: CssVar.space(2)
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: CssVar.space(1),
+                    padding: CssVar.space(2)
                 }}
             >
-                <Text>Note could not be loaded.</Text>
-                <Button onClick={props.onRetry}>Retry</Button>
+                <Text style={{ opacity: 0.7 }}>{unreachable ? t('fetchFailed') : t('unavailable')}</Text>
+                <a
+                    href={props.noteURL}
+                    onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        openUrl(props.noteURL, 'inAppBrowser')
+                    }}
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: CssVar.space(1),
+                        fontSize: '0.8rem',
+                        color: CssVar.contentLink,
+                        textDecoration: 'none'
+                    }}
+                >
+                    <MdOpenInNew size={14} />
+                    {t('openRemote')}
+                </a>
+                {devmode && <Text variant="caption">{props.noteURL}</Text>}
+                {devmode && (
+                    <Text variant="caption">{note instanceof Error ? note.message : 'negative cache hit'}</Text>
+                )}
             </div>
         )
     }
 
-    const medias = note.getAttachmentMedias()
+    const visibility = note.getVisibility(author?.followers)
+    const medias = note.getMedias()
+
+    const emojiDict: Record<string, EmojiLite> = {}
+    for (const tag of note.getTags()) {
+        if (tag.type !== 'Emoji' || !tag.name) continue
+        const icon = Array.isArray(tag.icon) ? tag.icon[0] : tag.icon
+        if (icon?.url) emojiDict[tag.name.replace(/:/g, '')] = { imageURL: icon.url }
+    }
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
-                push(<ApView uri={note.id} />)
+                // concrnt側のメッセージがあればネイティブ同等の詳細ビュー(リプライ/リアクション一覧付き)へ
+                if (props.message) {
+                    push(<PostView uri={props.message.uri} />)
+                } else {
+                    push(<ApView uri={note.id} />)
+                }
             }}
             left={
                 <div
@@ -115,13 +156,45 @@ const Note = (props: {
                     {author?.name ?? author?.preferredUsername ?? 'Unknown'}
                 </Text>
             }
-            headerRight={note.published && <TimeDiff date={new Date(note.published)} />}
+            headerRight={
+                <span style={{ display: 'flex', alignItems: 'center', gap: CssVar.space(1) }}>
+                    {visibility === 'followers' && <MdLock size={14} style={{ opacity: 0.7 }} title="フォロワー限定" />}
+                    {visibility === 'direct' && <MdMail size={14} style={{ opacity: 0.7 }} title="ダイレクト" />}
+                    {note.published && <TimeDiff date={new Date(note.published)} />}
+                </span>
+            }
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
-                <CfmRenderer messagebody={note.content ?? ''} emojiDict={{}} />
-                {medias.length > 0 && <MediaGallery medias={medias} />}
+                {note._misskey_content ? (
+                    <MfmRenderer messagebody={note._misskey_content} emojiDict={emojiDict} />
+                ) : (
+                    <GfmRenderer messagebody={note.content ?? ''} emojiDict={emojiDict} />
+                )}
             </CollapsibleBody>
-            {props.message && <MessageFooter message={props.message} />}
+            {medias.length > 0 && <MediaGallery medias={medias} />}
+            {props.detail && (
+                <a
+                    href={note.url ?? note.id}
+                    onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        openUrl(note.url ?? note.id, 'inAppBrowser')
+                    }}
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: CssVar.space(1),
+                        fontSize: '0.8rem',
+                        color: CssVar.contentLink,
+                        textDecoration: 'none'
+                    }}
+                >
+                    <MdOpenInNew size={14} />
+                    {t('openRemote')}
+                </a>
+            )}
+            {devmode && <Text variant="caption">{props.noteURL}</Text>}
+            {props.message && <MessageFooter message={props.message} rerouted={props.rerouted} />}
         </MessageLayout>
     )
 }

@@ -21,7 +21,6 @@ import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
-import { CssVar } from '../../types/Theme'
 
 interface Props {
     message: Message<any>
@@ -55,6 +54,15 @@ export const MessageActions = (props: Props) => {
         count: props.message.associationCounts?.[Schemas.likeAssociation] ?? 0
     })
 
+    // commit完了後、transitionが終わる(=useOptimisticがrevertする)前に
+    // メッセージ本体を再取得してベース値をサーバー状態に揃える。
+    // これをsocketイベント任せにすると、イベントがcommit応答より遅れたときに
+    // 一瞬いいね/リアクションが消える
+    const refreshMessage = async () => {
+        qt.update(messageHref)
+        await client?.getMessage(messageHref).catch(() => null)
+    }
+
     return (
         <div
             style={{
@@ -78,7 +86,8 @@ export const MessageActions = (props: Props) => {
                                 !uri.includes('/main/activity-timeline') &&
                                 !uri.includes('/main/notify-timeline')
                         ) ?? []
-                    composer.open(communityDestinations, [], 'reply', props.message)
+                    // 候補は省略してknownCommunities全体にする(投稿先は元メッセージの配信先に限らない)
+                    composer.open(communityDestinations, undefined, 'reply', props.message)
                 }}
                 onLongPress={() => {
                     hapticLight()
@@ -102,7 +111,8 @@ export const MessageActions = (props: Props) => {
                                 !uri.includes('/main/activity-timeline') &&
                                 !uri.includes('/main/notify-timeline')
                         ) ?? []
-                    composer.open(communityDestinations, [], 'reroute', props.message)
+                    // 候補は省略してknownCommunities全体にする(リルート先は元メッセージの配信先に限らない)
+                    composer.open(communityDestinations, undefined, 'reroute', props.message)
                 }}
                 onLongPress={() => {
                     hapticLight()
@@ -131,7 +141,7 @@ export const MessageActions = (props: Props) => {
                             })
                             if (likeState.ownLike) {
                                 await likeState.ownLike.delete(client)
-                                qt.update(messageHref)
+                                await refreshMessage()
                             }
                         })
                     } else {
@@ -149,7 +159,7 @@ export const MessageActions = (props: Props) => {
                                 }
                             })
                             await props.message.favorite(client)
-                            qt.update(messageHref)
+                            await refreshMessage()
                         })
                     }
                 }}
@@ -159,7 +169,7 @@ export const MessageActions = (props: Props) => {
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
-                {likeState.ownLike ? <MdStar size={20} color={CssVar.accent} /> : <MdStarOutline size={20} />}
+                {likeState.ownLike ? <MdStar size={20} color="gold" /> : <MdStarOutline size={20} />}
                 <span style={{ marginLeft: '4px' }}>{likeState.count}</span>
             </Button>
             {/* リアクションボタン */}
@@ -199,6 +209,7 @@ export const MessageActions = (props: Props) => {
                             await props.message.reaction(client, emoji.shortcode, emoji.imageURL).catch((err) => {
                                 console.error('Failed to add reaction:', err)
                             })
+                            await refreshMessage()
                         })
 
                         emojiPicker.close()

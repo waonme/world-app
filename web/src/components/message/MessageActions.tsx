@@ -20,7 +20,6 @@ import { MuteDurationSelect } from '../MuteDurationSelect'
 import { useEmojiPicker } from '../../contexts/EmojiPicker'
 import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
-import { CssVar } from '../../types/Theme'
 
 interface Props {
     message: Message<any>
@@ -41,7 +40,6 @@ export const MessageActions = (props: Props) => {
     const [reportOpen, setReportOpen] = useState(false)
     const [inspectorOpen, setInspectorOpen] = useState(false)
     const [muteDurationOpen, setMuteDurationOpen] = useState(false)
-    const messageHref = props.message.key ?? props.message.uri
     const emojiPicker = useEmojiPicker()
     const qt = useQueryTimelineContext()
     const menuAnchor = useAnchor()
@@ -53,6 +51,17 @@ export const MessageActions = (props: Props) => {
         ownLike: props.message.ownAssociations.find((a) => a.schema === Schemas.likeAssociation),
         count: props.message.associationCounts?.[Schemas.likeAssociation] ?? 0
     })
+
+    const messageHref = props.message.key ?? props.message.uri
+
+    // commit完了後、transitionが終わる(=useOptimisticがrevertする)前に
+    // メッセージ本体を再取得してベース値をサーバー状態に揃える。
+    // これをsocketイベント任せにすると、イベントがcommit応答より遅れたときに
+    // 一瞬いいね/リアクションが消える
+    const refreshMessage = async () => {
+        qt.update(messageHref)
+        await client?.getMessage(messageHref).catch(() => null)
+    }
 
     return (
         <div
@@ -77,7 +86,8 @@ export const MessageActions = (props: Props) => {
                                 !uri.includes('/main/activity-timeline') &&
                                 !uri.includes('/main/notify-timeline')
                         ) ?? []
-                    composer.open(communityDestinations, [], 'reply', props.message)
+                    // 候補は省略してknownCommunities全体にする(投稿先は元メッセージの配信先に限らない)
+                    composer.open(communityDestinations, undefined, 'reply', props.message)
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
@@ -97,7 +107,8 @@ export const MessageActions = (props: Props) => {
                                 !uri.includes('/main/activity-timeline') &&
                                 !uri.includes('/main/notify-timeline')
                         ) ?? []
-                    composer.open(communityDestinations, [], 'reroute', props.message)
+                    // 候補は省略してknownCommunities全体にする(リルート先は元メッセージの配信先に限らない)
+                    composer.open(communityDestinations, undefined, 'reroute', props.message)
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
@@ -122,7 +133,7 @@ export const MessageActions = (props: Props) => {
                             })
                             if (likeState.ownLike) {
                                 await likeState.ownLike.delete(client)
-                                qt.update(messageHref)
+                                await refreshMessage()
                             }
                         })
                     } else {
@@ -140,13 +151,13 @@ export const MessageActions = (props: Props) => {
                                 }
                             })
                             await props.message.favorite(client)
-                            qt.update(messageHref)
+                            await refreshMessage()
                         })
                     }
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
-                {likeState.ownLike ? <MdStar size={20} color={CssVar.accent} /> : <MdStarOutline size={20} />}
+                {likeState.ownLike ? <MdStar size={20} color="gold" /> : <MdStarOutline size={20} />}
                 <span style={{ marginLeft: '4px' }}>{likeState.count}</span>
             </Button>
             {/* リアクションボタン */}
@@ -186,6 +197,7 @@ export const MessageActions = (props: Props) => {
                             await props.message.reaction(client, emoji.shortcode, emoji.imageURL).catch((err) => {
                                 console.error('Failed to add reaction:', err)
                             })
+                            await refreshMessage()
                         })
 
                         emojiPicker.close()

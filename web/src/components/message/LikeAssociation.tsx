@@ -51,9 +51,7 @@ export const LikeAssociation = (props: MessageProps<LikeAssociationSchema>) => {
                 <span
                     onClick={(e) => {
                         e.stopPropagation()
-                        if (message.value.profileOverride?.link) {
-                            navigate('/activitypub/view/' + encodeURIComponent(message.value.profileOverride.link))
-                        } else if (likeAuthor) {
+                        if (likeAuthor) {
                             navigate('/profile/' + likeAuthor.ccid)
                         }
                     }}

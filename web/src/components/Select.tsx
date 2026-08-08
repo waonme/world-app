@@ -56,7 +56,7 @@ export const Select = (props: Props) => {
         )
     }
 
-    const height = props.options.length * 48 + 30 + 48 // ListItem minHeight 48 に合わせた概算
+    const height = props.options.length * 56 + 30 + 48 // Approximate height calculation
     return (
         <OverlaySurface open={props.open} onClose={props.onClose}>
             <BottomSheet height={height} onDismiss={props.onClose}>

@@ -1,14 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, IconButton, List, ListItem, Popover, Text, CfmRenderer, useAnchor } from '@concrnt/ui'
+import { Button, IconButton, List, ListItem, Popover, Text, TextField, CfmRenderer, useAnchor } from '@concrnt/ui'
+import { Select } from './Select'
 import { useClient } from '../contexts/Client'
 import { isNonNullOrUndefined, Message, Schemas, semantics } from '@concrnt/worldlib'
 import { TimelinePicker } from './TimelinePicker'
 import { Timeline } from '@concrnt/worldlib'
 import { CssVar } from '../types/Theme'
 import { ComposerMode, DraftBuffer, EditorMode } from '../contexts/Composer'
-import { MdImage, MdClose, MdDeleteOutline, MdUndo, MdTextFields, MdPermMedia, MdReply, MdRepeat } from 'react-icons/md'
+import {
+    MdImage,
+    MdClose,
+    MdCheck,
+    MdDeleteOutline,
+    MdFlag,
+    MdUndo,
+    MdTextFields,
+    MdPermMedia,
+    MdReply,
+    MdRepeat,
+    MdReplay,
+    MdCloudUpload
+} from 'react-icons/md'
 import { FaMarkdown } from 'react-icons/fa'
 import { uploadImage } from '../utils/uploadImage'
 import { computeBlurhash } from '../utils/computeBlurhash'
@@ -23,7 +37,10 @@ import { CDID } from '@concrnt/client'
 interface MediaDraft {
     file: File
     previewUrl?: string
+    flag?: string
 }
+
+const knownFlags = ['warn', 'nude', 'porn', 'hard']
 
 const modeIcons: Record<EditorMode | 'reply' | 'reroute', ReactNode> = {
     plaintext: <MdTextFields size={24} />,
@@ -42,6 +59,8 @@ const editorModeLabelKeys: Record<EditorMode, string> = {
 interface Props {
     destinations: string[]
     setDestinations?: (destinations: string[]) => void
+    // 「投稿先をデフォルトに戻す」の復帰先。未指定なら現在の投稿先を基準にする(=投稿先の差分は検出されない)
+    defaultDestinations?: string[]
     options?: Timeline[]
     mode: ComposerMode
     targetMessage?: Message<any>
@@ -59,26 +78,36 @@ export const Composer = (props: Props) => {
     const { client, isDomainOffline } = useClient()
     const [draft, setDraft] = useState<string>(props.draftBuffer?.draftText ?? '')
     const [postHome, setPostHome] = useState<boolean>(props.draftBuffer?.postHome ?? true)
-    const [selectedProfile, setSelectedProfile] = useState<string>(
-        props.initialProfile ?? client?.currentProfile ?? 'main'
-    )
+    const defaultDestinations = props.defaultDestinations ?? props.destinations
+    const defaultProfile = props.initialProfile ?? client?.currentProfile ?? 'main'
+    const [selectedProfile, setSelectedProfile] = useState<string>(defaultProfile)
 
     // 投稿先リストが切り替わったときにデフォルトプロフィールを追従させる
     useEffect(() => {
         setSelectedProfile(props.initialProfile ?? client?.currentProfile ?? 'main')
     }, [props.initialProfile, client?.currentProfile])
+
+    // 投稿先・ホームに流すか・投稿元プロフィールのいずれかがデフォルトから外れているか
+    const destinationModified =
+        props.destinations.length !== defaultDestinations.length ||
+        props.destinations.some((dest, i) => dest !== defaultDestinations[i]) ||
+        selectedProfile !== defaultProfile ||
+        !postHome
     const [mediaDrafts, setMediaDrafts] = useState<MediaDraft[]>(() => {
         if (!props.draftBuffer || props.draftBuffer.mediaDrafts.length === 0) return []
         return props.draftBuffer.mediaDrafts.map((m) => ({
             file: m.file,
+            flag: m.flag,
             previewUrl: m.file.type.startsWith('image/') ? URL.createObjectURL(m.file) : undefined
         }))
     })
     const [uploading, setUploading] = useState<boolean>(false)
+    const [dragging, setDragging] = useState<boolean>(false)
     const [editorMode, setEditorMode] = useState<EditorMode>(
         props.draftBuffer?.editorMode ?? ((props.draftBuffer?.mediaDrafts.length ?? 0) > 0 ? 'media' : 'markdown')
     )
     const [modeSelectOpen, setModeSelectOpen] = useState(false)
+    const [flagMenuIndex, setFlagMenuIndex] = useState<number | null>(null)
     const [emojiDict, setEmojiDict] = useState<Record<string, { imageURL: string }>>(props.draftBuffer?.emojiDict ?? {})
     const [undoCache, setUndoCache] = useState<{
         draft: string
@@ -92,6 +121,7 @@ export const Composer = (props: Props) => {
 
     // Composerは複数同時にマウントされ得るため、アンカー名をインスタンスごとに一意にする
     const modeSelectAnchor = useAnchor()
+    const flagAnchor = useAnchor()
 
     // リプライ/リルート時はモードを外部から固定し、通常時はユーザーが選択したエディタモードを表示する
     const displayMode: EditorMode | 'reply' | 'reroute' = props.mode === 'normal' ? editorMode : props.mode
@@ -105,7 +135,7 @@ export const Composer = (props: Props) => {
             const { draft, emojiDict, mediaDrafts, postHome, editorMode, onSaveDraft } = stateRef.current
             onSaveDraft?.({
                 draftText: draft,
-                mediaDrafts: mediaDrafts.map((m) => ({ file: m.file })),
+                mediaDrafts: mediaDrafts.map((m) => ({ file: m.file, flag: m.flag })),
                 emojiDict,
                 postHome,
                 editorMode
@@ -152,6 +182,11 @@ export const Composer = (props: Props) => {
         // inputをリセット（同じファイルを再選択可能にする）
         e.target.value = ''
 
+        await addFiles(selected)
+    }
+
+    // ファイル選択・ペースト・ドロップの3入口から共通で呼ばれる受け入れ口
+    const addFiles = async (selected: File[]) => {
         if (props.mode === 'reply' || editorMode === 'markdown') {
             // リプライ中、またはすでにドラフトがインラインでメディアを扱っている場合は
             // その場でアップロードしてタグを挿入する。そうでなければmediaモードへ切り替える
@@ -232,6 +267,18 @@ export const Composer = (props: Props) => {
             return prev.filter((_, i) => i !== index)
         })
     }
+
+    const setMediaFlag = (index: number, flag: string | undefined) => {
+        setMediaDrafts((prev) => prev.map((m, i) => (i === index ? { ...m, flag } : m)))
+    }
+
+    const flagLabels: Record<string, string> = {
+        warn: t('flagWarn'),
+        nude: t('flagNude'),
+        porn: t('flagPorn'),
+        hard: t('flagHard')
+    }
+    const currentFlag = flagMenuIndex !== null ? mediaDrafts[flagMenuIndex]?.flag : undefined
 
     const reset = () => {
         setDraft('')
@@ -384,7 +431,8 @@ export const Composer = (props: Props) => {
                                     return {
                                         mediaURL: url,
                                         mediaType: typ,
-                                        ...(blurhash ? { blurhash } : {})
+                                        ...(blurhash ? { blurhash } : {}),
+                                        ...(media.flag ? { flag: media.flag } : {})
                                     }
                                 })
                             )
@@ -438,16 +486,62 @@ export const Composer = (props: Props) => {
         }
     }
 
+    // ドロップ受け入れは添付ボタンと同じ条件のときだけ有効化する
+    const acceptsDrop = props.mode !== 'reroute' && displayMode !== 'plaintext'
+
     return (
         <div
             style={{
+                position: 'relative',
                 flex: 1,
                 minHeight: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: CssVar.space(2)
             }}
+            onDragEnter={(e) => {
+                if (!acceptsDrop || !e.dataTransfer.types.includes('Files')) return
+                e.preventDefault()
+                setDragging(true)
+            }}
+            onDragOver={(e) => {
+                if (!acceptsDrop || !e.dataTransfer.types.includes('Files')) return
+                e.preventDefault()
+                setDragging(true)
+            }}
         >
+            {/* D&D中のオーバーレイ。onDragLeaveは子要素通過でのちらつきを避けるためオーバーレイ側に付ける */}
+            {dragging && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: CssVar.space(1),
+                        border: '2px dashed',
+                        borderColor: CssVar.contentLink,
+                        borderRadius: CssVar.round(2),
+                        backgroundColor: CssVar.contentBackground,
+                        opacity: 0.9
+                    }}
+                    onDragLeave={(e) => {
+                        e.preventDefault()
+                        setDragging(false)
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault()
+                        setDragging(false)
+                        addFiles(Array.from(e.dataTransfer.files))
+                    }}
+                >
+                    <MdCloudUpload size={48} color={CssVar.contentLink} />
+                    <Text style={{ margin: 0, color: CssVar.contentLink }}>{t('dropToUpload')}</Text>
+                </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: CssVar.space(1) }}>
                 {/* モードセレクタ。リプライ/リルート時は状態表示のみで切り替え不可 */}
                 <IconButton
@@ -469,6 +563,19 @@ export const Composer = (props: Props) => {
                         setSelectedProfile={setSelectedProfile}
                     />
                 </div>
+                {/* v1と同じく、デフォルトから外れているときだけ復帰ボタンを出す */}
+                {destinationModified && (
+                    <IconButton
+                        title={t('resetDestination')}
+                        onClick={() => {
+                            props.setDestinations?.([...defaultDestinations])
+                            setSelectedProfile(defaultProfile)
+                            setPostHome(true)
+                        }}
+                    >
+                        <MdReplay size={20} />
+                    </IconButton>
+                )}
             </div>
 
             <Popover open={modeSelectOpen} onClose={() => setModeSelectOpen(false)} anchor={modeSelectAnchor}>
@@ -538,6 +645,16 @@ export const Composer = (props: Props) => {
                             handleSubmit()
                         }
                     }}
+                    onPaste={(e) => {
+                        // plaintextは添付非対応なのでテキストペーストだけを通常どおり通す
+                        if (displayMode === 'plaintext') return
+                        const files = Array.from(e.clipboardData.items)
+                            .map((item) => item.getAsFile())
+                            .filter(isNonNullOrUndefined)
+                        if (files.length === 0) return
+                        e.preventDefault()
+                        addFiles(files)
+                    }}
                 />
             )}
 
@@ -574,11 +691,16 @@ export const Composer = (props: Props) => {
                     {mediaDrafts.map((media, index) => (
                         <div
                             key={index}
-                            style={{
-                                position: 'relative',
-                                width: '80px',
-                                height: '80px'
-                            }}
+                            style={
+                                {
+                                    position: 'relative',
+                                    width: '80px',
+                                    height: '80px',
+                                    cursor: 'pointer',
+                                    ...(flagMenuIndex === index ? { anchorName: flagAnchor } : {})
+                                } as CSSProperties
+                            }
+                            onClick={() => setFlagMenuIndex(index)}
                         >
                             {media.previewUrl ? (
                                 <img
@@ -619,7 +741,10 @@ export const Composer = (props: Props) => {
                                 </div>
                             )}
                             <IconButton
-                                onClick={() => removeMedia(index)}
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    removeMedia(index)
+                                }}
                                 style={{
                                     position: 'absolute',
                                     top: '-8px',
@@ -633,10 +758,71 @@ export const Composer = (props: Props) => {
                             >
                                 <MdClose size={16} />
                             </IconButton>
+                            {media.flag && (
+                                <div
+                                    title={media.flag}
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: '-8px',
+                                        left: '-8px',
+                                        backgroundColor: CssVar.divider,
+                                        borderRadius: CssVar.round(4),
+                                        width: '24px',
+                                        height: '24px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        pointerEvents: 'none'
+                                    }}
+                                >
+                                    <MdFlag size={16} />
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
             )}
+
+            {/* 添付ごとのフラグ設定メニュー(サムネイルクリックで開く) */}
+            <Select
+                open={flagMenuIndex !== null}
+                onClose={() => setFlagMenuIndex(null)}
+                title={t('flagTitle')}
+                anchor={flagAnchor}
+                options={[
+                    <ListItem
+                        key="none"
+                        endIcon={currentFlag === undefined ? <MdCheck size={20} /> : undefined}
+                        onClick={() => {
+                            setMediaFlag(flagMenuIndex!, undefined)
+                            setFlagMenuIndex(null)
+                        }}
+                    >
+                        {t('flagNone')}
+                    </ListItem>,
+                    ...knownFlags.map((flag) => (
+                        <ListItem
+                            key={flag}
+                            endIcon={currentFlag === flag ? <MdCheck size={20} /> : undefined}
+                            onClick={() => {
+                                setMediaFlag(flagMenuIndex!, flag)
+                                setFlagMenuIndex(null)
+                            }}
+                        >
+                            {flagLabels[flag]}
+                        </ListItem>
+                    )),
+                    <div key="custom" style={{ padding: `${CssVar.space(1)} ${CssVar.space(2)}` }}>
+                        <TextField
+                            placeholder={t('flagCustomPlaceholder')}
+                            value={currentFlag !== undefined && !knownFlags.includes(currentFlag) ? currentFlag : ''}
+                            onChange={(e) =>
+                                setMediaFlag(flagMenuIndex!, e.target.value === '' ? undefined : e.target.value)
+                            }
+                        />
+                    </div>
+                ]}
+            />
 
             {/* ツールバー + 送信ボタン */}
             <div

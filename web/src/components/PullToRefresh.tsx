@@ -1,7 +1,7 @@
 import { RefObject, useEffect, useEffectEvent, useRef, useState } from 'react'
-import { CssVar } from '../types/Theme'
 import { ReactNode } from 'react'
 import { MdArrowDownward, MdSync } from 'react-icons/md'
+import styles from './PullToRefresh.module.css'
 
 const PTR_HEIGHT = 60
 
@@ -68,7 +68,7 @@ export const PullToRefresh = (props: Props): ReactNode => {
                     height: `${ptrEnabled ? PTR_HEIGHT : loaderSize}px`,
                     width: '100%',
                     position: 'relative',
-                    color: CssVar.textSecondary,
+                    color: 'text.secondary',
                     display: 'flex',
                     transition: 'height 0.2s ease-in-out',
                     overflow: 'hidden'
@@ -90,7 +90,7 @@ export const PullToRefresh = (props: Props): ReactNode => {
                         <MdSync
                             size={24}
                             style={{
-                                animation: 'ptr-spin 1s linear infinite'
+                                animation: `${styles['ptr-spin']} 1s linear infinite`
                             }}
                         />
                     ) : (
@@ -114,12 +114,6 @@ export const PullToRefresh = (props: Props): ReactNode => {
             >
                 {props.children}
             </div>
-            <style>{`
-                @keyframes ptr-spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(-360deg); }
-                }
-            `}</style>
         </>
     )
 }

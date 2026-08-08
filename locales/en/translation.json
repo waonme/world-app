@@ -211,7 +211,9 @@
             "urlCopied": "Copied URL",
             "loadFailed": "Failed to load",
             "brokenEntry": "Broken entry",
-            "fetchedAt": "Fetched at: {{date}}"
+            "fetchedAt": "Fetched at: {{date}}",
+            "addPackage": "Add",
+            "addPackageTitle": "Add Emoji Package"
         },
         "welcome": {
             "loadFailed": "Failed to load account information.\nThe key stored on this device has not been lost. Please try again.",
@@ -328,8 +330,9 @@
             "alias": "Alias",
             "loginOnAnotherDevice": "Log in on another device",
             "backupMasterKey": "Back up master key",
-            "backupNotSaved": "Not saved",
-            "backupFileContent": "Concrnt Web login information\nThis file is a backup of your Concrnt Web login information.\nKeep this file in a safe place.\n\nCCID: {{ccid}}\nMaster private key: {{privateKey}}\nRegistered server at backup: {{server}}\n\nIf you lose your private key, you may not be able to recover your account.\nIf anyone else learns this information, your account could be taken over.",
+            "copySubkey": "Copy Subkey",
+            "subkeyCopied": "Copied!",
+            "backupUnavailable": "This browser does not hold your master key. Log in again with your master key (12 words) to back it up.",
             "subkeys": {
                 "title": "Subkeys",
                 "description": "Subkeys authorized for this account. Devices you have logged in on sign with these keys.",
@@ -357,14 +360,32 @@
             "enable": "Enable",
             "enabled": "ActivityPub integration is enabled.",
             "yourId": "Your ID: {{id}}",
+            "forwardTimeline": "Forwarding Timelines",
+            "forwardTimelineDesc": "Your posts to the selected timelines will be forwarded to ActivityPub. If none are set, your home timeline is used.",
+            "inboxNotListed": "The ActivityPub timeline is not in any of your lists. Add it to a list to see incoming posts.",
+            "addToList": "Add to list",
+            "inboxPolicyBroken": "There is a problem with the inbox list permissions. Posts from ActivityPub cannot be delivered.",
+            "repair": "Repair",
+            "repairing": "Repairing...",
+            "repairFailed": "Repair failed. Please try again later.",
+            "update": "Update",
             "inquiry": "Inquiry"
+        },
+        "apNote": {
+            "notImported": "This post has not been fetched to this server yet.",
+            "import": "Fetch as Concrnt message",
+            "importing": "Fetching...",
+            "importFailed": "Failed to fetch"
         },
         "apPerson": {
             "follow": "Follow",
             "unfollow": "Unfollow",
             "noDescription": "No description yet",
             "apUserNotice": "This user is an ActivityPub user.",
-            "openRemote": "Open on remote server"
+            "openRemote": "Open on remote server",
+            "noPosts": "No posts to show",
+            "loadFailed": "Failed to load posts",
+            "boosted": "Boosted by {{name}}"
         },
         "bluesky": {
             "title": "Bluesky Settings",
@@ -417,10 +438,14 @@
             "title": "Inquiry",
             "submit": "Inquiry"
         },
+        "list": {
+            "listNotFound": "List not found"
+        },
         "lists": {
             "createList": "Create List",
             "create": "Create",
-            "listTitle": "Title"
+            "listTitle": "Title",
+            "openSettings": "List settings"
         }
     },
     "components": {
@@ -434,7 +459,24 @@
             "submit": "Post",
             "replyPlaceholder": "Write a reply...",
             "placeholder": "What are you up to?",
-            "cannotPostOffline": "You can't post while offline"
+            "cannotPostOffline": "You can't post while offline",
+            "resetDestination": "Reset destinations to default",
+            "dropToUpload": "Drop to upload",
+            "flagTitle": "Content flag (optional)",
+            "flagNone": "None",
+            "flagWarn": "Content Warning",
+            "flagNude": "Nudity",
+            "flagPorn": "Pornography",
+            "flagHard": "Hard Violence",
+            "flagCustomPlaceholder": "You can write freely"
+        },
+        "mediaGallery": {
+            "clickToReveal": "Click to reveal",
+            "hideAgain": "Hide again",
+            "flagWarn": "Content Warning",
+            "flagNude": "Nudity",
+            "flagPorn": "Pornography",
+            "flagHard": "Hard Violence"
         },
         "report": {
             "reason": "Report reason",
@@ -463,6 +505,11 @@
         "likeAssociation": {
             "userLiked": "{{name}} added this to favorites",
             "loading": "Loading..."
+        },
+        "activitypubNote": {
+            "openRemote": "Open on remote server",
+            "unavailable": "This post could not be fetched (it may have been deleted or is private)",
+            "fetchFailed": "Failed to load this post (server unreachable)"
         },
         "followAck": {
             "userFollowed": "{{name}} followed",
@@ -501,6 +548,10 @@
             "verificationKey": "Verification key ({{type}})",
             "verificationError": "Verification error: {{error}}",
             "keyMismatch": "The key recovered from the signature does not match the verification key"
+        },
+        "mentionAssociation": {
+            "userMentioned": "{{name}} mentioned you",
+            "loading": "Loading..."
         },
         "onelineMessage": {
             "deletePost": "Delete post"
@@ -551,6 +602,14 @@
             "variantLabel": "Display type",
             "preview": "Preview",
             "currentlyInUse": "This theme is currently in use"
+        },
+        "emojiPackImporter": {
+            "title": "Import from v1",
+            "description": "Paste the JSON (an array of emoji package URLs) exported with \"Copy all\" in the v1 emoji settings. Packages that are already added will be skipped.",
+            "placeholder": "Paste JSON here",
+            "noPackagesFound": "No emoji packages found",
+            "importResult": "{{added}} added / {{skipped}} skipped",
+            "import": "Import"
         },
         "themeImporter": {
             "title": "Import from v1",
@@ -631,6 +690,16 @@
             "following": "Following",
             "followers": "Followers"
         },
+        "apFollowList": {
+            "following": "Following",
+            "followers": "Followers",
+            "follow": "Follow",
+            "unfollow": "Unfollow",
+            "pending": "Pending",
+            "loadMore": "Load more",
+            "empty": "No users",
+            "loadError": "Failed to load"
+        },
         "userPicker": {
             "addUser": "Add user",
             "loading": "Loading..."
@@ -660,7 +729,8 @@
             "community": "Community",
             "user": "User",
             "noTimelines": "No timelines",
-            "defaultPostTimelines": "Default destination"
+            "defaultPostTimelines": "Default destination",
+            "isIconTab": "Use icon on tab"
         },
         "subscription": {
             "addToList": "Add to List"
@@ -754,12 +824,12 @@
             "masterKeyLogin": "Log in with master key",
             "methodQr": "App QR",
             "methodPasskey": "Passkey",
-            "methodMasterKey": "Master Key",
+            "methodManual": "Manual",
             "signup": "New here? Create an account",
             "checking": "Checking...",
             "usePasskey": "Use passkey",
-            "masterKey": "Master Key",
-            "masterKeyPlaceholder": "Enter your 12-word master key",
+            "manualKey": "Master Key or Subkey",
+            "manualKeyPlaceholder": "Enter your 12-word master key, or a subkey starting with concrnt-subkey",
             "registeredServer": "Registered server",
             "serverPlaceholder": "e.g. v2dev.concrnt.net",
             "masterKeyInvalid": "Could not verify this master key.",
@@ -778,7 +848,12 @@
             "registrationNotFoundOnServer": "No registration was found on the specified server.",
             "registeringKey": "Registering the key this browser will use...",
             "masterKeyLoginFailed": "Login with master key failed.",
-            "subkeyCommitFailed": "Subkey commit failed."
+            "subkeyCommitFailed": "Subkey commit failed.",
+            "subkeyLogin": "Log in with subkey",
+            "checkingSubkey": "Checking your subkey on {{domain}}...",
+            "subkeyInvalid": "This subkey is not in a valid format.",
+            "subkeyInvalidOnServer": "This subkey has been revoked or is not registered.",
+            "subkeyLoginFailed": "Login with subkey failed."
         },
         "register": {
             "title": "Account Registration",
@@ -800,6 +875,9 @@
             "usePasskeyDescription": "Passkeys are recommended, but may not be available on some devices or browsers.",
             "no": "No",
             "yes": "Yes",
+            "passkeyUnavailable": "Passkeys are not available in this browser.",
+            "passkeyCreateFailed": "Could not create a passkey. Passkeys may not be available in this environment. Select \"No\" to log in with a regular key instead.",
+            "passkeyNoPrf": "Your passkey does not support the required PRF extension 😭 The passkey that was just created cannot be used for login, so please delete it manually from your device's passkey settings. Try another passkey provider, or select \"No\" to use a regular key.",
             "confirmEmoji": "Check the emoji shown on your device, and if it matches, select \"Yes\" on the device."
         },
         "guestBase": {
@@ -834,6 +912,78 @@
             "privateTimeline": "This timeline is private",
             "loginRequired": "You need to log in to request access",
             "login": "Login"
+        },
+        "welcome": {
+            "start": "Let's Get Started",
+            "arrivalTimelineDescription": "Welcome to the ariake.concrnt.net server! If you have any questions, feel free to post here.",
+            "devCentralDescription": "A place for developers to relax",
+            "pageTitle": "Concrnt | Concurrent",
+            "metaDescription": "Concrnt is a new era SNS that enriches your world just a little bit.",
+            "guide": "User Guide",
+            "gettingStarted": "Let's Get Started",
+            "import": "Log In",
+            "catch": "What if there was an SNS like this...",
+            "wish1": "You could know in real-time what your friends and people you're interested in are doing.",
+            "wish2": "You could interact with multiple communities using a single account.",
+            "wish3": "You could choose who manages the platform, rather than being controlled by a single entity.",
+            "wish4": "Wouldn't it be great if there was such an SNS?",
+            "wish5": "Concrnt was developed to fulfill this wish.",
+            "wish6": "Welcome to the new era of SNS.",
+            "feature1title": "An SNS for Enjoying Together",
+            "feature1subtitle": "Tired of recommendation feeds filled with strangers?",
+            "feature1p1": "Wouldn't you rather know more about the people you like than just seeing recommendations filled with strangers?",
+            "feature1p2": "With Concrnt, instead of relying on algorithms, you can use customizable lists to access information that truly matters to you. Select the people you like and the communities you're interested in, and create a timeline that fits you perfectly.",
+            "feature1p3": "Concrnt is an SNS focused on the connections that truly matter to you, making it enjoyable for everyone.",
+            "feature2title": "Your Account is Truly Yours",
+            "feature2subtitle": "Say goodbye to the days of fearing account suspension 👋",
+            "feature2p1": "Concrnt is a decentralized SNS that prioritizes user freedom and safety. It is free from the dictatorship of a single company or organization, with independent individuals and organizations running their own servers.",
+            "feature2p2": "This means you no longer have to live in fear of your account being suddenly suspended. Even if you experience unfair treatment on one server, you can easily move to another server, retaining your posts and followers, and continue your activities. Here, you'll find the security and freedom of being able to manage your account in a way that was unimaginable with conventional SNS.",
+            "feature2p3": "On Concrnt, your account truly belongs to you.",
+            "feature3title": "Countless Communities in One SNS",
+            "feature3subtitle": "The era of using separate accounts for different interests is over",
+            "feature3p1": "On Concrnt, in addition to the home timeline, you can switch between multiple community timelines. When posting, you can simultaneously share across multiple communities, making it easy to connect loosely with multiple communities, which is natural for humans.",
+            "feature3p2": "It's not about being overly connected to the world like X, nor is it about being too closed off like Discord. The charm of Concrnt is that you can find your place while moderately connecting with other communities.",
+            "crnt1": "It’s a new way of using SNS, but once you get used to it, it's comfortable!",
+            "crnt2": "What I depend on must be open!",
+            "crnt3": "I want to broadcast to multiple communities simultaneously!",
+            "crnt4": "Maybe I’ll try setting up my own server?",
+            "crnt5": "I want a decentralized SNS where I don’t have to be decentralized!",
+            "crnt6": "What are you up to?",
+            "crnt7": "Yay!",
+            "crnt8": "Good evening!",
+            "crnt9": "Anyone want to hang out?",
+            "crnt10": "Customizing themes is so fun!",
+            "crnt11": "Because my account is truly in my own hands, \n I can use it confidently as my internet identity.",
+            "crnt12": "Communicating with emoji reactions is so smooth!",
+            "crnt13": "Even if the server I’m on shuts down, \n I can easily move my relationships to a new server, so no worries!",
+            "crnt14": "I’m hungry YO",
+            "crnt_totegamma": "This is exactly it!",
+            "mock": {
+                "home": {
+                    "title": "Home",
+                    "crnt1": "I really love the quietness at this time. Solo time on holidays is the best.",
+                    "crnt2": "Speaking of music, lately I can't get anime songs out of my head. They really pump me up.",
+                    "crnt3": "Afternoon music selection—what should I listen to today? It's a tough choice.",
+                    "crnt4": "A new book has arrived! Time to brew some tea and dive into it. The perfect holiday.",
+                    "crnt5": "It's been a while, but they're rerunning my favorite anime today. Time to relax and watch."
+                },
+                "game": {
+                    "title": "Gaming Scene",
+                    "crnt1": "Lost my save data in 'Adventurers of the Netherworld'... I want to cry.",
+                    "crnt2": "The new VR game is incredibly realistic! I need to be careful not to get dizzy.",
+                    "crnt3": "Last night's online battle was flawless teamwork. Let's do it again, team!",
+                    "crnt4": "Found an old arcade game. The feeling of inserting a coin and playing is so nostalgic.",
+                    "crnt5": "Collecting game OSTs is my hobby. I got a new one today!"
+                },
+                "food": {
+                    "title": "Food",
+                    "crnt1": "Trying my hand at homemade vegan dishes. Today, it's tomato and quinoa salad.",
+                    "crnt2": "Discovered a new spice shop! Time to experiment with some exotic flavors.",
+                    "crnt3": "Today's ramen was exceptional. The spice level was just right.",
+                    "crnt4": "Homemade cold brew, a summer staple. The choice of coffee beans is key.",
+                    "crnt5": "The yakitori I had at the restaurant was crispy on the outside and juicy on the inside. Next time, I'm bringing friends!"
+                }
+            }
         }
     },
     "app": {

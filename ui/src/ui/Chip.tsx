@@ -14,21 +14,20 @@ interface Props {
 
 const baseStyle: CSSProperties = {
     flexShrink: 0,
-    color: CssVar.contentText,
+    color: 'rgb(41, 46, 36)',
     fontSize: '16px',
     height: '24px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: CssVar.roundFull,
+    borderRadius: '16px',
     padding: '0 4px',
     width: 'fit-content'
 }
 
 const variantStyles = {
     contained: {
-        // 本文色の透過で地を作る(テーマ非依存)
-        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
+        backgroundColor: 'rgba(0, 0, 0, 0.08)',
         border: '1px solid transparent'
     },
     outlined: {
@@ -73,6 +72,10 @@ export const Chip = (props: Props) => {
                         {props.children}
                     </div>
                     <div
+                        // ButtonBaseはpointerdownでsetPointerCaptureするため、そのままだと後続のclickが
+                        // button側に再ターゲットされ、tailElement自身のonClickが永久に発火しない。
+                        // tail上で始まった押下はチップの押下ではないので、ここでpointerdownを止める。
+                        onPointerDown={(e) => e.stopPropagation()}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -115,6 +118,10 @@ export const Chip = (props: Props) => {
                         {props.children}
                     </div>
                     <div
+                        // ButtonBaseはpointerdownでsetPointerCaptureするため、そのままだと後続のclickが
+                        // button側に再ターゲットされ、tailElement自身のonClickが永久に発火しない。
+                        // tail上で始まった押下はチップの押下ではないので、ここでpointerdownを止める。
+                        onPointerDown={(e) => e.stopPropagation()}
                         style={{
                             display: 'flex',
                             alignItems: 'center',

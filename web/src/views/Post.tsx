@@ -4,6 +4,7 @@ import { MdAddReaction, MdReply } from 'react-icons/md'
 import { Suspense, startTransition, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClient } from '../contexts/Client'
+import { useSubscribe } from '../hooks/useSubscribe'
 import {
     Association,
     LikeAssociationSchema,
@@ -37,9 +38,11 @@ interface Props {
 export const PostView = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'views.post' })
     const { client } = useClient()
+    const navigate = useNavigate()
     const emojiPicker = useEmojiPicker()
     const composer = useComposer()
     const isMobile = useIsMobile()
+    const [knownCommunities] = useSubscribe(client.knownCommunities)
     const [tab, setTab] = useState<PostTab>('replies')
     const [message, setMessage] = useState<Message<any> | null>(null)
 
@@ -63,6 +66,27 @@ export const PostView = (props: Props) => {
     useEffect(() => {
         messagePromise?.then((msg) => setMessage(msg ?? null)).catch(() => setMessage(null))
     }, [messagePromise])
+
+    // リプライの投稿先は元メッセージの配信先(自分のホーム系タイムラインを除く)
+    const replyDestinations = useMemo(
+        () =>
+            message?.distributes?.filter(
+                (uri: string) =>
+                    !uri.includes('/main/home-timeline') &&
+                    !uri.includes('/main/activity-timeline') &&
+                    !uri.includes('/main/notify-timeline')
+            ) ?? [],
+        [message]
+    )
+
+    // インラインのリプライ欄の投稿先。元メッセージ由来の値を初期値にしつつ、その場で編集できるようにする
+    // (元メッセージは非同期ロードなので、届いた時点および別メッセージに移った時点で差し替える)
+    const [destinations, setDestinations] = useState<string[]>(replyDestinations)
+    const [prevReplyDestinations, setPrevReplyDestinations] = useState(replyDestinations)
+    if (prevReplyDestinations !== replyDestinations) {
+        setPrevReplyDestinations(replyDestinations)
+        setDestinations(replyDestinations)
+    }
 
     const fetchAssociations = useCallback(
         async (targetTab: PostTab) => {
@@ -145,7 +169,8 @@ export const PostView = (props: Props) => {
                     !uri.includes('/main/activity-timeline') &&
                     !uri.includes('/main/notify-timeline')
             ) ?? []
-        composer.open(communityDestinations, [], 'reply', msg)
+        // 候補は省略してknownCommunities全体にする(投稿先は元メッセージの配信先に限らない)
+        composer.open(communityDestinations, undefined, 'reply', msg)
     }, [messagePromise, composer])
 
     return (
@@ -159,7 +184,7 @@ export const PostView = (props: Props) => {
                 >
                     <ErrorBoundary FallbackComponent={RenderError}>
                         <Suspense fallback={<MessageSkeleton />}>
-                            <MessageContainer uri={props.uri} forceExpanded />
+                            <MessageContainer uri={props.uri} forceExpanded detail />
                         </Suspense>
                     </ErrorBoundary>
                 </div>
@@ -227,14 +252,10 @@ export const PostView = (props: Props) => {
                                     <Composer
                                         mode="reply"
                                         targetMessage={message}
-                                        destinations={
-                                            message.distributes?.filter(
-                                                (uri: string) =>
-                                                    !uri.includes('/main/home-timeline') &&
-                                                    !uri.includes('/main/activity-timeline') &&
-                                                    !uri.includes('/main/notify-timeline')
-                                            ) ?? []
-                                        }
+                                        destinations={destinations}
+                                        setDestinations={setDestinations}
+                                        defaultDestinations={replyDestinations}
+                                        options={knownCommunities}
                                         onPost={() => fetchAssociations('replies')}
                                     />
                                 </div>
@@ -275,7 +296,7 @@ export const PostView = (props: Props) => {
                                     key={reroute.ccfs}
                                     ccid={reroute.author}
                                     date={reroute.createdAt}
-                                    profileOverride={reroute.value.profileOverride}
+                                    onClick={() => navigate('/profile/' + reroute.author)}
                                 >
                                     {t('rerouted')}
                                 </AssociationUserItem>
@@ -295,7 +316,7 @@ export const PostView = (props: Props) => {
                                     key={fav.ccfs}
                                     ccid={fav.author}
                                     date={fav.createdAt}
-                                    profileOverride={fav.value.profileOverride}
+                                    onClick={() => navigate('/profile/' + fav.author)}
                                 >
                                     {t('favorited')}
                                 </AssociationUserItem>
@@ -372,12 +393,7 @@ export const PostView = (props: Props) => {
                                                 fontSize: '14px'
                                             }}
                                         >
-                                            <CCImage
-                                                src={imageUrl}
-                                                maxHeight={128}
-                                                alt=""
-                                                style={{ height: '20px', width: '20px', objectFit: 'contain' }}
-                                            />
+                                            <CCImage src={imageUrl} maxHeight={128} alt="" style={{ height: '20px' }} />
                                             <span>{count}</span>
                                         </button>
                                     ))}
@@ -405,7 +421,7 @@ export const PostView = (props: Props) => {
                                                 key={member.ccfs}
                                                 ccid={member.author}
                                                 date={member.createdAt}
-                                                profileOverride={member.value.profileOverride}
+                                                onClick={() => navigate('/profile/' + member.author)}
                                             />
                                         ))}
                                 </>
@@ -426,13 +442,12 @@ export const PostView = (props: Props) => {
 interface AssociationUserItemProps {
     ccid: string
     date: Date
-    profileOverride?: { username?: string; avatar?: string; link?: string }
     children?: React.ReactNode
+    onClick?: () => void
 }
 
 const AssociationUserItem = (props: AssociationUserItemProps) => {
     const { client } = useClient()
-    const navigate = useNavigate()
     const [user, setUser] = useState<User | null>(null)
 
     useEffect(() => {
@@ -448,23 +463,11 @@ const AssociationUserItem = (props: AssociationUserItemProps) => {
                 padding: `${CssVar.space(1)} 0`,
                 cursor: 'pointer'
             }}
-            onClick={() => {
-                if (props.profileOverride?.link) {
-                    navigate('/activitypub/view/' + encodeURIComponent(props.profileOverride.link))
-                } else {
-                    navigate('/profile/' + props.ccid)
-                }
-            }}
+            onClick={props.onClick}
         >
-            <Avatar
-                ccid={props.ccid}
-                src={props.profileOverride?.avatar ?? user?.profile.avatar}
-                style={{ width: '32px', height: '32px' }}
-            />
+            <Avatar ccid={props.ccid} src={user?.profile.avatar} style={{ width: '32px', height: '32px' }} />
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 'bold' }}>
-                    {props.profileOverride?.username ?? user?.profile.username ?? 'Anonymous'}
-                </span>
+                <span style={{ fontWeight: 'bold' }}>{user?.profile.username || 'Anonymous'}</span>
                 {props.children && <span style={{ opacity: 0.7 }}>{props.children}</span>}
             </div>
             <TimeDiff date={props.date instanceof Date ? props.date : new Date(props.date)} />

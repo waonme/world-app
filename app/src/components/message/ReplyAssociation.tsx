@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MessageProps } from './types'
-import { ReplyAssociationSchema, Message } from '@concrnt/worldlib'
+import { ReplyAssociationSchema, Message, Schemas } from '@concrnt/worldlib'
 import { Avatar, CfmRenderer, Chip } from '@concrnt/ui'
 import { useStack } from '../../layouts/Stack'
 import { useClient } from '../../contexts/Client'
 import { PostView } from '../../views/Post'
 import { ProfileView } from '../../views/Profile'
-import { ApView } from '../../views/ApView'
 import { MdReply } from 'react-icons/md'
 import { MessageLayout } from './MessageLayout'
+import { MessageContainer } from './main'
 
 export const ReplyAssociation = (props: MessageProps<ReplyAssociationSchema>) => {
     const { t } = useTranslation('', { keyPrefix: 'components.replyAssociation' })
@@ -79,8 +79,9 @@ export const ReplyAssociation = (props: MessageProps<ReplyAssociationSchema>) =>
                 </div>
             )}
 
-            {/* リプライメッセージを表示 */}
-            {replyMessage && (
+            {/* リプライメッセージを表示 (APブリッジ経由のap/noteレコードは本文を持たないためNote解決表示に委譲) */}
+            {replyMessage && replyMessage.schema === Schemas.apNote && <MessageContainer uri={replyMessageURI} />}
+            {replyMessage && replyMessage.schema !== Schemas.apNote && (
                 <MessageLayout
                     onClick={() => {
                         if (replyMessageURI) {
@@ -91,9 +92,7 @@ export const ReplyAssociation = (props: MessageProps<ReplyAssociationSchema>) =>
                         <div
                             onClick={(e) => {
                                 e.stopPropagation()
-                                if (message.value.profileOverride?.link) {
-                                    push(<ApView uri={message.value.profileOverride.link} />)
-                                } else if (replyAuthor) {
+                                if (replyAuthor) {
                                     push(<ProfileView ccid={replyAuthor.ccid} />)
                                 }
                             }}

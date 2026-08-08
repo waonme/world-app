@@ -146,9 +146,7 @@ const HomeMain = ({
             {sortedPins.length > 1 && (
                 <Tabs
                     style={{
-                        // リストが多いときは横スクロール(タブ幅を潰さない)
-                        overflowX: 'auto',
-                        justifyContent: 'flex-start'
+                        color: CssVar.contentLink
                     }}
                 >
                     {sortedPins.map((tab) => (
@@ -163,18 +161,10 @@ const HomeMain = ({
                             groupId="home-timeline-tabs"
                             style={{
                                 color: CssVar.contentText,
-                                flexShrink: 0,
-                                maxWidth: '10rem'
+                                width: '120px'
                             }}
                         >
-                            <ListName
-                                uri={tab.uri}
-                                style={{
-                                    overflow: 'hidden',
-                                    whiteSpace: 'nowrap',
-                                    textOverflow: 'ellipsis'
-                                }}
-                            />
+                            <ListName pin={tab} />
                         </Tab>
                     ))}
                 </Tabs>

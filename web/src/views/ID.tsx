@@ -10,6 +10,8 @@ import { Header } from '../components/Header'
 import { MdBadge, MdPublic } from 'react-icons/md'
 import { AliasSetupModalContent } from '../components/AliasSetupModalContent'
 import { SubkeyList } from '../components/SubkeyList'
+import { LoadIdentity } from '@concrnt/client'
+import i18n from '../i18n'
 
 const InfoTile = ({
     icon,
@@ -60,28 +62,55 @@ export const IDView = () => {
     const { t } = useTranslation('', { keyPrefix: 'views.id' })
     const { client } = useClient()
     const [aliasModalOpen, setAliasModalOpen] = useState(false)
+    const [subkeyCopied, setSubkeyCopied] = useState(false)
 
     if (!client) return null
 
     const username = client.profile?.username
     const alias = client.entity.alias || t('aliasNotSet')
 
+    const storedMnemonic = localStorage.getItem('Mnemonic')
+    let masterIdentity = null
+    try {
+        masterIdentity = storedMnemonic ? LoadIdentity(storedMnemonic) : null
+    } catch {
+        masterIdentity = null
+    }
+    // ニーモニックがこのセッションのアカウントのものである場合のみバックアップ可能
+    const canBackup = masterIdentity !== null && masterIdentity.CCID === client.ccid
+
     const backupMasterKey = () => {
-        const privateKey = localStorage.getItem('PrivateKey')
-        const text = t('backupFileContent', {
+        if (!masterIdentity) return
+        const text = i18n.t('views.accountSetup.masterkeyFileTemplate', {
             ccid: client.ccid,
-            privateKey: privateKey ?? t('backupNotSaved'),
-            server: client.server.domain ?? 'N/A',
-            interpolation: { escapeValue: false }
+            mnemonic: masterIdentity.mnemonic_ja,
+            domain: client.server.domain ?? 'N/A'
         })
 
         const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         const anchor = document.createElement('a')
         anchor.href = url
-        anchor.download = `concrnt-web-backup-${client.ccid}.txt`
+        anchor.download = `concrnt-masterkey-${client.ccid}.txt`
         anchor.click()
         URL.revokeObjectURL(url)
+    }
+
+    const copySubkey = () => {
+        let subkey = localStorage.getItem('SubKey')
+        if (!subkey) return
+        // QRSetup経由のセッションはusePersistentがJSON文字列化して保存している
+        if (subkey.startsWith('"')) {
+            try {
+                subkey = JSON.parse(subkey)
+            } catch {
+                /* raw文字列のまま使う */
+            }
+        }
+        if (!subkey) return
+        navigator.clipboard.writeText(subkey)
+        setSubkeyCopied(true)
+        setTimeout(() => setSubkeyCopied(false), 2000)
     }
 
     return (
@@ -130,7 +159,14 @@ export const IDView = () => {
                     />
                 </div>
 
-                <Button onClick={backupMasterKey}>{t('backupMasterKey')}</Button>
+                <Button disabled={!canBackup} onClick={backupMasterKey}>
+                    {t('backupMasterKey')}
+                </Button>
+                {!canBackup && <Text variant="caption">{t('backupUnavailable')}</Text>}
+
+                {localStorage.getItem('SubKey') && (
+                    <Button onClick={copySubkey}>{subkeyCopied ? t('subkeyCopied') : t('copySubkey')}</Button>
+                )}
 
                 <SubkeyList />
             </div>

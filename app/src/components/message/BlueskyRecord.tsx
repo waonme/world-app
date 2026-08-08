@@ -7,12 +7,14 @@ import { TimeDiff } from '../TimeDiff'
 import { BskyView } from '../../views/BskyView'
 import { useClient } from '../../contexts/Client'
 import { MessageSkeleton } from './MessageSkeleton'
-import { AtprotoRecordSchema, Message } from '@concrnt/worldlib'
+import { AtprotoRecordSchema, Message, RerouteMessageSchema } from '@concrnt/worldlib'
 import { MessageFooter } from './Footer'
 
 interface Props {
     atUri: string
     message?: Message<AtprotoRecordSchema>
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
 }
 
 export const BlueskyRecord = (props: Props) => {
@@ -26,12 +28,17 @@ export const BlueskyRecord = (props: Props) => {
 
     return (
         <Suspense fallback={<MessageSkeleton />}>
-            <Post postPromise={postPromise} message={props.message} />
+            <Post postPromise={postPromise} message={props.message} detail={props.detail} rerouted={props.rerouted} />
         </Suspense>
     )
 }
 
-const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Message<AtprotoRecordSchema> }) => {
+const Post = (props: {
+    postPromise: Promise<BskyPostView | null>
+    message?: Message<AtprotoRecordSchema>
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
+}) => {
     const { push } = useStack()
 
     const post = use(props.postPromise)
@@ -54,6 +61,7 @@ const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Mess
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
                 push(<BskyView uri={post.uri} />)
             }}
@@ -127,7 +135,7 @@ const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Mess
                     {external.description && <Text variant="caption">{external.description}</Text>}
                 </a>
             )}
-            {props.message && <MessageFooter message={props.message} />}
+            {props.message && <MessageFooter message={props.message} rerouted={props.rerouted} />}
         </MessageLayout>
     )
 }

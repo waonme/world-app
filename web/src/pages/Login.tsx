@@ -15,8 +15,11 @@ import {
     InMemoryAuthProvider,
     InMemoryKVS,
     LoadIdentity,
+    LoadSubKey,
+    NotFoundError,
     SignedDocument,
-    type Identity
+    type Identity,
+    type SubKey
 } from '@concrnt/client'
 import { semantics } from '@concrnt/worldlib'
 import { AuthActions, AuthButton, AuthHeader, AuthScreen, AuthTextButton, authStyles } from '../views/authLayout'
@@ -44,12 +47,23 @@ const loadRecoveryIdentity = (value: string): Identity | null => {
     }
 }
 
-const storeWebSession = (domain: string, masterKey: string | undefined, subKey: string) => {
+const storeWebSession = (
+    domain: string,
+    masterKey: string | undefined,
+    mnemonic: string | undefined,
+    subKey: string
+) => {
     localStorage.setItem('Domain', domain)
     if (masterKey) {
         localStorage.setItem('PrivateKey', masterKey)
     } else {
         localStorage.removeItem('PrivateKey')
+    }
+    if (mnemonic) {
+        localStorage.setItem('Mnemonic', mnemonic)
+    } else {
+        // 前セッションの別アカウントのニーモニックが残るとID画面で誤ったマスターキーをDLさせてしまう
+        localStorage.removeItem('Mnemonic')
     }
     localStorage.setItem('SubKey', subKey)
 }
@@ -127,6 +141,14 @@ export const Login = () => {
         return loadRecoveryIdentity(normalizedMnemonic)
     }, [normalizedMnemonic])
 
+    // normalizeRecoveryPhraseはNFKD+小文字化するため、サブキー文字列は正規化前の生入力で判定する
+    const parsedSubkey = useMemo((): { str: string; key: SubKey } | null => {
+        const trimmed = mnemonic.trim()
+        if (!trimmed.startsWith('concrnt-subkey')) return null
+        const key = LoadSubKey(trimmed)
+        return key ? { str: trimmed, key } : null
+    }, [mnemonic])
+
     const continueWithSession = () => {
         reset()
         window.location.href = '/'
@@ -187,11 +209,46 @@ export const Login = () => {
             const identity = DeriveIdentity(new Uint8Array(prfRes.first))
             const subkeyStr = `concrnt-subkey ${identity.privateKey} ${ccid}@${domain} -`
 
-            storeWebSession(domain, undefined, subkeyStr)
+            storeWebSession(domain, undefined, undefined, subkeyStr)
             continueWithSession()
         } catch (error) {
             console.error(error)
             setStatus(error instanceof Error ? error.message : t('passkeyLoginFailed'))
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const startSubkeyLogin = async (subkeyStr: string, subkey: SubKey) => {
+        setBusy(true)
+        setResolvedCCID(subkey.ccid)
+        setStatus(t('checkingSubkey', { domain: subkey.domain }))
+
+        try {
+            const authProvider = new InMemoryAuthProvider(undefined, subkeyStr)
+            const kvs = new InMemoryKVS()
+            const api = new Api(subkey.domain, authProvider, kvs)
+
+            let valid = false
+            try {
+                const doc = await api.getDocument(semantics.subkey(subkey.ccid, subkey.ckid), undefined, {
+                    cache: 'no-cache'
+                })
+                // revoked-subkey.jsonによる同一キー上書き(CIP-13)はrevoke扱い
+                valid = doc.kind === 'record' && doc.schema === 'https://schema.concrnt.net/subkey.json'
+            } catch (err) {
+                if (!(err instanceof NotFoundError)) throw err
+            }
+            if (!valid) {
+                setStatus(t('subkeyInvalidOnServer'))
+                return
+            }
+
+            storeWebSession(subkey.domain, undefined, undefined, subkeyStr)
+            continueWithSession()
+        } catch (error) {
+            console.error(error)
+            setStatus(error instanceof Error ? error.message : t('subkeyLoginFailed'))
         } finally {
             setBusy(false)
         }
@@ -231,7 +288,7 @@ export const Login = () => {
                 console.error('Failed to migrate entity proof type', err)
             })
 
-            storeWebSession(domain, identity.privateKey, subkeyStr)
+            storeWebSession(domain, identity.privateKey, identity.mnemonic, subkeyStr)
             continueWithSession()
         } catch (error) {
             console.error(error)
@@ -250,7 +307,7 @@ export const Login = () => {
                     options={[
                         { value: 'qr', label: t('methodQr') },
                         { value: 'passkey', label: t('methodPasskey') },
-                        { value: 'recovery', label: t('methodMasterKey') }
+                        { value: 'recovery', label: t('methodManual') }
                     ]}
                     value={method}
                     onChange={(value: LoginMethod) => {
@@ -284,7 +341,7 @@ export const Login = () => {
                 <>
                     <div style={authStyles.section}>
                         <div style={authStyles.inputGroup}>
-                            <Text style={{ color: CssVar.uiText }}>{t('masterKey')}</Text>
+                            <Text style={{ color: CssVar.uiText }}>{t('manualKey')}</Text>
                             <TextField
                                 value={mnemonic}
                                 onChange={(e) => {
@@ -293,7 +350,7 @@ export const Login = () => {
                                     setResolvedCCID(undefined)
                                     setStatus('')
                                 }}
-                                placeholder={t('masterKeyPlaceholder')}
+                                placeholder={t('manualKeyPlaceholder')}
                             />
                         </div>
 
@@ -311,7 +368,12 @@ export const Login = () => {
                         )}
 
                         <Text style={authStyles.status}>
-                            {status || (mnemonic && !recoveryIdentity ? t('masterKeyInvalid') : '')}
+                            {status ||
+                                (mnemonic && !recoveryIdentity && !parsedSubkey
+                                    ? mnemonic.trim().startsWith('concrnt-subkey')
+                                        ? t('subkeyInvalid')
+                                        : t('masterKeyInvalid')
+                                    : '')}
                         </Text>
                     </div>
 
@@ -324,8 +386,17 @@ export const Login = () => {
                                 {busy ? t('checking') : t('loginWithThisServer')}
                             </AuthButton>
                         ) : (
-                            <AuthButton disabled={busy || !recoveryIdentity} onClick={() => startRecoveryLogin()}>
-                                {busy ? t('checking') : t('masterKeyLogin')}
+                            <AuthButton
+                                disabled={busy || (!recoveryIdentity && !parsedSubkey)}
+                                onClick={() => {
+                                    if (parsedSubkey) {
+                                        startSubkeyLogin(parsedSubkey.str, parsedSubkey.key)
+                                    } else {
+                                        startRecoveryLogin()
+                                    }
+                                }}
+                            >
+                                {busy ? t('checking') : parsedSubkey ? t('subkeyLogin') : t('masterKeyLogin')}
                             </AuthButton>
                         )}
                         <AuthTextButton

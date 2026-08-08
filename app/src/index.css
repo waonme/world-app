@@ -15,7 +15,7 @@ html {
     overflow: hidden;
     top: 0;
     left: 0;
-    background-color: transparent;
+    background-color: 'transparent';
 }
 
 body {
@@ -45,7 +45,7 @@ body {
 
 :root {
   --content-text: #000000;
-  --content-link: #1e6476;
+  --content-link: #000000;
   --content-background: #ffffff;
 
   --ui-text: #ffffff;
@@ -58,14 +58,5 @@ body {
 
   --space: 4px;
   --round: 4px;
-
-  /* 派生トークン(ThemeProviderが上書きする。ここは初期描画用フォールバック) */
-  --accent: var(--content-link);
-  --danger: #d32f2f;
-  --text-secondary: color-mix(in srgb, var(--content-text) 70%, transparent);
-  --text-disabled: color-mix(in srgb, var(--content-text) 45%, transparent);
-  --scrim: rgba(0, 0, 0, 0.5);
-  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-2: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 

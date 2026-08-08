@@ -1,65 +1,70 @@
 import { useEffect, useState } from 'react'
 import { useClient } from '../contexts/Client'
 import { View } from '../components/View'
-import { Button } from '@concrnt/ui'
 import { ApNote } from './ApNote'
 import { ApPerson } from './ApPerson'
-import { ApObject } from '../utils/activitypub'
-import { invalidateActivitypubObject, resolveActivitypubObject } from '@concrnt/worldlib'
+import { ApObject, resolveApObject } from '../utils/activitypub'
+import { CssVar, Text } from '@concrnt/ui'
+import { MdOpenInNew } from 'react-icons/md'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
     uri: string
 }
 
-interface ResolveState {
-    key: string
-    object?: ApObject
-    failed: boolean
-}
-
 export const ApView = (props: Props) => {
     const { client } = useClient()
-    const [retryKey, setRetryKey] = useState(0)
-    const [resolveState, setResolveState] = useState<ResolveState>({ key: '', failed: false })
-    const requestKey = `${props.uri}\n${retryKey}`
+    const { t } = useTranslation('', { keyPrefix: 'components.activitypubNote' })
+    // undefined=読み込み中, null=取得失敗(404/接続不可)
+    const [ld, setLd] = useState<ApObject | null>()
 
     useEffect(() => {
-        let cancelled = false
-
-        resolveActivitypubObject<ApObject>(client.api, client.server.domain, props.uri, { force: retryKey > 0 })
-            .then(async (res) => {
-                if (!cancelled) setResolveState({ key: requestKey, object: new ApObject(res), failed: false })
+        resolveApObject(client, props.uri)
+            .then((res) => {
+                setLd(res)
             })
             .catch((err) => {
-                console.warn(`Failed to resolve ActivityPub object: ${props.uri}`, err)
-                if (!cancelled) setResolveState({ key: requestKey, failed: true })
+                console.log(err)
+                setLd(null)
             })
+    }, [props.uri, client])
 
-        return () => {
-            cancelled = true
-        }
-    }, [props.uri, client, retryKey, requestKey])
+    if (ld === undefined) {
+        return <View></View>
+    }
 
-    const currentState = resolveState.key === requestKey ? resolveState : undefined
-    const ld = currentState?.object
-
-    if (!ld) {
-        if (currentState?.failed) {
-            return (
-                <View>
-                    <p>ActivityPub object could not be loaded.</p>
-                    <Button
-                        onClick={() => {
-                            invalidateActivitypubObject(client.server.domain, props.uri)
-                            setRetryKey((key) => key + 1)
+    if (ld === null) {
+        return (
+            <View>
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: CssVar.space(1),
+                        padding: CssVar.space(2)
+                    }}
+                >
+                    <Text style={{ opacity: 0.7 }}>{t('unavailable')}</Text>
+                    <a
+                        href={props.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: CssVar.space(1),
+                            fontSize: '0.8rem',
+                            color: CssVar.contentLink,
+                            textDecoration: 'none'
                         }}
                     >
-                        Retry
-                    </Button>
-                </View>
-            )
-        }
-        return <View></View>
+                        <MdOpenInNew size={14} />
+                        {t('openRemote')}
+                    </a>
+                </div>
+            </View>
+        )
     }
 
     switch (ld.type) {

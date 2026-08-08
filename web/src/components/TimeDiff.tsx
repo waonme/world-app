@@ -21,7 +21,7 @@ export const TimeDiff = (props: TimeDiffProps): ReactNode => {
         <Text
             variant="caption"
             style={{
-                fontSize: '0.75rem'
+                fontSize: '0.8rem'
             }}
         >
             {diffTooLong && '?'}

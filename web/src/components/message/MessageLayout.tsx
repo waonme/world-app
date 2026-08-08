@@ -1,8 +1,8 @@
 import { ReactNode } from 'react'
-import { CssVar } from '../../types/Theme'
 
 interface Props {
     onClick?: () => void
+    detail?: boolean
     left: ReactNode
     headerLeft: ReactNode
     headerRight?: ReactNode
@@ -15,12 +15,14 @@ export const MessageLayout = (props: Props) => {
             style={{
                 display: 'flex',
                 flexDirection: 'row',
-                gap: CssVar.space(2),
-                overflow: 'hidden'
+                gap: '8px',
+                overflow: 'hidden',
+                userSelect: props.detail ? 'text' : undefined,
+                WebkitUserSelect: props.detail ? 'text' : undefined
             }}
             onClick={(e) => {
                 e.stopPropagation()
-                props.onClick?.()
+                if (!props.detail) props.onClick?.()
             }}
         >
             {props.left}
@@ -28,7 +30,7 @@ export const MessageLayout = (props: Props) => {
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: CssVar.space(1),
+                    gap: '4px',
                     flex: 1,
                     overflow: 'hidden'
                 }}
@@ -39,14 +41,10 @@ export const MessageLayout = (props: Props) => {
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        gap: CssVar.space(2)
+                        gap: '8px'
                     }}
                 >
-                    {/* 名前行は本文よりわずかに小さく(v1: 0.95rem)。時刻等のメタは各自の指定に任せる。
-                        flex:1+minWidth:0 が無いと shrink-to-fit になり、width:100% の子(スケルトン)が幅0に潰れる */}
-                    <div style={{ fontSize: '0.95rem', overflow: 'hidden', flex: 1, minWidth: 0 }}>
-                        {props.headerLeft}
-                    </div>
+                    {props.headerLeft}
                     {props.headerRight}
                 </div>
                 {props.children}

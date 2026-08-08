@@ -5,7 +5,6 @@ import { Avatar, CfmRenderer } from '@concrnt/ui'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
 import { ProfileView } from '../../views/Profile'
-import { ApView } from '../../views/ApView'
 import { MdRepeat } from 'react-icons/md'
 import { MessageLayout } from './MessageLayout'
 
@@ -57,9 +56,7 @@ export const RerouteAssociation = (props: MessageProps<RerouteAssociationSchema>
                 <span
                     onClick={(e) => {
                         e.stopPropagation()
-                        if (message.value.profileOverride?.link) {
-                            push(<ApView uri={message.value.profileOverride.link} />)
-                        } else if (rerouteAuthor) {
+                        if (rerouteAuthor) {
                             push(<ProfileView ccid={rerouteAuthor.ccid} />)
                         }
                     }}

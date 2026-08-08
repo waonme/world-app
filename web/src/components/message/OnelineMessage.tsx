@@ -58,7 +58,7 @@ export const OnelineMessage = (props: MessageProps<MarkdownMessageSchema>) => {
                     } as React.CSSProperties
                 }
             >
-                <MdMoreHoriz size={16} />
+                <MdMoreHoriz size={15} />
             </IconButton>
             <Select
                 open={menuOpen}

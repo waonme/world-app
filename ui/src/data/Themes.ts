@@ -37,7 +37,7 @@ export const Themes: Record<string, Theme> = {
             text: '#ffffff',
             background: '#333333'
         },
-        divider: 'rgba(255, 255, 255, 0.12)',
+        divider: '#e6e2df',
         space: '4px',
         round: '4px',
         variant: 'classic',
@@ -48,9 +48,7 @@ export const Themes: Record<string, Theme> = {
     blue: {
         content: {
             text: '#000000',
-            // v1のblueは secondary #1e6476 がリンク・選択・新着のアクセントだった。
-            // #000000(本文と同色)ではアクセントが消えるため復活させる
-            link: '#1e6476',
+            link: '#000000',
             background: '#ffffff'
         },
         ui: {

@@ -35,7 +35,6 @@ import { useStack } from '../layouts/Stack'
 import { PostView } from '../views/Post'
 import { ProfileView } from '../views/Profile'
 import { BskyView } from '../views/BskyView'
-import { ApView } from '../views/ApView'
 import { PullToRefresh } from './PullToRefresh'
 
 // 通知を集約した表示単位
@@ -228,7 +227,12 @@ export const NotificationTimeline = (props: Props) => {
         // 再アタッチパス: Activityのhidden→visible復帰でeffectが再実行された場合、
         // 既存readerと集約済み表示・iterカーソルをそのまま保持する(スクロール位置維持)
         const existing = reader.current
-        if (existing && existing.prefix === props.prefix && existing.body.length > 0) {
+        if (
+            existing &&
+            existing.prefix === props.prefix &&
+            JSON.stringify(existing.query) === JSON.stringify(props.query ?? {}) &&
+            existing.body.length > 0
+        ) {
             existing.onUpdate = () => {
                 update()
             }
@@ -442,7 +446,7 @@ const SummarisedLike = (props: { items: Message<LikeAssociationSchema>[] }) => {
     // 集約グループ内の全 Message は同じ associationTarget を指している前提
     // （集約キーが `${associationTarget.uri}${KEY_SUFFIX_LIKE}` のため）
     const target = props.items[0].associationTarget
-    const firstAuthor = props.items[0].authorProfile
+    const firstAuthorProfile = props.items[0].authorProfile
 
     return (
         <div
@@ -490,9 +494,7 @@ const SummarisedLike = (props: { items: Message<LikeAssociationSchema>[] }) => {
                             key={item.uri}
                             onClick={(e) => {
                                 e.stopPropagation()
-                                if (item.value.profileOverride?.link) {
-                                    push(<ApView uri={item.value.profileOverride.link} />)
-                                } else if (item.authorUser) {
+                                if (item.authorUser) {
                                     push(<ProfileView ccid={item.authorUser.ccid} />)
                                 }
                             }}
@@ -509,11 +511,11 @@ const SummarisedLike = (props: { items: Message<LikeAssociationSchema>[] }) => {
                 {/* 文言 */}
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
                     {props.items.length === 1 ? (
-                        <span>{t('favorite', { name: firstAuthor?.username ?? t('unknown') })}</span>
+                        <span>{t('favorite', { name: firstAuthorProfile?.username ?? t('unknown') })}</span>
                     ) : (
                         <span>
                             {t('favoriteMany', {
-                                name: firstAuthor?.username ?? t('unknown'),
+                                name: firstAuthorProfile?.username ?? t('unknown'),
                                 others: props.items.length - 1
                             })}
                         </span>
@@ -815,7 +817,7 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
     const { push } = useStack()
 
     const target = props.items[0].associationTarget
-    const firstAuthor = props.items[0].authorProfile
+    const firstAuthorProfile = props.items[0].authorProfile
 
     // imageUrl ごとに再グルーピング（同じ投稿に対する異なる絵文字リアクションをまとめる）
     const reactions: Record<string, Message<ReactionAssociationSchema>[]> = {}
@@ -891,9 +893,7 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
                                     key={item.uri}
                                     onClick={(e) => {
                                         e.stopPropagation()
-                                        if (item.value.profileOverride?.link) {
-                                            push(<ApView uri={item.value.profileOverride.link} />)
-                                        } else if (item.authorUser) {
+                                        if (item.authorUser) {
                                             push(<ProfileView ccid={item.authorUser.ccid} />)
                                         }
                                     }}
@@ -912,11 +912,11 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
                 {/* 文言 */}
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
                     {props.items.length === 1 ? (
-                        <span>{t('reaction', { name: firstAuthor?.username ?? t('unknown') })}</span>
+                        <span>{t('reaction', { name: firstAuthorProfile?.username ?? t('unknown') })}</span>
                     ) : (
                         <span>
                             {t('reactionMany', {
-                                name: firstAuthor?.username ?? t('unknown'),
+                                name: firstAuthorProfile?.username ?? t('unknown'),
                                 others: props.items.length - 1
                             })}
                         </span>

@@ -207,7 +207,6 @@ export const MainView = () => {
                         tabStyle={{
                             color: CssVar.backdropText
                         }}
-                        tabSelectedColor={CssVar.backdropText}
                     />
                 </div>
             </SidebarLayout>

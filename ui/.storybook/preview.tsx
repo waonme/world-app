@@ -1,7 +1,96 @@
 import type { Preview } from '@storybook/react-vite'
 import type { Theme } from '../src/types/Theme'
-// 本番と同じテーマ定義を使う(独自コピーは round 等が乖離していた)
-import { Themes } from '../src/data/Themes'
+
+export const Themes: Record<string, Theme> = {
+    light: {
+        content: {
+            text: '#000000',
+            link: '#0476d9',
+            background: '#ffffff'
+        },
+        ui: {
+            text: '#ffffff',
+            background: '#0476d9'
+        },
+        backdrop: {
+            text: '#000000',
+            background: '#ffffff'
+        },
+        divider: '#e6e2df',
+        space: '4px',
+        round: '8px',
+        variant: 'classic',
+        meta: {
+            name: 'light'
+        }
+    },
+    darkgray: {
+        content: {
+            text: '#ffffff',
+            link: 'rgba(255, 255, 255, 0.7)',
+            background: '#222222'
+        },
+        ui: {
+            text: '#ffffff',
+            background: '#555555'
+        },
+        backdrop: {
+            text: '#ffffff',
+            background: '#333333'
+        },
+        divider: '#e6e2df',
+        space: '4px',
+        round: '8px',
+        variant: 'classic',
+        meta: {
+            name: 'darkgray'
+        }
+    },
+    blue: {
+        content: {
+            text: '#000000',
+            link: '#000000',
+            background: '#ffffff'
+        },
+        ui: {
+            text: '#ffffff',
+            background: '#0476d9'
+        },
+        backdrop: {
+            text: '#ffffff',
+            background: '#023059'
+        },
+        divider: '#e6e2df',
+        space: '4px',
+        round: '8px',
+        variant: 'world',
+        meta: {
+            name: 'blue'
+        }
+    },
+    rainyday: {
+        content: {
+            text: '#232d31',
+            link: 'rgba(52, 61, 66, 0.7)',
+            background: '#ebf3f5'
+        },
+        ui: {
+            text: '#ffffff',
+            background: '#70868b'
+        },
+        backdrop: {
+            text: '#ffffff',
+            background: '#839fa1'
+        },
+        divider: '#e6e2df',
+        space: '4px',
+        round: '8px',
+        variant: 'world',
+        meta: {
+            name: 'rainyday'
+        }
+    }
+}
 
 const preview: Preview = {
     parameters: {
@@ -66,14 +155,7 @@ const preview: Preview = {
                                 '--backdrop-background': themeData.backdrop.background,
                                 '--divider': themeData.divider,
                                 '--space': themeData.space,
-                                '--round': themeData.round,
-                                '--accent': themeData.accent ?? themeData.content.link,
-                                '--danger': themeData.danger ?? '#d32f2f',
-                                '--text-secondary': 'color-mix(in srgb, var(--content-text) 70%, transparent)',
-                                '--text-disabled': 'color-mix(in srgb, var(--content-text) 45%, transparent)',
-                                '--scrim': 'rgba(0, 0, 0, 0.5)',
-                                '--shadow-1': '0 2px 8px rgba(0, 0, 0, 0.2)',
-                                '--shadow-2': '0 4px 8px rgba(0, 0, 0, 0.2)'
+                                '--round': themeData.round
                             }}
                         >
                             <Story />

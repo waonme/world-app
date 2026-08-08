@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode, useId } from 'react'
-import { Tabs, Tab, CssVar } from '@concrnt/ui'
+import { Tabs, Tab } from '@concrnt/ui'
 import { ActivityProvider } from '../contexts/Activity'
 
 interface Tab {
@@ -12,7 +12,6 @@ interface Props {
     setSelectedTab: (tab: string) => void
     tabs: Record<string, Tab>
     tabStyle?: CSSProperties
-    tabSelectedColor?: string
     style?: CSSProperties
     placement?: 'upper' | 'lower'
     divider?: boolean
@@ -42,13 +41,12 @@ export const TabLayout = (props: Props) => {
                                 onClick={() => props.setSelectedTab(key)}
                                 selected={key === props.selectedTab}
                                 style={props.tabStyle}
-                                selectedColor={props.tabSelectedColor}
                             >
                                 {tab.tab}
                             </Tab>
                         ))}
                     </Tabs>
-                    {props.divider && <div style={{ height: '1px', backgroundColor: CssVar.divider, width: '100%' }} />}
+                    {props.divider && <div style={{ height: '1px', backgroundColor: '#ccc', width: '100%' }} />}
                 </>
             )}
 
@@ -60,12 +58,11 @@ export const TabLayout = (props: Props) => {
 
             {props.placement !== 'upper' && (
                 <>
-                    {props.divider && <div style={{ height: '1px', backgroundColor: CssVar.divider, width: '100%' }} />}
+                    {props.divider && <div style={{ height: '1px', backgroundColor: '#ccc', width: '100%' }} />}
                     <Tabs style={props.style}>
                         {Object.entries(props.tabs).map(([key, tab]) => (
                             <Tab
                                 style={props.tabStyle}
-                                selectedColor={props.tabSelectedColor}
                                 key={key}
                                 onClick={() => props.setSelectedTab(key)}
                                 selected={key === props.selectedTab}

@@ -211,7 +211,9 @@
             "urlCopied": "URLをコピーしました",
             "loadFailed": "読み込みに失敗しました",
             "brokenEntry": "壊れた項目",
-            "fetchedAt": "取得日: {{date}}"
+            "fetchedAt": "取得日: {{date}}",
+            "addPackage": "追加",
+            "addPackageTitle": "絵文字パッケージを追加"
         },
         "welcome": {
             "loadFailed": "アカウント情報の読み込みに失敗しました。\n端末に保存された鍵が消えたわけではありません。もう一度お試しください。",
@@ -328,8 +330,9 @@
             "alias": "エイリアス",
             "loginOnAnotherDevice": "他デバイスでログイン",
             "backupMasterKey": "マスターキーをバックアップ",
-            "backupNotSaved": "未保存",
-            "backupFileContent": "Concrnt Web ログイン情報\nこのファイルは Concrnt Web のログイン情報をバックアップするためのものです。\nこのファイルを安全な場所に保管してください。\n\nCCID: {{ccid}}\nマスター秘密鍵: {{privateKey}}\nバックアップ時登録サーバー: {{server}}\n\n秘密鍵を紛失した場合、アカウントを復元できなくなる可能性があります。\nこの内容を他人に知られると、アカウントが乗っ取られる可能性があります。",
+            "copySubkey": "サブキーをコピー",
+            "subkeyCopied": "コピーしました",
+            "backupUnavailable": "このブラウザはマスターキーを保持していません。マスターキー(12単語)でログインし直すとバックアップできます。",
             "subkeys": {
                 "title": "サブキー",
                 "description": "このアカウントで承認されているサブキーの一覧です。ログインした各デバイスはこの鍵で署名を行います。",
@@ -357,14 +360,32 @@
             "enable": "有効化",
             "enabled": "Activitypub連携は有効化されています。",
             "yourId": "あなたのID: {{id}}",
+            "forwardTimeline": "転送元タイムライン",
+            "forwardTimelineDesc": "選択したタイムラインへの自分の投稿がActivityPubへ転送されます。未設定の場合はホームタイムラインが使用されます。",
+            "inboxNotListed": "ActivityPubタイムラインがどのリストにも登録されていません。リストに追加しないと受信した投稿が表示されません。",
+            "addToList": "リストに追加",
+            "inboxPolicyBroken": "受信リストの権限設定に問題があり、ActivityPubからの投稿が届かない状態です。",
+            "repair": "修復する",
+            "repairing": "修復中...",
+            "repairFailed": "修復に失敗しました。時間をおいて再度お試しください。",
+            "update": "更新",
             "inquiry": "照会"
+        },
+        "apNote": {
+            "notImported": "この投稿はまだこのサーバーに取得されていません。",
+            "import": "concrntメッセージとして取得する",
+            "importing": "取得中...",
+            "importFailed": "取得に失敗しました"
         },
         "apPerson": {
             "follow": "フォロー",
             "unfollow": "フォロー解除",
             "noDescription": "説明はまだありません",
             "apUserNotice": "このユーザーはActivityPubのユーザーです。",
-            "openRemote": "リモートで開く"
+            "openRemote": "リモートで開く",
+            "noPosts": "表示できる投稿はありません",
+            "loadFailed": "投稿を読み込めませんでした",
+            "boosted": "{{name}}がブースト"
         },
         "bluesky": {
             "title": "Bluesky設定",
@@ -417,10 +438,14 @@
             "title": "照会",
             "submit": "照会"
         },
+        "list": {
+            "listNotFound": "リストが見つかりませんでした"
+        },
         "lists": {
             "createList": "リストを作成",
             "create": "作成",
-            "listTitle": "タイトル"
+            "listTitle": "タイトル",
+            "openSettings": "リスト設定"
         }
     },
     "components": {
@@ -434,7 +459,24 @@
             "submit": "カレント",
             "replyPlaceholder": "返信を入力...",
             "placeholder": "今、なにしてる？",
-            "cannotPostOffline": "オフラインのため投稿できません"
+            "cannotPostOffline": "オフラインのため投稿できません",
+            "resetDestination": "投稿先をデフォルトに戻す",
+            "dropToUpload": "ドロップしてアップロード",
+            "flagTitle": "フラグ設定(任意)",
+            "flagNone": "なし",
+            "flagWarn": "注意",
+            "flagNude": "ヌード",
+            "flagPorn": "ポルノ",
+            "flagHard": "ハード",
+            "flagCustomPlaceholder": "自由に記述できます"
+        },
+        "mediaGallery": {
+            "clickToReveal": "タップして表示",
+            "hideAgain": "再度隠す",
+            "flagWarn": "注意",
+            "flagNude": "ヌード",
+            "flagPorn": "ポルノ",
+            "flagHard": "ハード"
         },
         "report": {
             "reason": "報告理由",
@@ -463,6 +505,11 @@
         "likeAssociation": {
             "userLiked": "{{name}} がお気に入りに登録しました",
             "loading": "読み込み中..."
+        },
+        "activitypubNote": {
+            "openRemote": "リモートで開く",
+            "unavailable": "この投稿は取得できませんでした(削除済みか、非公開の可能性があります)",
+            "fetchFailed": "この投稿を読み込めませんでした(サーバーに接続できません)"
         },
         "followAck": {
             "userFollowed": "{{name}} がフォローしました",
@@ -501,6 +548,10 @@
             "verificationKey": "検証キー ({{type}})",
             "verificationError": "検証エラー: {{error}}",
             "keyMismatch": "署名から復元したキーが検証キーと一致しません"
+        },
+        "mentionAssociation": {
+            "userMentioned": "{{name}} がメンションしました",
+            "loading": "読み込み中..."
         },
         "onelineMessage": {
             "deletePost": "投稿を削除"
@@ -551,6 +602,14 @@
             "variantLabel": "表示タイプ",
             "preview": "プレビュー",
             "currentlyInUse": "現在このテーマを使用しています"
+        },
+        "emojiPackImporter": {
+            "title": "v1からインポート",
+            "description": "v1の絵文字設定で「全部コピー」したJSON(絵文字パッケージURLの配列)を貼り付けてください。すでに追加済みのパッケージはスキップします。",
+            "placeholder": "ここにJSONを貼り付け",
+            "noPackagesFound": "絵文字パッケージが見つかりませんでした",
+            "importResult": "{{added}}件追加 / {{skipped}}件スキップ",
+            "import": "インポート"
         },
         "themeImporter": {
             "title": "v1からインポート",
@@ -631,6 +690,16 @@
             "following": "フォロー",
             "followers": "フォロワー"
         },
+        "apFollowList": {
+            "following": "フォロー中",
+            "followers": "フォロワー",
+            "follow": "フォロー",
+            "unfollow": "フォロー解除",
+            "pending": "承認待ち",
+            "loadMore": "もっと見る",
+            "empty": "ユーザーがいません",
+            "loadError": "読み込みに失敗しました"
+        },
         "userPicker": {
             "addUser": "ユーザーを追加",
             "loading": "読み込み中..."
@@ -660,7 +729,8 @@
             "community": "コミュニティ",
             "user": "ユーザー",
             "noTimelines": "タイムラインがありません",
-            "defaultPostTimelines": "デフォルト投稿先"
+            "defaultPostTimelines": "デフォルト投稿先",
+            "isIconTab": "タブ表示にアイコンを使用"
         },
         "subscription": {
             "addToList": "リストに追加"
@@ -754,12 +824,12 @@
             "masterKeyLogin": "マスターキーでログイン",
             "methodQr": "アプリでQR",
             "methodPasskey": "パスキー",
-            "methodMasterKey": "マスターキー",
+            "methodManual": "手動入力",
             "signup": "アカウントをお持ちでない方は新規登録",
             "checking": "確認中...",
             "usePasskey": "パスキーを使う",
-            "masterKey": "マスターキー",
-            "masterKeyPlaceholder": "12語のマスターキーを入力",
+            "manualKey": "マスターキーまたはサブキー",
+            "manualKeyPlaceholder": "12語のマスターキー、または concrnt-subkey から始まるサブキーを入力",
             "registeredServer": "登録サーバー",
             "serverPlaceholder": "例: v2dev.concrnt.net",
             "masterKeyInvalid": "マスターキーを確認できません。",
@@ -778,7 +848,12 @@
             "registrationNotFoundOnServer": "指定されたサーバーで登録情報が見つかりませんでした。",
             "registeringKey": "このブラウザで使う鍵を登録しています...",
             "masterKeyLoginFailed": "マスターキーでのログインに失敗しました。",
-            "subkeyCommitFailed": "サブキーの登録に失敗しました。"
+            "subkeyCommitFailed": "サブキーの登録に失敗しました。",
+            "subkeyLogin": "サブキーでログイン",
+            "checkingSubkey": "{{domain}} でサブキーを確認しています...",
+            "subkeyInvalid": "サブキーの形式が正しくありません。",
+            "subkeyInvalidOnServer": "このサブキーは無効化されているか、登録されていません。",
+            "subkeyLoginFailed": "サブキーでのログインに失敗しました。"
         },
         "register": {
             "title": "アカウント登録",
@@ -800,6 +875,9 @@
             "usePasskeyDescription": "パスキーがおすすめですが、一部の端末やブラウザでは利用できない場合があります。",
             "no": "いいえ",
             "yes": "はい",
+            "passkeyUnavailable": "このブラウザではパスキーを利用できません。",
+            "passkeyCreateFailed": "パスキーを作成できませんでした。この環境ではパスキーを利用できない可能性があります。「いいえ」を選ぶと通常のキーでログインできます。",
+            "passkeyNoPrf": "お使いのパスキーは必要な拡張機能(PRF)に対応していませんでした😭 今作成されたパスキーはログインに使用できないため、お手数ですが端末のパスキー設定から削除してください。別のパスキーをお試しいただくか、「いいえ」で通常のキーを利用できます。",
             "confirmEmoji": "端末で表示されている絵文字を確認し、同じであれば端末で「はい」を選択してください。"
         },
         "guestBase": {
@@ -834,6 +912,78 @@
             "privateTimeline": "このタイムラインはプライベートです",
             "loginRequired": "閲覧をリクエストするにはログインが必要です",
             "login": "ログイン"
+        },
+        "welcome": {
+            "start": "はじめる",
+            "arrivalTimelineDescription": "ariake.concrnt.netサーバーへようこそ！わからない事があれば、ここで呟いてみましょう。",
+            "devCentralDescription": "開発者の憩い場",
+            "pageTitle": "Concrnt | コンカレント",
+            "metaDescription": "Concrntはあなたの世界をちょっとだけより豊かにする、新しい時代のSNSです",
+            "guide": "ユーザーガイド",
+            "gettingStarted": "さぁ、はじめよう",
+            "import": "ログイン",
+            "catch": "もし、こんなSNSがあったら...",
+            "wish1": "自分の友達や興味のある人が「いま、なにしてる」のかをリアルタイムで知れる。",
+            "wish2": "1つのアカウントで、複数のコミュニティと交流できる。",
+            "wish3": "運営が単一でなく、だれに管理をお願いするかを選べる。",
+            "wish4": "そんなSNSが、あったらいいですよね。",
+            "wish5": "Concrntは、この願いにこたえるために開発されました。",
+            "wish6": "新時代のSNSへ、ようこそ。",
+            "feature1title": "みんなで楽しむためのSNS",
+            "feature1subtitle": "知らない人しか流れてこないおすすめ欄に疲れた？",
+            "feature1p1": "知らない人しか流れてこないオススメより、自分の好きな人のことの方が、もっと知りたいですよね。",
+            "feature1p2": "Concrntでは、アルゴリズムに任せるのではなく、自分でカスタマイズできるリスト機能を活用して、自分にとって本当に価値のある情報を手に入れることができます。好きな人、興味のあるコミュニティを選び、自分にピッタリなタイムラインを作り上げましょう。",
+            "feature1p3": "Concrntは、あなたが本当に大切にしたいつながりを中心に据えた、みんなで楽しむためのSNSです。",
+            "feature2title": "あなたのアカウントはあなたのもの",
+            "feature2subtitle": "凍結に怯える日々とバイバイ👋",
+            "feature2p1": "Concrntは、ユーザーの自由と安全を最優先に考えた分散型SNSです。一つの企業や組織による独裁的な管理から解放され、複数の個人や組織が独立してサーバーを運営しています。",
+            "feature2p2": "これにより、あなたのアカウントが突然凍結されるリスクに怯える必要はもうありません。仮に一つのサーバーで理不尽な対応を受けたとしても、別のサーバーへと簡単に移行でき、投稿やフォロワーをそのまま引き継いで活動を続けることが可能です。従来のSNSでは考えられなかった、自分自身で管理できる安心感と自由がここにあります。",
+            "feature2p3": "Concrntでは、あなたのアカウントは本当に「あなたのもの」として存在します。",
+            "feature3title": "1つのSNSで無数の居場所を",
+            "feature3subtitle": "趣味に合わせてアカウントを使い分ける時代は終わり",
+            "feature3p1": "Concrntでは、ホームタイムラインに加え、複数のコミュニティタイムラインを使い分けることができます。投稿時には、複数のコミュニティに同時に投稿できるため、人間にとって自然な「複数のコミュニティとゆるくつながる」ことが簡単に行えます。",
+            "feature3p2": "Xのように世界と過剰につながりすぎることもなく、Discordのように閉じすぎることもない。適度に他のコミュニティと接続しながら、自分に合った居場所を見つけることができるのがConcrntの特徴です。",
+            "crnt1": "使い方が新しいけどなれたら快適！",
+            "crnt2": "自分が依存するものは、オープンなものじゃなくっちゃね",
+            "crnt3": "複数のコミュニティに同時に発信したい！",
+            "crnt4": "自分でサーバー建ててみようかな？",
+            "crnt5": "自分が分散しなくていい分散型SNSが欲しい！",
+            "crnt6": "いま、なにしてる？",
+            "crnt7": "わいわい",
+            "crnt8": "よるほー",
+            "crnt9": "誰か遊びに行こ！",
+            "crnt10": "テーマのカスタマイズが楽しい！",
+            "crnt11": "自分のアカウントが自分の手の内にあるから、\n安心してインターネットアイデンティティとして利用できる",
+            "crnt12": "絵文字リアクションでのコミュニケーションが快適！",
+            "crnt13": "いまいるサーバーが閉鎖しちゃっても、\n関係をそのまま引っ越せるから安心！",
+            "crnt14": "おなかすいたYO",
+            "crnt_totegamma": "こういうの、あれ！",
+            "mock": {
+                "home": {
+                    "title": "ホーム",
+                    "crnt1": "この時間の静かさ、ほんとに好き。休日はひとりの時間が一番。",
+                    "crnt2": "音楽といえば、最近アニソンが頭から離れない。聴くとなんかテンション上がる。",
+                    "crnt3": "昼下がりの音楽セレクト、今日は何を聴こう。ちょっと悩むな。",
+                    "crnt4": "新しい本が届いた！紅茶を淹れて読書の時間。最高の休日。",
+                    "crnt5": "今日は久々に好きなアニメの再放送。これからまったり視聴タイム。"
+                },
+                "game": {
+                    "title": "ゲーム界隈",
+                    "crnt1": "『魔界の冒険者』のセーブデータ、消失…。泣きたい。",
+                    "crnt2": "VRゲームの新作、現実感がすごい！酔わないよう気をつけないと。",
+                    "crnt3": "昨晩のオンラインバトル、完璧な連携だった。次も頼むぞ、チーム！",
+                    "crnt4": "古いアーケードゲームを発見。コイン入れてプレイする感覚、懐かしい。",
+                    "crnt5": "ゲームのOST集めるのが趣味。今日は新しい1枚ゲット！"
+                },
+                "food": {
+                    "title": "ごはん",
+                    "crnt1": "手作りのビーガン料理に挑戦中。今日はトマトとキヌアのサラダ。",
+                    "crnt2": "新しいスパイスショップを発見！エキゾチックな味で実験開始。",
+                    "crnt3": "今日のラーメン、絶品だった。辛さがちょうど良い。",
+                    "crnt4": "自家製のコールドブリュー、夏の定番。コーヒー豆の選び方が鍵。",
+                    "crnt5": "お店で食べた焼き鳥、外はサクサク、中はジューシー。次は友達を連れて行く！"
+                }
+            }
         }
     },
     "app": {

@@ -1,7 +1,6 @@
 import BoringAvatar from 'boring-avatars'
 import { Suspense, use, useDeferredValue } from 'react'
 import { CCImage } from '../contexts/CCImage'
-import { CssVar } from '../types/Theme'
 
 interface Props {
     ccid: string
@@ -19,7 +18,7 @@ export const Avatar = (props: Props) => {
                         width: '40px',
                         height: '40px',
                         borderRadius: '4px',
-                        backgroundColor: `color-mix(in srgb, ${CssVar.contentText} 8%, transparent)`,
+                        backgroundColor: '#e0e0e0',
                         ...props.style
                     }}
                 />

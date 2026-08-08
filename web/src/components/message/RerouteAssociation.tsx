@@ -54,9 +54,7 @@ export const RerouteAssociation = (props: MessageProps<RerouteAssociationSchema>
                 <span
                     onClick={(e) => {
                         e.stopPropagation()
-                        if (message.value.profileOverride?.link) {
-                            navigate('/activitypub/view/' + encodeURIComponent(message.value.profileOverride.link))
-                        } else if (rerouteAuthor) {
+                        if (rerouteAuthor) {
                             navigate('/profile/' + rerouteAuthor.ccid)
                         }
                     }}

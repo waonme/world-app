@@ -8,6 +8,10 @@ import { ReactionState } from './Footer'
 import { ButtonBase, CCImage } from '@concrnt/ui'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
+import { useQueryTimelineContext } from '../QueryTimeline'
+
+// web版との意図的な差分: appはButtonBase+長押しでリアクション一覧へ遷移、
+// webは素のbutton+hoverでリアクションした人をtooltip表示する(tooltipはweb限定機能)
 
 interface Props {
     message: Message<any>
@@ -18,8 +22,19 @@ interface Props {
 export const MessageReactions = (props: Props) => {
     const { client } = useClient()
     const { push } = useStack()
+    const qt = useQueryTimelineContext()
+    const messageHref = props.message.key ?? props.message.uri
 
     const { reactionCounts, ownReactions } = props.reactionState
+
+    // commit完了後、transitionが終わる(=useOptimisticがrevertする)前に
+    // メッセージ本体を再取得してベース値をサーバー状態に揃える。
+    // これをsocketイベント任せにすると、イベントがcommit応答より遅れたときに
+    // 一瞬リアクションが消える
+    const refreshMessage = async () => {
+        qt.update(messageHref)
+        await client?.getMessage(messageHref).catch(() => null)
+    }
 
     const handleReactionClick = async (imageUrl: string) => {
         if (!client) return
@@ -41,6 +56,7 @@ export const MessageReactions = (props: Props) => {
                 await ownReactions[imageUrl].delete(client).catch((e) => {
                     console.error('Failed to delete reaction:', e)
                 })
+                await refreshMessage()
             })
         } else {
             startTransition(async () => {
@@ -85,6 +101,7 @@ export const MessageReactions = (props: Props) => {
                 await props.message.reaction(client, shortcode, imageUrl).catch((e) => {
                     console.error('Failed to add reaction:', e)
                 })
+                await refreshMessage()
             })
         }
     }
@@ -94,7 +111,7 @@ export const MessageReactions = (props: Props) => {
             style={{
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: CssVar.space(1)
+                gap: '6px'
             }}
         >
             {Object.entries(reactionCounts).map(([imageUrl, count]) => {
@@ -110,18 +127,17 @@ export const MessageReactions = (props: Props) => {
                             hapticLight()
                             push(<PostView uri={props.message.uri} initialTab="reactions" initialReaction={imageUrl} />)
                         }}
-                        pressedStyle={{ backgroundColor: CssVar.statePressed(CssVar.contentText) }}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: CssVar.space(1),
-                            padding: `${CssVar.space(0.5)} ${CssVar.space(2)}`,
+                            gap: '4px',
+                            padding: '2px 8px',
                             borderRadius: CssVar.round(1),
-                            border: isOwn ? `1.5px solid ${CssVar.accent}` : `1px solid ${CssVar.divider}`,
-                            backgroundColor: isOwn ? CssVar.stateSelected(CssVar.accent) : 'transparent',
+                            border: isOwn ? `1.5px solid ${CssVar.contentLink}` : `1px solid ${CssVar.divider}`,
+                            backgroundColor: isOwn ? `rgb(from ${CssVar.contentLink} r g b / 0.15)` : 'transparent',
                             cursor: 'pointer',
                             color: CssVar.contentText,
-                            fontSize: '0.875rem'
+                            fontSize: '13px'
                         }}
                     >
                         <CCImage
@@ -129,9 +145,8 @@ export const MessageReactions = (props: Props) => {
                             maxHeight={128}
                             alt=""
                             style={{
-                                height: '18px',
-                                width: '18px',
-                                objectFit: 'contain'
+                                // width指定なし=アスペクト比維持(横長絵文字は潰さずそのまま伸ばす)
+                                height: '20px'
                             }}
                         />
                         <span>{count}</span>

@@ -16,15 +16,16 @@ import { useRefWithUpdate } from '../hooks/useRefWithUpdate'
 import { TimelineItemWithUpdate, TimelineReader } from '@concrnt/client'
 import { findMute, Schemas, type Message } from '@concrnt/worldlib'
 import { useMuteScope } from '../contexts/Mute'
+import { usePreference } from '../contexts/Preference'
 import { MessageContainer } from './message'
-import { Text, Avatar, CssVar, Divider } from '@concrnt/ui'
+import { QueryTimelineContext } from './QueryTimeline'
+import { Avatar, CssVar, Divider } from '@concrnt/ui'
 import { ErrorBoundary } from 'react-error-boundary'
 import { PullToRefresh } from './PullToRefresh'
 import { MessageSkeleton } from './message/MessageSkeleton'
 import { RenderError } from './message/RenderError'
 import { Loading } from './message/Loading'
 import { MdArrowUpward } from 'react-icons/md'
-import { usePreference } from '../contexts/Preference'
 
 interface NewArrivalIcon {
     id: string
@@ -285,6 +286,16 @@ export const RealtimeTimeline = (props: Props) => {
         }
     }, [reader])
 
+    // リアクション等のcommit後に、そのアイテムだけ再取得させる。
+    // socketのassociatedイベント任せだとcommit応答より遅れて届いたときに
+    // useOptimisticのrevertが先に走り、リアクションが一瞬消える
+    const itemUpdated = useCallback(
+        (href: string) => {
+            reader.current?.updateItem(href)
+        },
+        [reader]
+    )
+
     /** 新着バッジクリック時の処理 */
     const handleNewArrivalClick = useCallback(() => {
         setNewArrivals([])
@@ -377,15 +388,15 @@ export const RealtimeTimeline = (props: Props) => {
                             pointerEvents: newArrivals.length > 0 ? 'auto' : 'none',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: CssVar.space(1),
-                            padding: `${CssVar.space(1)} ${CssVar.space(3)}`,
+                            gap: '4px',
+                            padding: '4px 12px',
                             border: 'none',
-                            borderRadius: CssVar.roundFull,
-                            backgroundColor: CssVar.uiBackground,
-                            color: CssVar.uiText,
+                            borderRadius: '100px',
+                            backgroundColor: CssVar.contentLink,
+                            color: '#fff',
                             cursor: 'pointer',
-                            boxShadow: CssVar.shadow1,
-                            fontSize: '0.875rem'
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                            fontSize: '14px'
                         }}
                     >
                         <MdArrowUpward size={16} />
@@ -397,7 +408,7 @@ export const RealtimeTimeline = (props: Props) => {
                                         marginLeft: i > 0 ? '-6px' : '0',
                                         borderRadius: '50%',
                                         overflow: 'hidden',
-                                        border: `1.5px solid ${CssVar.uiText}`,
+                                        border: '1.5px solid #fff',
                                         width: '22px',
                                         height: '22px',
                                         flexShrink: 0
@@ -421,14 +432,14 @@ export const RealtimeTimeline = (props: Props) => {
                                         width: '22px',
                                         height: '22px',
                                         borderRadius: '50%',
-                                        backgroundColor: `color-mix(in srgb, ${CssVar.uiText} 30%, transparent)`,
-                                        border: `1.5px solid ${CssVar.uiText}`,
+                                        backgroundColor: 'rgba(255,255,255,0.3)',
+                                        border: '1.5px solid #fff',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        fontSize: '0.75rem',
+                                        fontSize: '10px',
                                         fontWeight: 'bold',
-                                        color: CssVar.uiText,
+                                        color: '#fff',
                                         flexShrink: 0
                                     }}
                                 >
@@ -443,12 +454,11 @@ export const RealtimeTimeline = (props: Props) => {
                     style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: CssVar.space(2),
-                        padding: `${CssVar.space(2)} 0`,
+                        gap: '8px',
+                        padding: '8px 0',
                         overflowX: 'hidden',
                         overflowY: 'auto',
-                        overscrollBehaviorY: 'none',
-                        touchAction: 'pan-y'
+                        overscrollBehaviorY: 'none'
                     }}
                     ref={scrollRef}
                 >
@@ -459,16 +469,18 @@ export const RealtimeTimeline = (props: Props) => {
                                 <MessageSkeleton />
                             </div>
                         ))}
-                    {reader.current?.body.map((item) => (
-                        <Cell key={item.href} item={item} lastUpdate={item.lastUpdate?.getTime() ?? 0} />
-                    ))}
+                    <QueryTimelineContext.Provider value={{ update: itemUpdated }}>
+                        {reader.current?.body.map((item) => (
+                            <Cell key={item.href} item={item} lastUpdate={item.lastUpdate?.getTime() ?? 0} />
+                        ))}
+                    </QueryTimelineContext.Provider>
                     {loading && <Loading message={'Loading...'} />}
                     {!hasMoreData && (
                         <div
                             style={{
-                                padding: CssVar.space(2),
-                                fontSize: '0.75rem',
-                                color: CssVar.textSecondary,
+                                padding: '8px',
+                                fontSize: '12px',
+                                color: '#888',
                                 width: '100%',
                                 height: '100px',
                                 display: 'flex',
@@ -491,8 +503,6 @@ interface CellProps {
 }
 
 const Cell = memo<CellProps>(({ item }: CellProps) => {
-    const [devmode] = usePreference('developerMode')
-
     return (
         <>
             <ErrorBoundary FallbackComponent={RenderError}>
@@ -508,8 +518,7 @@ const Cell = memo<CellProps>(({ item }: CellProps) => {
                     </Suspense>
                 </div>
             </ErrorBoundary>
-            {devmode && <Text variant="caption">{item.href}</Text>}
-            <Divider style={{ margin: `0 ${CssVar.space(2)}` }} />
+            <Divider />
         </>
     )
 })

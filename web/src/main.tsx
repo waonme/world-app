@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
+import '@concrnt/ui/style.css'
 import './index.css'
 import './i18n'
 import { EmergencyKit } from './components/EmergencyKit'
@@ -37,6 +38,7 @@ import { ProfileView } from './views/Profile'
 import { PostView } from './views/Post'
 import { TimelineView } from './views/Timeline'
 import { ListsView } from './views/Lists'
+import { ListView } from './views/List'
 import { QueryView } from './views/Query'
 import { DevView } from './views/Dev'
 import { IDView } from './views/ID'
@@ -47,6 +49,7 @@ import { BskyView } from './views/BskyView'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { Signup } from './pages/Signup'
+import { WelcomePage } from './pages/Welcome'
 import { GuestShell } from './views/guest/GuestBase'
 import { GuestProfileView } from './views/guest/GuestProfile'
 import { GuestPostView } from './views/guest/GuestPost'
@@ -80,7 +83,7 @@ const ProfileRoute = () => {
     return <ProfileView key={`${ccid}/${profile ?? ''}`} ccid={ccid} profileName={profile} />
 }
 
-const UriRoute = ({ kind }: { kind: 'post' | 'timeline' | 'apView' | 'bskyView' }) => {
+const UriRoute = ({ kind }: { kind: 'post' | 'timeline' | 'list' | 'apView' | 'bskyView' }) => {
     const { uri = '' } = useParams()
     const decoded = decodeURIComponent(uri)
 
@@ -89,6 +92,8 @@ const UriRoute = ({ kind }: { kind: 'post' | 'timeline' | 'apView' | 'bskyView' 
             return <PostView uri={decoded} />
         case 'timeline':
             return <TimelineView uri={decoded} />
+        case 'list':
+            return <ListView uri={decoded} />
         case 'apView':
             return <ApView uri={decoded} />
         case 'bskyView':
@@ -298,7 +303,10 @@ const AuthedRoutes = () => (
                                                                     element={<UriRoute kind="timeline" />}
                                                                 />
                                                                 <Route path="lists" element={<ListsView />} />
-                                                                <Route path="lists/:uri" element={<ListsView />} />
+                                                                <Route
+                                                                    path="lists/:uri"
+                                                                    element={<UriRoute kind="list" />}
+                                                                />
                                                                 <Route path="query" element={<QueryView />} />
                                                                 <Route
                                                                     path="dev"
@@ -391,6 +399,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                             </BaseThemeProvider>
                         }
                     />
+                    <Route path="/welcome" element={<WelcomePage />} />
                     <Route
                         path="/crash"
                         element={<EmergencyKit error={new Error('Test crash')} resetErrorBoundary={() => {}} />}
@@ -405,7 +414,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                     {hasSession ? (
                         <Route path="*" element={<AuthedRoutes />} />
                     ) : (
-                        <Route path="*" element={<Navigate to="/login" replace />} />
+                        <Route path="*" element={<Navigate to="/welcome" replace />} />
                     )}
                 </Routes>
             </BrowserRouter>

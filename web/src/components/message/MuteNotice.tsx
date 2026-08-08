@@ -3,7 +3,6 @@ import { MdVisibilityOff } from 'react-icons/md'
 import { Message, type MuteMatch } from '@concrnt/worldlib'
 import { useClient } from '../../contexts/Client'
 import { TimelineTag } from '../TimelineTag'
-import { CssVar } from '../../types/Theme'
 
 interface Props {
     // マッチした側のメッセージ(外側 or associationTarget)
@@ -29,11 +28,11 @@ export const MuteNotice = (props: Props) => {
             style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: CssVar.space(2),
+                gap: '8px',
                 fontSize: '0.875em',
-                color: CssVar.textSecondary,
+                opacity: 0.7,
                 overflow: 'hidden',
-                padding: `${CssVar.space(1)} 0`
+                padding: '4px 0'
             }}
         >
             <MdVisibilityOff size={16} style={{ flexShrink: 0 }} />
@@ -50,7 +49,7 @@ export const MuteNotice = (props: Props) => {
             >
                 {reasonLabel}:{' '}
                 {props.mute.reason === 'timeline' ? (
-                    <TimelineTag uri={props.mute.value} style={{ fontSize: '0.75rem' }} />
+                    <TimelineTag uri={props.mute.value} style={{ fontSize: '0.875em' }} />
                 ) : props.mute.reason === 'word' ? (
                     props.mute.value
                 ) : (

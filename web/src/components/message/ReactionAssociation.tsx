@@ -60,9 +60,7 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                 <span
                     onClick={(e) => {
                         e.stopPropagation()
-                        if (message.value.profileOverride?.link) {
-                            navigate('/activitypub/view/' + encodeURIComponent(message.value.profileOverride.link))
-                        } else if (reactionAuthor) {
+                        if (reactionAuthor) {
                             navigate('/profile/' + reactionAuthor.ccid)
                         }
                     }}

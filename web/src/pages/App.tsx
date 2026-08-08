@@ -200,7 +200,6 @@ const MobileShell = () => {
                                     style={{
                                         color: CssVar.backdropText
                                     }}
-                                    selectedColor={CssVar.backdropText}
                                 >
                                     {tab.icon}
                                 </Tab>
