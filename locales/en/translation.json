@@ -587,7 +587,8 @@
             "settings": "Settings",
             "post": "Post",
             "documentation": "Documentation",
-            "forum": "Forum"
+            "forum": "Forum",
+            "notFound": "Not found"
         },
         "themeEditor": {
             "title": "Theme Editor",
@@ -714,6 +715,11 @@
             "muteTimeline": "Mute this timeline",
             "unmuteTimeline": "Unmute"
         },
+        "policyEditor": {
+            "modeEditor": "Policy Editor",
+            "modeJson": "JSON",
+            "invalidJson": "Invalid JSON"
+        },
         "listSettings": {
             "title": "List Settings",
             "save": "Save",
@@ -829,11 +835,11 @@
             "checking": "Checking...",
             "usePasskey": "Use passkey",
             "manualKey": "Master Key or Subkey",
-            "manualKeyPlaceholder": "Enter your 12-word master key, or a subkey starting with concrnt-subkey",
+            "manualKeyPlaceholder": "Enter your 12-word master key, a 64-char hex private key, or a subkey starting with concrnt-subkey",
             "registeredServer": "Registered server",
             "serverPlaceholder": "e.g. v2dev.concrnt.net",
             "masterKeyInvalid": "Could not verify this master key.",
-            "masterKeyInvalidDetailed": "Could not verify this master key. Please enter your 12-word master key.",
+            "masterKeyInvalidDetailed": "Could not verify this master key. Please enter your 12-word master key or 64-char hex private key.",
             "loginWithThisServer": "Log in with this server",
             "clearInput": "Clear input",
             "passkeyUnavailable": "Passkeys are not available in this browser.",

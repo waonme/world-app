@@ -180,6 +180,7 @@ const TimelineEditor = (props: EditorProps) => {
             value: valueDraft,
             author: client.ccid,
             createdAt: new Date(),
+            policy: policyDraft,
             onUpdate: 'forget'
         }
         client.api.commit(document)

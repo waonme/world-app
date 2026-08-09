@@ -257,7 +257,8 @@ export class Client {
                             author: this.ccid,
                             schema: Schemas.pinnedLists,
                             value: initial,
-                            createdAt: new Date()
+                            createdAt: new Date(),
+                            onUpdate: 'forget'
                         }
                         this.api.commit(document)
                         return initial
@@ -312,6 +313,7 @@ export class Client {
     private recoveryTimer: ReturnType<typeof setInterval> | null = null
 
     private profilesSubscriptions: Array<() => void> = []
+    private serverSubscriptions: Array<() => void> = []
     private lastFreshResourcesRefresh = 0
 
     constructor(api: Api, ccid: string, entity: Entity, server: Server, profile?: string) {
@@ -360,6 +362,14 @@ export class Client {
 
     unsubscribeProfilesUpdated(callback: () => void) {
         this.profilesSubscriptions = this.profilesSubscriptions.filter((sub) => sub !== callback)
+    }
+
+    subscribeServerUpdated(callback: () => void) {
+        this.serverSubscriptions.push(callback)
+    }
+
+    unsubscribeServerUpdated(callback: () => void) {
+        this.serverSubscriptions = this.serverSubscriptions.filter((sub) => sub !== callback)
     }
 
     // バックオフゲートを迂回して自ドメインへ直接プローブする
@@ -499,10 +509,30 @@ export class Client {
     // 鮮度が重要なリソース(プロフィール・リスト設定等)をキャッシュ即表示のまま裏で最新化する。
     // 起動直後とアプリ復帰時に呼ぶ。30秒以内の連続呼び出しはスキップ
     async refreshFreshResources(): Promise<void> {
-        if (this.ccid === '') return
         if (Date.now() - this.lastFreshResourcesRefresh < 30_000) return
         this.lastFreshResourcesRefresh = Date.now()
+
+        // 自ドメインのwell-known(サービス広告)。古いままだと後から有効化されたサービスが
+        // 見えないため取り直す。ゲストでも参照される(ApNote・Explorer等)のでccidガードより前。
+        // 接続先はserver.domain(well-knownの自己申告値)ではなくdefaultHostを使う
+        const refreshServer = this.api
+            .getServer(this.api.defaultHost, { cache: 'no-cache' })
+            .then((server) => {
+                if (JSON.stringify(server) === JSON.stringify(this.server)) return
+                this.server = server
+                for (const callback of this.serverSubscriptions) {
+                    callback()
+                }
+            })
+            .catch(() => {}) // オフライン等の失敗時は既存値を維持
+
+        if (this.ccid === '') {
+            await refreshServer
+            return
+        }
+
         await Promise.allSettled([
+            refreshServer,
             this.updateProfiles(),
             this.pinnedLists.refresh(),
             this.acknowledging.refresh(),
@@ -520,7 +550,8 @@ export class Client {
             schema: Schemas.empty,
             value: {},
             author: this.ccid,
-            createdAt: new Date()
+            createdAt: new Date(),
+            onUpdate: 'forget'
         }
         await this.api.commit(blockDocument)
         this.blocks.reload()
@@ -779,7 +810,8 @@ export class Client {
             author: this.ccid,
             schema: Schemas.pinnedLists,
             value: newValue,
-            createdAt: new Date()
+            createdAt: new Date(),
+            onUpdate: 'forget'
         }
 
         await this.api.commit(newDocument)
@@ -817,7 +849,8 @@ export class Client {
             author: this.ccid,
             schema: Schemas.pinnedLists,
             value: newValue,
-            createdAt: new Date()
+            createdAt: new Date(),
+            onUpdate: 'forget'
         }
 
         await this.api.commit(newDocument)
@@ -859,7 +892,8 @@ export class Client {
             author: this.ccid,
             schema: Schemas.pinnedLists,
             value: newValue,
-            createdAt: new Date()
+            createdAt: new Date(),
+            onUpdate: 'forget'
         }
 
         await this.api.commit(newDocument)

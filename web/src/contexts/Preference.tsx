@@ -11,6 +11,8 @@ export interface Preference {
     muteBlockedUsers?: boolean
     // プロフィール名 -> リストURIの並び順
     listOrder?: Record<string, string[]>
+    // プロフィール名 -> サイドバーで展開中のリストURI
+    expandedLists?: Record<string, string[]>
 }
 
 export const defaultPreference: Preference = {
@@ -18,7 +20,8 @@ export const defaultPreference: Preference = {
     themeVariant: 'classic',
     developerMode: false,
     muteBlockedUsers: true,
-    listOrder: {}
+    listOrder: {},
+    expandedLists: {}
 }
 
 interface PreferenceState {
@@ -134,7 +137,8 @@ export function usePreference<K extends keyof Preference>(
                             url: 'https://policy.concrnt.world/private.json'
                         }
                     ]
-                }
+                },
+                onUpdate: 'forget'
             }
 
             client.api.commit(document).catch((e) => {
