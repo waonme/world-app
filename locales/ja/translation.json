@@ -587,7 +587,8 @@
             "settings": "設定",
             "post": "投稿",
             "documentation": "ドキュメント",
-            "forum": "フォーラム"
+            "forum": "フォーラム",
+            "notFound": "見つかりません"
         },
         "themeEditor": {
             "title": "テーマエディタ",
@@ -714,6 +715,11 @@
             "muteTimeline": "このタイムラインをミュート",
             "unmuteTimeline": "ミュートを解除"
         },
+        "policyEditor": {
+            "modeEditor": "ポリシーエディタ",
+            "modeJson": "JSON",
+            "invalidJson": "JSONが不正です"
+        },
         "listSettings": {
             "title": "リスト設定",
             "save": "保存",
@@ -829,11 +835,11 @@
             "checking": "確認中...",
             "usePasskey": "パスキーを使う",
             "manualKey": "マスターキーまたはサブキー",
-            "manualKeyPlaceholder": "12語のマスターキー、または concrnt-subkey から始まるサブキーを入力",
+            "manualKeyPlaceholder": "12語のマスターキー、64桁のhex秘密鍵、または concrnt-subkey から始まるサブキーを入力",
             "registeredServer": "登録サーバー",
             "serverPlaceholder": "例: v2dev.concrnt.net",
             "masterKeyInvalid": "マスターキーを確認できません。",
-            "masterKeyInvalidDetailed": "マスターキーを確認できません。12語のマスターキーを入力してください。",
+            "masterKeyInvalidDetailed": "マスターキーを確認できません。12語のマスターキーまたは64桁のhex秘密鍵を入力してください。",
             "loginWithThisServer": "このサーバーでログイン",
             "clearInput": "入力をクリア",
             "passkeyUnavailable": "このブラウザではパスキーを利用できません。",
