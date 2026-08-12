@@ -42,6 +42,14 @@ export interface ApiResponse<T> {
     prev?: string
 }
 
+interface LegacyMessage {
+    id: string
+    author: string
+    schema: string
+    document: string
+    cdate: string
+}
+
 // query/associations/acknowledgesエンドポイントのページング封筒 (CIP-5 §3.2)。
 // prev/nextは日時カーソル文字列。Dateを経由するとms精度に丸まって境界を
 // 取りこぼすため、文字列のまま次のsince/untilへエコーバックする。
@@ -184,11 +192,20 @@ export class Api {
         }
 
         try {
-            const res = await fetchWithTimeout(
+            let res = await fetchWithTimeout(
                 `https://${host}/.well-known/concrnt`,
                 { headers: { Accept: 'application/json' } },
                 5000
             )
+            // v1サーバーはwell-knownを持たない。404だけは旧domain APIでも生存確認し、
+            // 稼働中の旧サーバーをオフラインとしてバックオフし続けないようにする。
+            if (res.status === 404) {
+                res = await fetchWithTimeout(
+                    `https://${host}/api/v1/domain`,
+                    { headers: { Accept: 'application/json' } },
+                    5000
+                )
+            }
             if (!res.ok) throw new Error(`fetch failed on transport: ${res.status}`)
             this.onlineProbeMemo.set(host, Date.now())
             this.markHostOnline(host)
@@ -513,11 +530,86 @@ export class Api {
     }
 
     async getDocument<T>(uri: string, domain?: string, opts?: FetchOptions<SignedDocument>): Promise<Document<T>> {
-        const sd = await this.getResource<SignedDocument>(uri, domain, opts)
-        // 負キャッシュ(404の記憶)にヒットするとgetResourceはnullを返す。
-        // ネットワーク経由の404と同じ型のエラーにしないと、呼び出し側のNotFoundErrorハンドリングが機能しない
-        if (!sd) {
-            throw new NotFoundError(`fetch failed on negative cache: ${uri}`, uri)
+        let sd: SignedDocument
+        try {
+            sd = await this.getResource<SignedDocument>(uri, domain, opts)
+            // 404の負キャッシュはnullを返す。例外と同じ互換フォールバックへ流す。
+            if (!sd) {
+                throw new NotFoundError(`fetch failed on negative cache: ${uri}`, uri)
+            }
+        } catch (error) {
+            // v2へ未同期のv1投稿と、well-knownを持たないv1専用サーバーを読む互換経路。
+            // 投稿以外へ旧APIを推測適用すると権限や意味論を変えかねないため、旧message IDを
+            // keyに持つ標準post URIだけを対象にする。
+            const parsed = URL.parse(uri)
+            const match = parsed?.pathname.match(/^\/concrnt\.world\/profiles\/[^/]+\/posts\/(m[0-9a-z]{26})$/)
+            if (!parsed || !match || (!(error instanceof NotFoundError) && !(error instanceof ServerOfflineError))) {
+                throw error
+            }
+
+            const fqdn = await this.resolveDomain(parsed.host, domain)
+            if (!(await this.getServerOnlineStatus(fqdn))) {
+                throw new ServerOfflineError(fqdn)
+            }
+
+            let response: ApiResponse<LegacyMessage>
+            try {
+                response = await this.fetchWithCredential<ApiResponse<LegacyMessage>>(
+                    fqdn,
+                    `/api/v1/message/${encodeURIComponent(match[1])}`,
+                    {},
+                    opts?.timeoutms
+                )
+            } catch (legacyError) {
+                if (legacyError instanceof NotFoundError) {
+                    throw new NotFoundError(`message ${uri} not found on v2 or v1`, uri)
+                }
+                throw legacyError
+            }
+
+            if (response.status !== 'ok' || !response.content) {
+                throw new NotFoundError(response.error || `message ${uri} not found on v1`, uri)
+            }
+
+            const legacy = JSON.parse(response.content.document) as {
+                signer?: string
+                type?: string
+                schema?: string
+                body?: T & Record<string, unknown>
+                signedAt?: string
+            }
+            if (legacy.type !== 'message' || !legacy.body) {
+                throw new NotFoundError(`legacy resource ${uri} is not a message`, uri)
+            }
+
+            const value = legacy.body
+            const legacyValue = value as Record<string, unknown>
+            const schema = legacy.schema || response.content.schema
+            if (
+                schema === 'https://schema.concrnt.world/m/reply.json' &&
+                typeof legacyValue.targetURI !== 'string' &&
+                typeof legacyValue.replyToMessageAuthor === 'string' &&
+                typeof legacyValue.replyToMessageId === 'string'
+            ) {
+                legacyValue.targetURI = `cckv://${legacyValue.replyToMessageAuthor}/concrnt.world/profiles/main/posts/${legacyValue.replyToMessageId}`
+            }
+            if (
+                schema === 'https://schema.concrnt.world/m/reroute.json' &&
+                typeof legacyValue.targetURI !== 'string' &&
+                typeof legacyValue.rerouteMessageAuthor === 'string' &&
+                typeof legacyValue.rerouteMessageId === 'string'
+            ) {
+                legacyValue.targetURI = `cckv://${legacyValue.rerouteMessageAuthor}/concrnt.world/profiles/main/posts/${legacyValue.rerouteMessageId}`
+            }
+
+            return {
+                kind: 'record',
+                key: uri,
+                schema,
+                value,
+                author: legacy.signer || response.content.author,
+                createdAt: new Date(legacy.signedAt || response.content.cdate)
+            }
         }
         const document: Document<T> = JSON.parse(sd.document)
 

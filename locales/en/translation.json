@@ -561,9 +561,10 @@
             "loading": "Loading..."
         },
         "renderError": {
-            "messageDeleted": "This message has been deleted",
+            "messageUnavailable": "This message could not be loaded",
             "serverOffline": "The server hosting this message is offline",
-            "cannotDisplay": "This message cannot be displayed"
+            "cannotDisplay": "This message cannot be displayed",
+            "retry": "Retry"
         },
         "replyAssociation": {
             "loading": "Loading..."

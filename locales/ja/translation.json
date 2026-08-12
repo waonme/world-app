@@ -561,9 +561,10 @@
             "loading": "読み込み中..."
         },
         "renderError": {
-            "messageDeleted": "このメッセージは削除されました",
+            "messageUnavailable": "このメッセージを取得できませんでした",
             "serverOffline": "メッセージの取得先サーバーはオフラインです",
-            "cannotDisplay": "このメッセージは表示できません"
+            "cannotDisplay": "このメッセージは表示できません",
+            "retry": "再試行"
         },
         "replyAssociation": {
             "loading": "読み込み中..."
