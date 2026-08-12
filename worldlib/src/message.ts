@@ -96,14 +96,19 @@ export class Message<T> implements Document<T> {
             }
         }
 
+        // 本文取得後の付帯情報は表示の必須条件ではない。v1専用サーバーや一時的な
+        // association API障害でも、取得できた本文までエラー表示に巻き込まない。
         message.ownAssociations = client.ccid
-            ? (await client.api.getAssociationsAll(uri, { author: client.ccid })).map((sd) =>
-                  Association.fromSignedDocument(sd)
-              )
+            ? await client.api
+                  .getAssociationsAll(uri, { author: client.ccid })
+                  .then((items) => items.map((sd) => Association.fromSignedDocument(sd)))
+                  .catch(() => [])
             : []
 
-        message.associationCounts = await client.api.getAssociationCounts(uri)
-        message.reactionCounts = await client.api.getAssociationCounts(uri, Schemas.reactionAssociation)
+        message.associationCounts = await client.api.getAssociationCounts(uri).catch(() => ({}))
+        message.reactionCounts = await client.api
+            .getAssociationCounts(uri, Schemas.reactionAssociation)
+            .catch(() => ({}))
 
         if (res.associate) {
             message.associationTarget = await Message.load<any>(client, res.associate).catch(() => undefined)

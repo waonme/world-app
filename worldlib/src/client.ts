@@ -673,6 +673,13 @@ export class Client {
             data: msg,
             expire: Date.now() + cacheLifetime
         }
+        // 失敗したPromiseを5分間保持すると、再試行しても同じrejectが返り続ける。
+        // 成功結果だけをTTLキャッシュとして残し、失敗は直ちに再取得可能にする。
+        void msg.catch(() => {
+            if (this.messageCache[uri]?.data === msg) {
+                delete this.messageCache[uri]
+            }
+        })
         return msg
     }
 
