@@ -541,13 +541,18 @@ export class Api {
             // v2へ未同期のv1投稿と、well-knownを持たないv1専用サーバーを読む互換経路。
             // 投稿以外へ旧APIを推測適用すると権限や意味論を変えかねないため、旧message IDを
             // keyに持つ標準post URIだけを対象にする。
-            const parsed = URL.parse(uri)
-            const match = parsed?.pathname.match(/^\/concrnt\.world\/profiles\/[^/]+\/posts\/(m[0-9a-z]{26})$/)
-            if (!parsed || !match || (!(error instanceof NotFoundError) && !(error instanceof ServerOfflineError))) {
+            const parsed = parseCCURI(uri)
+            const match = parsed.key.match(/^concrnt\.world\/profiles\/[^/]+\/posts\/(m[0-9a-z]{26})$/)
+            if (
+                parsed.scheme !== 'cckv' ||
+                !IsCCID(parsed.owner) ||
+                !match ||
+                (!(error instanceof NotFoundError) && !(error instanceof ServerOfflineError))
+            ) {
                 throw error
             }
 
-            const fqdn = await this.resolveDomain(parsed.host, domain)
+            const fqdn = await this.resolveDomain(parsed.owner, domain ?? parsed.hint)
             if (!(await this.getServerOnlineStatus(fqdn))) {
                 throw new ServerOfflineError(fqdn)
             }
@@ -582,6 +587,17 @@ export class Api {
                 throw new NotFoundError(`legacy resource ${uri} is not a message`, uri)
             }
 
+            // v1 message APIはIDだけで検索するため、同一サーバー上の別ユーザーのIDを
+            // 組み込んだURIでも応答自体は成功しうる。要求したCCIDと、封筒・署名文書の
+            // 両方のauthorが一致する場合だけ、そのURIの投稿として受け入れる。
+            if (
+                response.content.id !== match[1] ||
+                response.content.author !== parsed.owner ||
+                legacy.signer !== parsed.owner
+            ) {
+                throw new NotFoundError(`legacy message identity does not match ${uri}`, uri)
+            }
+
             const value = legacy.body
             const legacyValue = value as Record<string, unknown>
             const schema = legacy.schema || response.content.schema
@@ -607,7 +623,7 @@ export class Api {
                 key: uri,
                 schema,
                 value,
-                author: legacy.signer || response.content.author,
+                author: parsed.owner,
                 createdAt: new Date(legacy.signedAt || response.content.cdate)
             }
         }

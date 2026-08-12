@@ -30,6 +30,7 @@ import { CachedPromise } from './cachedPromise'
 import { isMuteEntryExpired, muteEntryId, normalizeMuteWord, type MuteEntry, type MuteType } from './mute'
 
 const cacheLifetime = 5 * 60 * 1000
+const partialMessageCacheLifetime = 5 * 1000
 interface Cache<T> {
     data: T
     expire: number
@@ -675,11 +676,19 @@ export class Client {
         }
         // 失敗したPromiseを5分間保持すると、再試行しても同じrejectが返り続ける。
         // 成功結果だけをTTLキャッシュとして残し、失敗は直ちに再取得可能にする。
-        void msg.catch(() => {
-            if (this.messageCache[uri]?.data === msg) {
-                delete this.messageCache[uri]
-            }
-        })
+        void msg
+            .then((message) => {
+                // 本文だけ取得できた部分成功は、React Suspenseが同じfulfilled promiseで
+                // 再開できるだけの短時間は保持し、その後の再描画で付帯APIを再試行する。
+                if (message && !message.ownAssociationsLoaded && this.messageCache[uri]?.data === msg) {
+                    this.messageCache[uri].expire = Date.now() + partialMessageCacheLifetime
+                }
+            })
+            .catch(() => {
+                if (this.messageCache[uri]?.data === msg) {
+                    delete this.messageCache[uri]
+                }
+            })
         return msg
     }
 
