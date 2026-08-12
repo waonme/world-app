@@ -119,6 +119,7 @@ export const MessageActions = (props: Props) => {
             {/* いいねボタン */}
             <Button
                 variant="text"
+                disabled={!props.message.ownAssociationsLoaded}
                 onClick={(e) => {
                     e.stopPropagation()
                     if (!client) return
@@ -163,6 +164,7 @@ export const MessageActions = (props: Props) => {
             {/* リアクションボタン */}
             <Button
                 variant="text"
+                disabled={!props.message.ownAssociationsLoaded}
                 onClick={(e) => {
                     e.stopPropagation()
                     if (!client) return
