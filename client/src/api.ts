@@ -541,18 +541,18 @@ export class Api {
             // v2へ未同期のv1投稿と、well-knownを持たないv1専用サーバーを読む互換経路。
             // 投稿以外へ旧APIを推測適用すると権限や意味論を変えかねないため、旧message IDを
             // keyに持つ標準post URIだけを対象にする。
-            const parsed = URL.parse(uri)
-            const match = parsed?.pathname.match(/^\/concrnt\.world\/profiles\/[^/]+\/posts\/(m[0-9a-z]{26})$/)
+            const parsed = parseCCURI(uri)
+            const match = parsed.key.match(/^concrnt\.world\/profiles\/[^/]+\/posts\/(m[0-9a-z]{26})$/)
             if (
-                !parsed ||
-                !IsCCID(parsed.host) ||
+                parsed.scheme !== 'cckv' ||
+                !IsCCID(parsed.owner) ||
                 !match ||
                 (!(error instanceof NotFoundError) && !(error instanceof ServerOfflineError))
             ) {
                 throw error
             }
 
-            const fqdn = await this.resolveDomain(parsed.host, domain)
+            const fqdn = await this.resolveDomain(parsed.owner, domain ?? parsed.hint)
             if (!(await this.getServerOnlineStatus(fqdn))) {
                 throw new ServerOfflineError(fqdn)
             }
@@ -592,8 +592,8 @@ export class Api {
             // 両方のauthorが一致する場合だけ、そのURIの投稿として受け入れる。
             if (
                 response.content.id !== match[1] ||
-                response.content.author !== parsed.host ||
-                legacy.signer !== parsed.host
+                response.content.author !== parsed.owner ||
+                legacy.signer !== parsed.owner
             ) {
                 throw new NotFoundError(`legacy message identity does not match ${uri}`, uri)
             }
@@ -623,7 +623,7 @@ export class Api {
                 key: uri,
                 schema,
                 value,
-                author: parsed.host,
+                author: parsed.owner,
                 createdAt: new Date(legacy.signedAt || response.content.cdate)
             }
         }

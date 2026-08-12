@@ -675,11 +675,19 @@ export class Client {
         }
         // 失敗したPromiseを5分間保持すると、再試行しても同じrejectが返り続ける。
         // 成功結果だけをTTLキャッシュとして残し、失敗は直ちに再取得可能にする。
-        void msg.catch(() => {
-            if (this.messageCache[uri]?.data === msg) {
-                delete this.messageCache[uri]
-            }
-        })
+        void msg
+            .then((message) => {
+                // 本文だけ取得できた部分成功は短時間で付帯APIを再試行可能にする。
+                // 5分キャッシュから即時に外しても現在のcallerには同じMessageを返せる。
+                if (message && !message.ownAssociationsLoaded && this.messageCache[uri]?.data === msg) {
+                    delete this.messageCache[uri]
+                }
+            })
+            .catch(() => {
+                if (this.messageCache[uri]?.data === msg) {
+                    delete this.messageCache[uri]
+                }
+            })
         return msg
     }
 
