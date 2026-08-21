@@ -420,7 +420,8 @@
         "bluesky": {
             "title": "Bluesky Settings",
             "loading": "Loading...",
-            "unavailable": "Failed to communicate with the Bluesky bridge.",
+        "unavailable": "Failed to communicate with the Bluesky bridge.",
+        "settingsLoadFailed": "Saved Bluesky settings could not be loaded. Changes are temporarily disabled.",
             "enableIntro": "Let's enable Bluesky integration",
             "enableDescription": "Enabling integration lets you connect with the Bluesky (AT Protocol) network. You need a domain you own — it becomes your Bluesky handle.",
             "handleLabel": "Your handle (a domain you own)",

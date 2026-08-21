@@ -51,10 +51,13 @@ export const Bluesky = () => {
     const [listenHome, setListenHome] = useState(true)
     const [listenProfile, setListenProfile] = useState('main')
     const [listenCommunities, setListenCommunities] = useState<string[]>([])
+    const [settingsLoaded, setSettingsLoaded] = useState(false)
+    const [settingsLoadFailed, setSettingsLoadFailed] = useState(false)
 
     const homeTimelineRegex = new RegExp(`^cckv://${client.ccid}/concrnt\\.world/profiles/([^/]+)/home-timeline$`)
 
     const commitSettings = (enabled: boolean) => {
+        if (!settingsLoaded) return
         const listenTimelines = [
             ...(listenHome ? [semantics.homeTimeline(client.ccid, listenProfile)] : []),
             ...listenCommunities
@@ -125,9 +128,16 @@ export const Bluesky = () => {
                 if (homeProfile) setListenProfile(homeProfile)
                 setListenCommunities(timelines.filter((uri) => !homeTimelineRegex.test(uri)))
                 setBridgeEnabled(doc.value?.enabled ?? true)
+                setSettingsLoaded(true)
             })
             .catch((err) => {
-                if (!(err instanceof NotFoundError)) console.log(err)
+                if (err instanceof NotFoundError) {
+                    // 設定レコード無しは既定値を明示的に確定した状態。
+                    setSettingsLoaded(true)
+                } else {
+                    console.log(err)
+                    setSettingsLoadFailed(true)
+                }
             })
 
         client.api
@@ -275,6 +285,8 @@ export const Bluesky = () => {
                         <Text>{t('active')}</Text>
                         <Text>{t('yourHandle', { handle: info.entity.handle })}</Text>
                         <Text variant="caption">{info.entity.did}</Text>
+                        {!settingsLoaded && !settingsLoadFailed && <Text>{t('loading')}</Text>}
+                        {settingsLoadFailed && <Text style={{ color: '#ff5b5b' }}>{t('settingsLoadFailed')}</Text>}
                         <div
                             style={{
                                 display: 'flex',
@@ -285,6 +297,7 @@ export const Bluesky = () => {
                             <Text>{t('enabledToggle')}</Text>
                             <Switch
                                 checked={bridgeEnabled}
+                                disabled={!settingsLoaded}
                                 onChange={(checked) => {
                                     setBridgeEnabled(checked)
                                     commitSettings(checked)
@@ -311,7 +324,9 @@ export const Bluesky = () => {
                             selectedProfile={listenProfile}
                             setSelectedProfile={setListenProfile}
                         />
-                        <Button onClick={() => commitSettings(bridgeEnabled)}>{t('update')}</Button>
+                        <Button disabled={!settingsLoaded} onClick={() => commitSettings(bridgeEnabled)}>
+                            {t('update')}
+                        </Button>
                         <Divider />
                         <IconButton
                             onClick={(e) => {

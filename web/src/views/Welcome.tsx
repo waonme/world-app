@@ -43,7 +43,7 @@ export const WelcomeView = () => {
     const [user, setUser] = useState<User | null>(null)
     const [updater, setUpdater] = useState<number>(0)
     const reset = useResetPreference()
-    const [resolver, setResolver] = useState<string>(resolveEntrypoint())
+    const [resolver, setResolver] = useState<string>(() => readStoredString('Domain') ?? resolveEntrypoint())
 
     const masterKey = readStoredString('PrivateKey')
     const subKey = readStoredString('SubKey')
