@@ -20,6 +20,7 @@ import { setupDefaultTimelines } from '../utils/clientSetup'
 import { resourceCache } from '../lib/cache'
 import { isPushEnabled, unregisterPush } from '../lib/push'
 import { SubkeyInvalidDrawer } from '../components/SubkeyInvalidDrawer'
+import { ResetSessionButton } from '../components/ResetSessionButton'
 
 export interface ClientContextState {
     client: Client
@@ -528,6 +529,7 @@ export const ClientProvider = (props: Props): ReactNode => {
                 >
                     {t('logout')}
                 </Button>
+                <ResetSessionButton ccid="unknown" onDone={() => window.location.reload()} />
             </div>
         )
     }
