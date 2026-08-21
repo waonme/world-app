@@ -68,6 +68,7 @@ export const WelcomeView = () => {
     // エントリポイントはhint無しでは他ドメインのユーザーを解決できないため、これが無いと
     // ログアウト後に他サーバーのユーザーが常に「登録なし」に誤診される
     const [resolver, setResolver] = useState<string | null>(null)
+    const [resolverCCID, setResolverCCID] = useState<string | null>(null)
 
     useEffect(() => {
         const load = async () => {
@@ -94,9 +95,9 @@ export const WelcomeView = () => {
             }
             setExistingCCID(ccid)
 
-            // resolverの初期化は一度きり(RecoveryViewの手入力によるsetResolverをloadが巻き戻さないため)。
-            // setResolverでeffectが再実行され、次周回で照会に進む
-            if (resolver === null) {
+            // アクティブアカウントが変わった時は、そのアカウントの保存domainでresolverを引き直す。
+            // RecoveryViewの手入力は同じCCIDの間は保持する。
+            if (resolver === null || resolverCCID !== ccid) {
                 let accountDomain: string | null = null
                 try {
                     const accounts = await listAccounts()
@@ -105,6 +106,7 @@ export const WelcomeView = () => {
                     console.error('Failed to list accounts', e)
                 }
                 setResolver(accountDomain ?? resolveEntrypoint())
+                setResolverCCID(ccid)
                 return
             }
 
@@ -141,7 +143,7 @@ export const WelcomeView = () => {
             // get_active_ccid成功後の想定外の例外。鍵は読めているので、キーチェーン起因ではない。
             console.error('Unexpected error while preparing account view', e)
         })
-    }, [updater, resolver])
+    }, [updater, resolver, resolverCCID])
 
     const reload = () => {
         setUpdater((prev) => prev + 1)
@@ -243,6 +245,7 @@ export const WelcomeView = () => {
                     giveup={() => setState('signup')}
                     setDomain={(domain) => {
                         setResolver(domain)
+                        setResolverCCID(existingCCID)
                     }}
                 />
             )
