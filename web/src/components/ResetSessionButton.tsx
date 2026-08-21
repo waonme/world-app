@@ -48,6 +48,9 @@ export const ResetSessionModalContent = (props: { ccid: string; onDone: () => vo
         } else if (storedPrivateKey) {
             // ニーモニックを持たない(hex鍵のみの)セッションは生の秘密鍵をそのまま保存する
             text = storedPrivateKey
+        } else if (storedMnemonic) {
+            // 壊れたニーモニックが起動失敗の原因でも、削除前に生値を退避できるようにする
+            text = storedMnemonic
         } else {
             return
         }

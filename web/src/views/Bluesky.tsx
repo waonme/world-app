@@ -53,17 +53,21 @@ export const Bluesky = () => {
     const [listenCommunities, setListenCommunities] = useState<string[]>([])
     const [settingsLoaded, setSettingsLoaded] = useState(false)
     const [settingsLoadFailed, setSettingsLoadFailed] = useState(false)
+    const [settingsSaving, setSettingsSaving] = useState(false)
+    const [settingsSaveFailed, setSettingsSaveFailed] = useState(false)
 
     const homeTimelineRegex = new RegExp(`^cckv://${client.ccid}/concrnt\\.world/profiles/([^/]+)/home-timeline$`)
 
-    const commitSettings = (enabled: boolean) => {
+    const commitSettings = async (enabled: boolean, rollbackEnabled?: boolean) => {
         if (!settingsLoaded) return
+        setSettingsSaving(true)
+        setSettingsSaveFailed(false)
         const listenTimelines = [
             ...(listenHome ? [semantics.homeTimeline(client.ccid, listenProfile)] : []),
             ...listenCommunities
         ]
-        client.api
-            .commit({
+        try {
+            await client.api.commit({
                 kind: 'record' as const,
                 key: bskySettingsKey(client.ccid),
                 author: client.ccid,
@@ -71,9 +75,13 @@ export const Bluesky = () => {
                 value: { listenTimelines, enabled },
                 createdAt: new Date()
             })
-            .catch((err) => {
-                console.log(err)
-            })
+        } catch (err) {
+            console.log(err)
+            if (rollbackEnabled !== undefined) setBridgeEnabled(rollbackEnabled)
+            setSettingsSaveFailed(true)
+        } finally {
+            setSettingsSaving(false)
+        }
     }
 
     const [following, setFollowing] = useState<BskyProfile[]>([])
@@ -287,6 +295,7 @@ export const Bluesky = () => {
                         <Text variant="caption">{info.entity.did}</Text>
                         {!settingsLoaded && !settingsLoadFailed && <Text>{t('loading')}</Text>}
                         {settingsLoadFailed && <Text style={{ color: '#ff5b5b' }}>{t('settingsLoadFailed')}</Text>}
+                        {settingsSaveFailed && <Text style={{ color: '#ff5b5b' }}>{t('settingsSaveFailed')}</Text>}
                         {settingsLoaded && (
                             <>
                                 <div
@@ -299,9 +308,11 @@ export const Bluesky = () => {
                                     <Text>{t('enabledToggle')}</Text>
                                     <Switch
                                         checked={bridgeEnabled}
+                                        disabled={settingsSaving}
                                         onChange={(checked) => {
+                                            const previous = bridgeEnabled
                                             setBridgeEnabled(checked)
-                                            commitSettings(checked)
+                                            void commitSettings(checked, previous)
                                         }}
                                     />
                                 </div>
@@ -325,7 +336,9 @@ export const Bluesky = () => {
                                     selectedProfile={listenProfile}
                                     setSelectedProfile={setListenProfile}
                                 />
-                                <Button onClick={() => commitSettings(bridgeEnabled)}>{t('update')}</Button>
+                                <Button disabled={settingsSaving} onClick={() => void commitSettings(bridgeEnabled)}>
+                                    {t('update')}
+                                </Button>
                             </>
                         )}
                         <Divider />

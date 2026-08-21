@@ -421,6 +421,7 @@
             "loading": "読み込み中...",
         "unavailable": "Blueskyブリッジとの通信に失敗しました。",
         "settingsLoadFailed": "保存済みのBluesky設定を読み込めませんでした。設定の変更は一時的に無効です。",
+        "settingsSaveFailed": "Bluesky設定を保存できませんでした。もう一度お試しください。",
             "enableIntro": "Bluesky連携を有効化しましょう",
             "enableDescription": "連携を有効化すると、Bluesky(AT Protocol)のネットワークと繋がることができます。自分が所有しているドメインが必要です。ドメインがそのままBlueskyのハンドルになります。",
             "handleLabel": "ハンドル(自分が所有するドメイン)",
