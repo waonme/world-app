@@ -189,6 +189,12 @@ pub(crate) async fn clear_session(
     })
 }
 
+/// 全アカウントを消去する非常口。通常のUIフローからは呼ばないこと。
+#[tauri::command]
+pub(crate) async fn clear_all(app_handle: tauri::AppHandle) -> Result<(), Error> {
+    accounts::clear_all(&app_handle)
+}
+
 #[tauri::command]
 pub(crate) fn load_identity(mnemonic: &str) -> Result<Identity, Error> {
     concrnt::load_identity(mnemonic)

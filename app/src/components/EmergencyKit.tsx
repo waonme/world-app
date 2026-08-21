@@ -88,7 +88,7 @@ export function EmergencyKit({ error }: FallbackProps): ReactNode {
     const hardReset = async (): Promise<void> => {
         localStorage.clear()
         await deleteAllResourceCaches().catch(() => {})
-        await invoke('clear_session')
+        await invoke('clear_all')
         window.location.reload()
     }
 

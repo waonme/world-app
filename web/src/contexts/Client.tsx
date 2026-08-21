@@ -376,10 +376,9 @@ export const ClientProvider = (props: Props): ReactNode => {
         if (current && isPushEnabled()) {
             await unregisterPush(current).catch(() => {})
         }
-        // ログアウトはセッション(サブキー/接続先)の破棄のみ。マスターキー(PrivateKey/Mnemonic)は
+        // ログアウトはサブキーの破棄のみ。接続先とマスターキー(PrivateKey/Mnemonic)は
         // 削除しない: 同じ鍵で他サーバーへ登録・再ログインできることがアカウントモデルの前提であり、
         // 鍵を消す操作はバックアップDLを強制するResetSessionButtonだけに限定する(app版のclear_sessionと同じ方針)
-        localStorage.removeItem('Domain')
         localStorage.removeItem('SubKey')
         localStorage.removeItem('SelectedProfile')
         localStorage.removeItem('V1EntityProofPending')
