@@ -114,11 +114,17 @@ export const ClientProvider = (props: Props): ReactNode => {
                     return
                 }
 
-                // マスターキーのみのセッションはv1(concrnt-world)からの引き継ぎでしか発生しない
-                // (v2のログインは必ずsubkeyを発行する)。通常の書き込みはsubkey署名なので、
-                // ここでログインフローと同様にsubkeyを発行して揃える。失敗してもマスターキーのみで
-                // 続行する(読み取りは可能・次回起動で再試行される)
+                // マスターキーのみのセッションは、v1移行時の専用マーカーがある場合に限り
+                // サブキーを自動発行する。通常のログアウトもPrivateKeyを残してSubKeyだけを
+                // 消すため、マーカー無しで自動発行するとログアウト直後に再ログインしてしまう。
                 if (masterKey && !subKey) {
+                    if (localStorage.getItem('V1SubkeyProvisionPending') === null) {
+                        console.log('Master-key-only session requires explicit re-enrollment')
+                        clientRef.current?.dispose()
+                        clientRef.current = null
+                        setClient(null)
+                        return
+                    }
                     try {
                         const masterProvider = new InMemoryAuthProvider(masterKey)
                         const ccid = masterProvider.getCCID()
@@ -137,6 +143,7 @@ export const ClientProvider = (props: Props): ReactNode => {
                         await api.commit(subkeyDoc, domain, { useMasterkey: true })
                         subKey = `concrnt-subkey ${subIdentity.privateKey} ${ccid}@${domain} -`
                         localStorage.setItem('SubKey', subKey)
+                        localStorage.removeItem('V1SubkeyProvisionPending')
                         console.log('Provisioned a subkey for the migrated master key session')
                     } catch (err) {
                         console.error('Failed to provision subkey for master key session', err)
@@ -382,6 +389,7 @@ export const ClientProvider = (props: Props): ReactNode => {
         localStorage.removeItem('SubKey')
         localStorage.removeItem('SelectedProfile')
         localStorage.removeItem('V1EntityProofPending')
+        localStorage.removeItem('V1SubkeyProvisionPending')
         await resourceCache.clear()
         await reload()
     }, [reload])

@@ -89,6 +89,7 @@ export const ResetSessionModalContent = (props: { ccid: string; onDone: () => vo
                         localStorage.removeItem('SubKey')
                         localStorage.removeItem('SelectedProfile')
                         localStorage.removeItem('V1EntityProofPending')
+                        localStorage.removeItem('V1SubkeyProvisionPending')
                         props.onDone()
                     }}
                 >
