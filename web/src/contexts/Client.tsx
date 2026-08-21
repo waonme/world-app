@@ -4,11 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { Client, migrateLegacyProfilePolicies, semantics } from '@concrnt/worldlib'
 import {
     Api,
-    ComputeCKID,
     Document,
     Entity,
     ErrorCodeRegistrationNotFound,
-    GenerateIdentity,
     InMemoryAuthProvider,
     InMemoryKVS,
     NotFoundError,
@@ -21,6 +19,7 @@ import { resourceCache } from '../lib/cache'
 import { isPushEnabled, unregisterPush } from '../lib/push'
 import { SubkeyInvalidDrawer } from '../components/SubkeyInvalidDrawer'
 import { ResetSessionButton } from '../components/ResetSessionButton'
+import { provisionSubkey } from '../lib/subkey'
 
 export interface ClientContextState {
     client: Client
@@ -127,22 +126,7 @@ export const ClientProvider = (props: Props): ReactNode => {
                         return
                     }
                     try {
-                        const masterProvider = new InMemoryAuthProvider(masterKey)
-                        const ccid = masterProvider.getCCID()
-                        const api = new Api(domain, masterProvider, new InMemoryKVS())
-                        const subIdentity = GenerateIdentity()
-                        const ckid = ComputeCKID(subIdentity.publicKey)
-                        const subkeyDoc: Document<any> = {
-                            kind: 'record',
-                            key: semantics.subkey(ccid, ckid),
-                            author: ccid,
-                            schema: 'https://schema.concrnt.net/subkey.json',
-                            value: { ckid },
-                            createdAt: new Date(),
-                            onUpdate: 'retain'
-                        }
-                        await api.commit(subkeyDoc, domain, { useMasterkey: true })
-                        subKey = `concrnt-subkey ${subIdentity.privateKey} ${ccid}@${domain} -`
+                        subKey = await provisionSubkey(domain, masterKey)
                         localStorage.setItem('SubKey', subKey)
                         localStorage.removeItem('V1SubkeyProvisionPending')
                         console.log('Provisioned a subkey for the migrated master key session')
