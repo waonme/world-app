@@ -287,46 +287,47 @@ export const Bluesky = () => {
                         <Text variant="caption">{info.entity.did}</Text>
                         {!settingsLoaded && !settingsLoadFailed && <Text>{t('loading')}</Text>}
                         {settingsLoadFailed && <Text style={{ color: '#ff5b5b' }}>{t('settingsLoadFailed')}</Text>}
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between'
-                            }}
-                        >
-                            <Text>{t('enabledToggle')}</Text>
-                            <Switch
-                                checked={bridgeEnabled}
-                                disabled={!settingsLoaded}
-                                onChange={(checked) => {
-                                    setBridgeEnabled(checked)
-                                    commitSettings(checked)
-                                }}
-                            />
-                        </div>
-                        <Divider />
-                        <Text>{t('forwardTimeline')}</Text>
-                        <Text>{t('forwardTimelineDesc')}</Text>
-                        <TimelinePicker
-                            items={[
-                                // リスト未登録だとknownCommunitiesに現れないため、自分のinboxは常に候補に出す
-                                { uri: inboxKey(client.ccid), name: 'Bluesky' },
-                                ...knownCommunities.filter(
-                                    (tl: Timeline) => !tl.uri.includes('/atproto.concrnt.world/')
-                                )
-                            ]}
-                            selected={listenCommunities}
-                            setSelected={setListenCommunities}
-                            keyFunc={(item: Timeline) => item.uri}
-                            labelFunc={(item: Timeline) => item.name ?? 'no name'}
-                            postHome={listenHome}
-                            setPostHome={setListenHome}
-                            selectedProfile={listenProfile}
-                            setSelectedProfile={setListenProfile}
-                        />
-                        <Button disabled={!settingsLoaded} onClick={() => commitSettings(bridgeEnabled)}>
-                            {t('update')}
-                        </Button>
+                        {settingsLoaded && (
+                            <>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between'
+                                    }}
+                                >
+                                    <Text>{t('enabledToggle')}</Text>
+                                    <Switch
+                                        checked={bridgeEnabled}
+                                        onChange={(checked) => {
+                                            setBridgeEnabled(checked)
+                                            commitSettings(checked)
+                                        }}
+                                    />
+                                </div>
+                                <Divider />
+                                <Text>{t('forwardTimeline')}</Text>
+                                <Text>{t('forwardTimelineDesc')}</Text>
+                                <TimelinePicker
+                                    items={[
+                                        // リスト未登録だとknownCommunitiesに現れないため、自分のinboxは常に候補に出す
+                                        { uri: inboxKey(client.ccid), name: 'Bluesky' },
+                                        ...knownCommunities.filter(
+                                            (tl: Timeline) => !tl.uri.includes('/atproto.concrnt.world/')
+                                        )
+                                    ]}
+                                    selected={listenCommunities}
+                                    setSelected={setListenCommunities}
+                                    keyFunc={(item: Timeline) => item.uri}
+                                    labelFunc={(item: Timeline) => item.name ?? 'no name'}
+                                    postHome={listenHome}
+                                    setPostHome={setListenHome}
+                                    selectedProfile={listenProfile}
+                                    setSelectedProfile={setListenProfile}
+                                />
+                                <Button onClick={() => commitSettings(bridgeEnabled)}>{t('update')}</Button>
+                            </>
+                        )}
                         <Divider />
                         <IconButton
                             onClick={(e) => {
