@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { CssVar } from '../types/Theme'
 import { usePersistent } from '../hooks/usePersistent'
 import { MdAccessTime, MdSearch, MdClose } from 'react-icons/md'
-import { CCImage, IconButton, CfmActionsProvider, useCfmActions } from '@concrnt/ui'
+import { CCImage, HorizontalLayout, IconButton, CfmActionsProvider, useCfmActions } from '@concrnt/ui'
 import { useClient } from './Client'
 import { useKeyboard } from './Keyboard'
 import { EMOJI_PACKAGE_SCHEMA, ensureEmojiPackageList } from '../utils/emojiPackages'
@@ -348,7 +348,7 @@ export const EmojiPickerProvider = (props: Props) => {
                         <motion.div
                             style={{
                                 position: 'fixed',
-                                bottom: `${keyboard.height}px`,
+                                bottom: 0,
                                 left: 0,
                                 right: 0,
                                 backgroundColor: CssVar.contentBackground,
@@ -356,9 +356,9 @@ export const EmojiPickerProvider = (props: Props) => {
                                 borderRadius: `${CssVar.round(1)} ${CssVar.round(1)} 0 0`,
                                 display: 'flex',
                                 flexDirection: 'column',
-                                maxHeight: '50vh',
+                                height: searchBoxFocused ? 'auto' : `calc(50vh + ${keyboard.height}px)`,
                                 paddingBottom: keyboard.visible ? 0 : 'env(safe-area-inset-bottom)',
-                                transition: `bottom ${keyboard.duration}s ease-out`,
+                                transition: `height ${keyboard.duration}s ease-out`,
                                 zIndex: 1001
                             }}
                             initial={{ y: '100%' }}
@@ -386,11 +386,10 @@ export const EmojiPickerProvider = (props: Props) => {
                             </div>
 
                             {/* One-line emoji strip (キーボード表示中) */}
-                            <div
+                            <HorizontalLayout
                                 style={{
                                     display: searchBoxFocused ? 'flex' : 'none',
                                     alignItems: 'center',
-                                    overflowX: 'auto',
                                     overflowY: 'hidden',
                                     padding: `${CssVar.space(1)} ${CssVar.space(2)} 0`,
                                     flexShrink: 0
@@ -441,13 +440,12 @@ export const EmojiPickerProvider = (props: Props) => {
                                         {query.length > 0 ? t('noMatchingEmojis') : t('noEmojis')}
                                     </div>
                                 )}
-                            </div>
+                            </HorizontalLayout>
 
                             {/* Tabs */}
-                            <div
+                            <HorizontalLayout
                                 style={{
                                     display: searchBoxFocused ? 'none' : 'flex',
-                                    overflowX: 'auto',
                                     gap: CssVar.space(1),
                                     padding: `0 ${CssVar.space(2)}`,
                                     flexShrink: 0
@@ -489,7 +487,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                         />
                                     </TabButton>
                                 ))}
-                            </div>
+                            </HorizontalLayout>
 
                             {/* Divider */}
                             <div
@@ -649,6 +647,15 @@ export const EmojiPickerProvider = (props: Props) => {
                                     ))
                                 )}
                             </div>
+
+                            {/* キーボードの裏まで背景を敷くスペーサ */}
+                            <div
+                                style={{
+                                    flexShrink: 0,
+                                    height: `${keyboard.height}px`,
+                                    transition: `height ${keyboard.duration}s ease-out`
+                                }}
+                            />
                         </motion.div>
                     </>
                 )}

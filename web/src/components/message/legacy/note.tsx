@@ -24,7 +24,7 @@ export const LegacyNoteMessage = (props: MessageProps<any>) => {
                         navigate('/profile/' + message.author)
                     }}
                 >
-                    <Avatar ccid={message.author} />
+                    <Avatar ccid={message.author} style={{ width: '48px', height: '48px' }} />
                 </div>
             }
             headerLeft={
@@ -43,9 +43,9 @@ export const LegacyNoteMessage = (props: MessageProps<any>) => {
                     >
                         {message.author.slice(0, 16)}...
                     </div>
-                    <div>{new Date(message.createdAt).toLocaleString()}</div>
                 </div>
             }
+            headerRight={<div>{new Date(message.createdAt).toLocaleString()}</div>}
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
                 <CfmRenderer messagebody={legacyMessage.body} emojiDict={{}} />

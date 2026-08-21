@@ -14,8 +14,11 @@
         "reload": "Reload",
         "recoverTools": "Recovery Tools",
         "whenToUseTools": "If reloading doesn’t help after 3 tries ↓",
-        "softReset": "Reset everything except login info and reload",
-        "hardReset": "Reset everything (login info will also be lost)",
+    "softReset": "Reset everything except login info and reload",
+    "backupRecoveryKeys": "Back up login information",
+    "backupRequired": "Back up your login information before resetting everything.",
+    "confirmHardReset": "This removes all Concrnt data from this browser, including the login information you backed up. Continue?",
+    "hardReset": "Reset everything (login info will also be lost)",
         "support": "Support",
         "supportDesc": "If reloading doesn't resolve the issue, there may be a serious problem. Check the latest updates using the link below.",
         "reportFailed": "Failed to send report (Hint: This only works on official deployments)",
@@ -34,8 +37,8 @@
     "views": {
         "settings": {
             "title": "Settings",
+            "general": "General",
             "theme": "Theme",
-            "language": "Language",
             "activitypub": "ActivityPub",
             "bluesky": "Bluesky",
             "id": "ID Management",
@@ -57,6 +60,11 @@
                 "branch": "Branch",
                 "commit": "Commit"
             }
+        },
+        "generalSettings": {
+            "title": "General",
+            "language": "Language",
+            "haptics": "Haptic Feedback"
         },
         "languageSettings": {
             "title": "Language"
@@ -238,7 +246,8 @@
                 "registrationNotFound": "Registration not found.",
                 "continue": "Continue",
                 "registerNew": "Register a new account",
-                "deleteBrowserAccount": "Delete account data from this browser"
+                "deleteBrowserAccount": "Delete account data from this browser",
+                "checkFailed": "Could not verify. Please check your connection or the server status and try again."
             }
         },
         "ageBlocked": {
@@ -333,8 +342,23 @@
             "copySubkey": "Copy Subkey",
             "subkeyCopied": "Copied!",
             "backupUnavailable": "This browser does not hold your master key. Log in again with your master key (12 words) to back it up.",
+            "homeServer": {
+                "title": "Home Server",
+                "description": "View and edit your registration info stored on this server.",
+                "domain": "Domain",
+                "inviter": "Invited by",
+                "loading": "Loading...",
+                "fetchError": "Failed to load registration info",
+                "notRegistered": "No registration was found on this server",
+                "schemaUnavailable": "This server does not serve a registration form definition, so editing is unavailable.",
+                "save": "Save",
+                "saved": "Saved!",
+                "saveError": "Failed to save"
+            },
             "subkeys": {
                 "title": "Subkeys",
+                "count_one": "{{count}} key",
+                "count_other": "{{count}} keys",
                 "description": "Subkeys authorized for this account. Devices you have logged in on sign with these keys.",
                 "loading": "Loading...",
                 "empty": "No subkeys",
@@ -349,6 +373,12 @@
                 "revokeConfirmCurrentDescription": "This is the subkey used by this device. Revoking it will log this device out.",
                 "revokeFailed": "Failed to revoke subkey",
                 "masterKeyRequired": "Revoking a subkey requires the master key."
+            },
+            "evacuated": {
+                "title": "Evacuated keys",
+                "description": "Master keys of previous accounts, preserved when you signed in with a different account. Download a backup and store it somewhere safe. Deletion becomes available after downloading.",
+                "download": "Download backup",
+                "delete": "Delete"
             }
         },
         "activitypub": {
@@ -390,7 +420,9 @@
         "bluesky": {
             "title": "Bluesky Settings",
             "loading": "Loading...",
-            "unavailable": "Failed to communicate with the Bluesky bridge.",
+        "unavailable": "Failed to communicate with the Bluesky bridge.",
+        "settingsLoadFailed": "Saved Bluesky settings could not be loaded. Changes are temporarily disabled.",
+        "settingsSaveFailed": "Bluesky settings could not be saved. Please try again.",
             "enableIntro": "Let's enable Bluesky integration",
             "enableDescription": "Enabling integration lets you connect with the Bluesky (AT Protocol) network. You need a domain you own — it becomes your Bluesky handle.",
             "handleLabel": "Your handle (a domain you own)",
@@ -406,6 +438,9 @@
             "active": "Bluesky integration is enabled.",
             "yourHandle": "Your handle: @{{handle}}",
             "enabledToggle": "Enable federation",
+            "forwardTimeline": "Forwarding Timelines",
+            "forwardTimelineDesc": "Your posts to the selected timelines will be forwarded to Bluesky. If none are set, your home timeline is used.",
+            "update": "Update",
             "following": "Following",
             "followers": "Followers",
             "loadMore": "Show more",
@@ -1034,7 +1069,9 @@
             "cancel": "Cancel",
             "delete": "Delete",
             "deleteFailed": "Could not delete. Please try again.",
-            "resetSession": "Reset Session"
+            "resetSession": "Reset Session",
+            "noKeyToBackup": "This session does not hold a master key, so no key will be lost.",
+            "confirmDelete": "This will remove this account (including its master key) from this browser. Are you sure?"
         },
         "storeMocks": {
             "idTitle": "ID Management",

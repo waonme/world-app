@@ -11,7 +11,7 @@ import { IDView } from './ID'
 import { DevView } from './Dev'
 import { EmojiSettingsView } from './EmojiSettings'
 import { ThemeSettingsView } from './ThemeSettings'
-import { LanguageSettingsView } from './LanguageSettings'
+import { GeneralSettingsView } from './GeneralSettings'
 import { NotificationSettingsView } from './NotificationSettings'
 import { MuteSettingsView } from './MuteSettings'
 import { MediaSettingsView } from './MediaSettings'
@@ -22,7 +22,6 @@ import {
     MdBadge,
     MdChevronRight,
     MdEmojiEmotions,
-    MdLanguage,
     MdList,
     MdLuggage,
     MdNotifications,
@@ -30,7 +29,8 @@ import {
     MdPermMedia,
     MdRestore,
     MdTerminal,
-    MdVolumeOff
+    MdVolumeOff,
+    MdTune
 } from 'react-icons/md'
 import { SiActivitypub, SiBluesky } from 'react-icons/si'
 import { Fragment, useState } from 'react'
@@ -57,7 +57,7 @@ export const SettingsView = () => {
     const [, setAppInfoTapCount] = useState(0)
 
     const activitypubEnabled = 'net.concrnt.activitypub.settings' in (client.server?.endpoints ?? {})
-    const blueskyEnabled = 'world.concrnt.atproto.settings' in (client.server?.endpoints ?? {})
+    const blueskyEnabled = 'world.concrnt.atproto.info' in (client.server?.endpoints ?? {})
     const mediaEnabled = 'net.concrnt.storage.list' in (client.server?.endpoints ?? {})
 
     const handleAppInfoClick = () => {
@@ -90,18 +90,18 @@ export const SettingsView = () => {
                 <Text variant="h3">{t('title')}</Text>
                 <List>
                     <ListItem
+                        startIcon={<MdTune size={24} />}
+                        endIcon={<MdChevronRight size={24} />}
+                        onClick={() => stack.push(<GeneralSettingsView />)}
+                    >
+                        {t('general')}
+                    </ListItem>
+                    <ListItem
                         startIcon={<MdPalette size={24} />}
                         endIcon={<MdChevronRight size={24} />}
                         onClick={() => stack.push(<ThemeSettingsView />)}
                     >
                         {t('theme')}
-                    </ListItem>
-                    <ListItem
-                        startIcon={<MdLanguage size={24} />}
-                        endIcon={<MdChevronRight size={24} />}
-                        onClick={() => stack.push(<LanguageSettingsView />)}
-                    >
-                        {t('language')}
                     </ListItem>
                     {activitypubEnabled && (
                         <ListItem

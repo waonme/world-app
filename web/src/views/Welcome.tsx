@@ -3,12 +3,14 @@ import Tilt from 'react-parallax-tilt'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router-dom'
-import { Api, InMemoryAuthProvider, InMemoryKVS, Document, Entity } from '@concrnt/client'
+import { Api, InMemoryAuthProvider, InMemoryKVS, Document, Entity, NotFoundError } from '@concrnt/client'
 import { Passport } from '@concrnt/ui'
 import { ProfileSchema, semantics } from '@concrnt/worldlib'
 import { useResetPreference } from '../contexts/Preference'
 import { LoadingFull } from '../components/LoadingFull'
-import { AuthActions, AuthButton, AuthHeader, AuthScreen, AuthTextButton, authStyles } from './authLayout'
+import { ResetSessionButton } from '../components/ResetSessionButton'
+import { provisionSubkey } from '../lib/subkey'
+import { AuthActions, AuthBrand, AuthButton, AuthHeader, AuthScreen, authStyles } from './authLayout'
 
 const resolveEntrypoint = (): string => {
     const hostname = window.location.hostname
@@ -41,7 +43,7 @@ export const WelcomeView = () => {
     const [user, setUser] = useState<User | null>(null)
     const [updater, setUpdater] = useState<number>(0)
     const reset = useResetPreference()
-    const [resolver, setResolver] = useState<string>(resolveEntrypoint())
+    const [resolver, setResolver] = useState<string>(() => readStoredString('Domain') ?? resolveEntrypoint())
 
     const masterKey = readStoredString('PrivateKey')
     const subKey = readStoredString('SubKey')
@@ -55,7 +57,31 @@ export const WelcomeView = () => {
         return authProvider?.getCCID()
     }, [authProvider])
 
-    const [state, setState] = useState<'initial' | 'missing' | 'ready'>('initial')
+    const [state, setState] = useState<'initial' | 'missing' | 'ready' | 'error'>('initial')
+    const [loadError, setLoadError] = useState<string | null>(null)
+
+    const continueWithAccount = async () => {
+        const domain = user?.entity?.value.domain
+        if (!domain) {
+            setLoadError(t('loadFailed'))
+            setState('error')
+            return
+        }
+
+        try {
+            localStorage.setItem('Domain', domain)
+            // 通常ログアウト後のマスターキー単独状態では、利用者がこのボタンを押した時だけ
+            // 明示的にサブキーを再発行する。ClientProviderのv1自動移行とは分離する。
+            if (masterKey && !subKey) {
+                localStorage.setItem('SubKey', await provisionSubkey(domain, masterKey))
+            }
+            reset()
+            window.location.reload()
+        } catch (error) {
+            setLoadError(error instanceof Error ? error.message : String(error))
+            setState('error')
+        }
+    }
 
     useEffect(() => {
         if (!existingCCID) return
@@ -64,16 +90,35 @@ export const WelcomeView = () => {
         const kvs = new InMemoryKVS()
         const api = new Api(resolver, new InMemoryAuthProvider(), kvs)
 
-        Promise.all([
-            api.getEntity(ccid).catch(() => undefined),
-            api.getDocument<ProfileSchema>(semantics.profile(ccid, 'main')).catch(() => undefined)
-        ]).then(([entity, profile]) => {
+        const load = async () => {
+            // 「登録なし」と断定するのはサーバーが404を返した時だけ。通信失敗やサーバーエラーを
+            // missingにすると、鍵がブラウザに残っているのに新規鍵生成への導線が開いてしまう
+            let entity: Document<Entity> | undefined
+            try {
+                entity = await api.getEntity(ccid)
+            } catch (e) {
+                if (e instanceof NotFoundError) {
+                    entity = undefined
+                } else {
+                    console.error('Failed to check registration', e)
+                    setLoadError(e instanceof Error ? e.message : String(e))
+                    setState('error')
+                    return
+                }
+            }
+            const profile = await api.getDocument<ProfileSchema>(semantics.profile(ccid, 'main')).catch(() => undefined)
+
             setUser({
                 ccid,
                 entity,
                 profile
             })
-            setState(entity && subKey ? 'ready' : 'missing')
+            // ログアウト後はSubKeyが無くマスターキーだけが残る。その場合もreadyに落とし、
+            // 利用者が続行を選んだ時だけサブキーを再発行する
+            setState(entity && (subKey || masterKey) ? 'ready' : 'missing')
+        }
+        load().catch((e) => {
+            console.error('Unexpected error while preparing account view', e)
         })
     }, [updater, resolver, existingCCID, authProvider])
 
@@ -88,6 +133,56 @@ export const WelcomeView = () => {
     switch (state) {
         case 'initial':
             return <LoadingFull />
+        case 'error':
+            return (
+                <AuthScreen>
+                    <div style={{ flex: 1 }} />
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: CssVar.space(2)
+                        }}
+                    >
+                        <AuthBrand />
+                        <Text
+                            style={{
+                                color: CssVar.uiText,
+                                textAlign: 'center',
+                                whiteSpace: 'pre-line'
+                            }}
+                        >
+                            {t('loadFailed')}
+                        </Text>
+                        {loadError && (
+                            <Text
+                                variant="caption"
+                                style={{
+                                    color: CssVar.uiText,
+                                    opacity: 0.6,
+                                    textAlign: 'center',
+                                    wordBreak: 'break-all'
+                                }}
+                            >
+                                {loadError}
+                            </Text>
+                        )}
+                    </div>
+                    <div style={{ flex: 1 }} />
+                    <AuthActions fixedBottom>
+                        <AuthButton
+                            onClick={() => {
+                                setLoadError(null)
+                                setState('initial')
+                                reload()
+                            }}
+                        >
+                            {t('retry')}
+                        </AuthButton>
+                    </AuthActions>
+                </AuthScreen>
+            )
         case 'missing':
             return (
                 <RecoveryView
@@ -117,27 +212,15 @@ export const WelcomeView = () => {
                         </Tilt>
                     </div>
                     <AuthActions fixedBottom>
-                        <AuthButton
-                            onClick={() => {
-                                if (user?.entity?.value.domain) localStorage.setItem('Domain', user.entity.value.domain)
-                                reset()
-                                window.location.reload()
-                            }}
-                        >
-                            {t('continueWithAccount')}
-                        </AuthButton>
-                        <AuthTextButton
-                            danger
-                            onClick={() => {
-                                localStorage.removeItem('Domain')
-                                localStorage.removeItem('PrivateKey')
-                                localStorage.removeItem('Mnemonic')
-                                localStorage.removeItem('SubKey')
+                        <AuthButton onClick={continueWithAccount}>{t('continueWithAccount')}</AuthButton>
+                        <ResetSessionButton
+                            ccid={user!.ccid}
+                            onDone={() => {
                                 reload()
                             }}
                         >
                             {t('resetBrowserAccount')}
-                        </AuthTextButton>
+                        </ResetSessionButton>
                     </AuthActions>
                 </AuthScreen>
             )
@@ -151,28 +234,44 @@ const RecoveryView = (props: {
     ccid: string
 }) => {
     const { t } = useTranslation('', { keyPrefix: 'views.welcome' })
-    const [found, setFound] = useState<boolean>(false)
+    // unknown=未入力(何も表示しない)。「見つからない」と表示・断定するのはサーバーが404を返した時だけで、
+    // 通信失敗はerrorとして区別する(誤って新規登録/削除に誘導しないため)
+    const [found, setFound] = useState<'unknown' | 'found' | 'notfound' | 'error'>('unknown')
     const [domain, setDomain] = useState<string>()
+
+    // 入力が変わったら判定結果を描画中にリセットする(照会完了までは何も表示しない)
+    const [checkedDomain, setCheckedDomain] = useState<string | undefined>(undefined)
+    if (domain !== checkedDomain) {
+        setCheckedDomain(domain)
+        setFound('unknown')
+    }
 
     useEffect(() => {
         if (!domain) return
 
-        const auth = new InMemoryAuthProvider()
-        const kvs = new InMemoryKVS()
-        const api = new Api(domain, auth, kvs)
+        // 打鍵ごとに照会が飛ばないようデバウンスする
+        const timer = setTimeout(() => {
+            const auth = new InMemoryAuthProvider()
+            const kvs = new InMemoryKVS()
+            const api = new Api(domain, auth, kvs)
 
-        api.getEntity(props.ccid)
-            .then((entity) => {
-                if (entity) {
-                    setFound(true)
-                    props.setDomain?.(entity.value.domain)
-                } else {
-                    setFound(false)
-                }
-            })
-            .catch(() => {
-                setFound(false)
-            })
+            api.getEntity(props.ccid)
+                .then((entity) => {
+                    if (entity) {
+                        setFound('found')
+                        props.setDomain?.(entity.value.domain)
+                    } else {
+                        setFound('notfound')
+                    }
+                })
+                .catch((e) => {
+                    setFound(e instanceof NotFoundError ? 'notfound' : 'error')
+                })
+        }, 500)
+
+        return () => {
+            clearTimeout(timer)
+        }
     }, [domain])
 
     return (
@@ -188,28 +287,30 @@ const RecoveryView = (props: {
                     />
                 </div>
                 <Text style={authStyles.status}>
-                    {found ? t('recovery.registrationFound') : t('recovery.registrationNotFound')}
+                    {found === 'found'
+                        ? t('recovery.registrationFound')
+                        : found === 'notfound'
+                          ? t('recovery.registrationNotFound')
+                          : found === 'error'
+                            ? t('recovery.checkFailed')
+                            : ''}
                 </Text>
             </div>
-            {found ? (
+            {found === 'found' ? (
                 <AuthActions fixedBottom>
                     <AuthButton onClick={props.reload}>{t('recovery.continue')}</AuthButton>
                 </AuthActions>
-            ) : (
+            ) : found === 'error' ? null : (
                 <AuthActions fixedBottom>
                     <AuthButton onClick={props.giveup}>{t('recovery.registerNew')}</AuthButton>
-                    <AuthTextButton
-                        danger
-                        onClick={() => {
-                            localStorage.removeItem('Domain')
-                            localStorage.removeItem('PrivateKey')
-                            localStorage.removeItem('Mnemonic')
-                            localStorage.removeItem('SubKey')
+                    <ResetSessionButton
+                        ccid={props.ccid}
+                        onDone={() => {
                             props.reload()
                         }}
                     >
                         {t('recovery.deleteBrowserAccount')}
-                    </AuthTextButton>
+                    </ResetSessionButton>
                 </AuthActions>
             )}
         </AuthScreen>

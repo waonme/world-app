@@ -29,8 +29,18 @@ function extractUrls(text: string): string[] {
     // replace markdown link syntax to just URL
     replaced = replaced.replace(/\[.*?\]\((.*?)\)/g, '$1')
 
-    // strip a tag body
-    replaced = replaced.replace(/<a(.*?)>.*?<\/a>/g, '$1')
+    // strip a tag body (drop mention/hashtag anchors entirely — their href is a profile/tag page, not an article)
+    replaced = replaced.replace(/<a(.*?)>.*?<\/a>/g, (_, attrs: string) =>
+        /class="[^"]*(?:mention|hashtag)[^"]*"|rel="[^"]*tag[^"]*"/.test(attrs) ? '' : attrs
+    )
+
+    // decode html entities (AP note content is html; mastodon hrefs contain &amp; etc.)
+    replaced = replaced
+        .replace(/&quot;/g, '"')
+        .replace(/&#0?39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
 
     // extract urls
     const urls = replaced.match(/(https?:\/\/[\w.\-?=/&%#,@+:!~]+)/g) ?? []
@@ -69,9 +79,10 @@ export const AutoSummary = (props: Props) => {
                         >
                             <iframe
                                 allowFullScreen
-                                src={`https://www.youtube.com/embed/${matchYoutube[1]}`}
+                                src={`https://www.youtube.com/embed/${matchYoutube[1]}?playsinline=1`}
                                 title="YouTube video player"
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                referrerPolicy="strict-origin-when-cross-origin"
                                 style={{
                                     width: '100%',
                                     height: '100%',

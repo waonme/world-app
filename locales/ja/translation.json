@@ -14,8 +14,11 @@
         "reload": "リロード",
         "recoverTools": "復旧ツール",
         "whenToUseTools": "3回くらい再読み込みしても解決しないなら↓",
-        "softReset": "ログイン情報以外をリセットして再読み込み",
-        "hardReset": "すべてリセットする(ログイン情報も失われます)",
+    "softReset": "ログイン情報以外をリセットして再読み込み",
+    "backupRecoveryKeys": "ログイン情報をバックアップ",
+    "backupRequired": "すべてリセットする前にログイン情報をバックアップしてください。",
+    "confirmHardReset": "バックアップ済みのログイン情報を含め、このブラウザのConcrntデータをすべて削除します。よろしいですか？",
+    "hardReset": "すべてリセットする(ログイン情報も失われます)",
         "support": "Support",
         "supportDesc": "リロードしても解決しない場合、何か重大な問題が発生中かもしれません。以下のリンクから最新情報を確認できます。",
         "reportFailed": "レポートの送信に失敗しました(ヒント: このレポートは公式で提供しているもののみ機能します)",
@@ -34,8 +37,8 @@
     "views": {
         "settings": {
             "title": "設定",
+            "general": "一般",
             "theme": "テーマ設定",
-            "language": "言語",
             "activitypub": "ActivityPub設定",
             "bluesky": "Bluesky設定",
             "id": "ID管理",
@@ -57,6 +60,11 @@
                 "branch": "ブランチ",
                 "commit": "コミット"
             }
+        },
+        "generalSettings": {
+            "title": "一般",
+            "language": "言語",
+            "haptics": "触覚フィードバック"
         },
         "languageSettings": {
             "title": "言語"
@@ -238,7 +246,8 @@
                 "registrationNotFound": "登録情報が見つかりませんでした。",
                 "continue": "続行",
                 "registerNew": "新規登録する",
-                "deleteBrowserAccount": "ブラウザのアカウント情報を削除"
+                "deleteBrowserAccount": "ブラウザのアカウント情報を削除",
+                "checkFailed": "確認できませんでした。通信環境やサーバーの状態を確認して、もう一度お試しください。"
             }
         },
         "ageBlocked": {
@@ -333,8 +342,22 @@
             "copySubkey": "サブキーをコピー",
             "subkeyCopied": "コピーしました",
             "backupUnavailable": "このブラウザはマスターキーを保持していません。マスターキー(12単語)でログインし直すとバックアップできます。",
+            "homeServer": {
+                "title": "ホームサーバー",
+                "description": "このサーバーに登録されているあなたの登録情報を確認・編集できます。",
+                "domain": "ドメイン",
+                "inviter": "招待者",
+                "loading": "読み込み中...",
+                "fetchError": "登録情報の取得に失敗しました",
+                "notRegistered": "このサーバーに登録情報が見つかりませんでした",
+                "schemaUnavailable": "このサーバーは登録フォームの定義を配信していないため、編集できません。",
+                "save": "保存",
+                "saved": "保存しました",
+                "saveError": "保存に失敗しました"
+            },
             "subkeys": {
                 "title": "サブキー",
+                "count": "{{count}}個",
                 "description": "このアカウントで承認されているサブキーの一覧です。ログインした各デバイスはこの鍵で署名を行います。",
                 "loading": "読み込み中...",
                 "empty": "サブキーはありません",
@@ -349,6 +372,12 @@
                 "revokeConfirmCurrentDescription": "これは今このデバイスが使用しているサブキーです。失効させるとこのデバイスはログアウトされます。",
                 "revokeFailed": "サブキーの失効に失敗しました",
                 "masterKeyRequired": "サブキーの失効にはマスターキーが必要です。"
+            },
+            "evacuated": {
+                "title": "退避された鍵",
+                "description": "別のアカウントでログインした際に退避された旧マスターキーです。バックアップをダウンロードして安全な場所に保管してください。削除はダウンロード後に可能になります。",
+                "download": "バックアップをダウンロード",
+                "delete": "削除"
             }
         },
         "activitypub": {
@@ -390,7 +419,9 @@
         "bluesky": {
             "title": "Bluesky設定",
             "loading": "読み込み中...",
-            "unavailable": "Blueskyブリッジとの通信に失敗しました。",
+        "unavailable": "Blueskyブリッジとの通信に失敗しました。",
+        "settingsLoadFailed": "保存済みのBluesky設定を読み込めませんでした。設定の変更は一時的に無効です。",
+        "settingsSaveFailed": "Bluesky設定を保存できませんでした。もう一度お試しください。",
             "enableIntro": "Bluesky連携を有効化しましょう",
             "enableDescription": "連携を有効化すると、Bluesky(AT Protocol)のネットワークと繋がることができます。自分が所有しているドメインが必要です。ドメインがそのままBlueskyのハンドルになります。",
             "handleLabel": "ハンドル(自分が所有するドメイン)",
@@ -406,6 +437,9 @@
             "active": "Bluesky連携は有効化されています。",
             "yourHandle": "あなたのハンドル: @{{handle}}",
             "enabledToggle": "連携を有効にする",
+            "forwardTimeline": "転送元タイムライン",
+            "forwardTimelineDesc": "選択したタイムラインへの自分の投稿がBlueskyへ転送されます。未設定の場合はホームタイムラインが使用されます。",
+            "update": "更新",
             "following": "フォロー中",
             "followers": "フォロワー",
             "loadMore": "もっと見る",
@@ -1034,7 +1068,9 @@
             "cancel": "キャンセル",
             "delete": "削除",
             "deleteFailed": "削除できませんでした。もう一度お試しください。",
-            "resetSession": "セッションをリセット"
+            "resetSession": "セッションをリセット",
+            "noKeyToBackup": "このセッションはマスターキーを保持していないため、失われる鍵はありません。",
+            "confirmDelete": "このアカウントの情報(マスターキーを含む)をこのブラウザから削除します。よろしいですか？"
         },
         "storeMocks": {
             "idTitle": "ID管理",

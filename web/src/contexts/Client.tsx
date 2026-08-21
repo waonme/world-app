@@ -1,13 +1,25 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Client, migrateLegacyProfilePolicies } from '@concrnt/worldlib'
-import { InMemoryAuthProvider, NotFoundError, ServerOfflineError } from '@concrnt/client'
+import { Client, migrateLegacyProfilePolicies, semantics } from '@concrnt/worldlib'
+import {
+    Api,
+    Document,
+    Entity,
+    ErrorCodeRegistrationNotFound,
+    InMemoryAuthProvider,
+    InMemoryKVS,
+    NotFoundError,
+    ServerOfflineError,
+    SignedDocument
+} from '@concrnt/client'
 import { Button } from '@concrnt/ui'
 import { setupDefaultTimelines } from '../utils/clientSetup'
 import { resourceCache } from '../lib/cache'
 import { isPushEnabled, unregisterPush } from '../lib/push'
 import { SubkeyInvalidDrawer } from '../components/SubkeyInvalidDrawer'
+import { ResetSessionButton } from '../components/ResetSessionButton'
+import { provisionSubkey } from '../lib/subkey'
 
 export interface ClientContextState {
     client: Client
@@ -92,7 +104,7 @@ export const ClientProvider = (props: Props): ReactNode => {
 
                 const domain = readStoredString('Domain')
                 const masterKey = readStoredString('PrivateKey')
-                const subKey = readStoredString('SubKey')
+                let subKey = readStoredString('SubKey')
 
                 if (!domain || (!masterKey && !subKey)) {
                     console.log('No web session found')
@@ -100,6 +112,27 @@ export const ClientProvider = (props: Props): ReactNode => {
                     clientRef.current = null
                     setClient(null)
                     return
+                }
+
+                // マスターキーのみのセッションは、v1移行時の専用マーカーがある場合に限り
+                // サブキーを自動発行する。通常のログアウトもPrivateKeyを残してSubKeyだけを
+                // 消すため、マーカー無しで自動発行するとログアウト直後に再ログインしてしまう。
+                if (masterKey && !subKey) {
+                    if (localStorage.getItem('V1SubkeyProvisionPending') === null) {
+                        console.log('Master-key-only session requires explicit re-enrollment')
+                        clientRef.current?.dispose()
+                        clientRef.current = null
+                        setClient(null)
+                        return
+                    }
+                    try {
+                        subKey = await provisionSubkey(domain, masterKey)
+                        localStorage.setItem('SubKey', subKey)
+                        localStorage.removeItem('V1SubkeyProvisionPending')
+                        console.log('Provisioned a subkey for the migrated master key session')
+                    } catch (err) {
+                        console.error('Failed to provision subkey for master key session', err)
+                    }
                 }
 
                 // 選択中のサブプロフィールはログアウト時に他のセッションキーと一緒に破棄する
@@ -120,6 +153,35 @@ export const ClientProvider = (props: Props): ReactNode => {
                         await setupDefaultTimelines(client)
                         // v1から移行したアカウントの旧形式鍵垢設定をv2形式へ移行する。失敗してもログインは止めない
                         await migrateLegacyProfilePolicies(client).catch(console.error)
+
+                        // v1から自動移行されたエンティティ(proof:none)のマスターキーによる再コミット。
+                        // 通常はログイン画面(ensureEntityProof)が行うが、v1のlocalStorageからセッションを
+                        // 引き継いだ場合はログイン画面を通らないため、移行時に立てたフラグを見てここで行う。
+                        // 失敗してもログインは止めない(フラグが残るため次回起動で再試行される)
+                        if (
+                            localStorage.getItem('V1EntityProofPending') !== null &&
+                            client.api.authProvider.canSignMaster()
+                        ) {
+                            await (async () => {
+                                const self = await client.api.getResource<SignedDocument>(
+                                    semantics.user(client.ccid),
+                                    undefined,
+                                    { cache: 'no-cache' }
+                                )
+                                if (self.proof?.type === 'none') {
+                                    console.log('Entity proof type is "none", re-committing entity with master key...')
+                                    const entityDoc: Document<Entity> = {
+                                        kind: 'entity',
+                                        author: client.ccid,
+                                        schema: 'https://schema.concrnt.net/entity.json',
+                                        value: JSON.parse(self.document).value,
+                                        createdAt: new Date()
+                                    }
+                                    await client.api.commit(entityDoc, client.server.domain, { useMasterkey: true })
+                                }
+                                localStorage.removeItem('V1EntityProofPending')
+                            })().catch(console.error)
+                        }
 
                         setProgress(t('loadingLists'))
                         await client.pinnedLists.value()
@@ -202,12 +264,36 @@ export const ClientProvider = (props: Props): ReactNode => {
                     if (err instanceof ServerOfflineError) {
                         setIsOffline(true)
                     } else if (err instanceof NotFoundError) {
-                        // サーバーは応答しているが、自分の登録が見つからない(サーバーのリセットや移行など)。
-                        // 再試行しても復帰しないため、ログアウトを促す専用画面を出す。
-                        setNotFoundOn(domain)
+                        // NotFoundErrorはwell-knownの404、セットアップ中のcommitの404、キャプティブポータルや
+                        // デプロイ中CDNの404でも届く。「登録が無い」と断定できるのは、認証付きGET /registerが
+                        // registration-not-foundコードを返した時だけ。それ以外(403=認証不成立/entityなし、
+                        // コード無し404=旧サーバー/経路の問題、その他)は一過性として再試行画面へ
+                        const probe = new Api(domain, authProvider, new InMemoryKVS())
+                        try {
+                            await probe.getRegistration(domain, { useMasterkey: !authProvider.canSignSub() })
+                            // 登録は健在 = 別の404が原因
+                            setSetupError(err.message)
+                        } catch (e2) {
+                            if (e2 instanceof NotFoundError && e2.code === ErrorCodeRegistrationNotFound) {
+                                setNotFoundOn(domain)
+                            } else if (e2 instanceof ServerOfflineError) {
+                                setIsOffline(true)
+                            } else {
+                                setSetupError(err.message)
+                            }
+                        }
                     } else {
                         setSetupError(err instanceof Error ? err.message : String(err))
                     }
+                }
+            } catch (err) {
+                // authProviderの構築(壊れた鍵素材でのthrow)など、内側のcatchが覆わない範囲の失敗。
+                // 放置するとunhandled rejectionになりロード画面のまま固まるため、エラー画面に落とす
+                console.error('Failed to set up client', err)
+                if (isLiveSwitch && clientRef.current) {
+                    setSwitchError(err instanceof Error ? err.message : String(err))
+                } else {
+                    setSetupError(err instanceof Error ? err.message : String(err))
                 }
             } finally {
                 setIsSwitching(false)
@@ -282,11 +368,13 @@ export const ClientProvider = (props: Props): ReactNode => {
         if (current && isPushEnabled()) {
             await unregisterPush(current).catch(() => {})
         }
-        localStorage.removeItem('Domain')
-        localStorage.removeItem('PrivateKey')
-        localStorage.removeItem('Mnemonic')
+        // ログアウトはサブキーの破棄のみ。接続先とマスターキー(PrivateKey/Mnemonic)は
+        // 削除しない: 同じ鍵で他サーバーへ登録・再ログインできることがアカウントモデルの前提であり、
+        // 鍵を消す操作はバックアップDLを強制するResetSessionButtonだけに限定する(app版のclear_sessionと同じ方針)
         localStorage.removeItem('SubKey')
         localStorage.removeItem('SelectedProfile')
+        localStorage.removeItem('V1EntityProofPending')
+        localStorage.removeItem('V1SubkeyProvisionPending')
         await resourceCache.clear()
         await reload()
     }, [reload])
@@ -373,6 +461,14 @@ export const ClientProvider = (props: Props): ReactNode => {
                 {t('registrationNotFound', { domain: notFoundOn })}
                 <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>{t('registrationNotFoundDesc')}</div>
                 <Button
+                    onClick={() => {
+                        setNotFoundOn(null)
+                        reload()
+                    }}
+                >
+                    {t('retry')}
+                </Button>
+                <Button
                     onClick={async () => {
                         await logout()
                         window.location.reload()
@@ -417,6 +513,7 @@ export const ClientProvider = (props: Props): ReactNode => {
                 >
                     {t('logout')}
                 </Button>
+                <ResetSessionButton ccid="unknown" onDone={() => window.location.reload()} />
             </div>
         )
     }

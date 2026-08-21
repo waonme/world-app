@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useClient } from '../contexts/Client'
 import { NotFoundError, Document } from '@concrnt/client'
 import { Schemas, AtprotoFollowSchema } from '@concrnt/worldlib'
-import { BskyProfile, bskyProfileUrl, followKey } from '../utils/bluesky'
+import { BskyProfile, bskyProfileUrl, followKey, legacyFollowKey } from '../utils/bluesky'
 
 interface Props {
     person: BskyProfile
@@ -20,24 +20,31 @@ export const BskyPerson = ({ person }: Props) => {
 
     const [followed, setFollowed] = useState<boolean | undefined>(undefined)
 
-    const updateFollowed = () => {
-        client.api
-            .getDocument(followKey(client.ccid, person.did))
-            .then(() => {
-                setFollowed(true)
-            })
-            .catch((err) => {
-                if (err instanceof NotFoundError) {
-                    setFollowed(false)
-                } else {
-                    console.log(err)
-                }
-            })
-    }
+    const followKeys = () => [followKey(client.ccid, person.did), legacyFollowKey(client.ccid, person.did)]
 
     useEffect(() => {
-        updateFollowed()
-    }, [person.did])
+        let active = true
+        const check = async (): Promise<boolean | undefined> => {
+            for (const key of followKeys()) {
+                try {
+                    await client.api.getDocument(key)
+                    return true
+                } catch (err) {
+                    if (!(err instanceof NotFoundError)) {
+                        console.log(err)
+                        return undefined
+                    }
+                }
+            }
+            return false
+        }
+        check().then((value) => {
+            if (active && value !== undefined) setFollowed(value)
+        })
+        return () => {
+            active = false
+        }
+    }, [client, person.did])
 
     return (
         <View>
@@ -105,8 +112,13 @@ export const BskyPerson = ({ person }: Props) => {
                             (followed ? (
                                 <Button
                                     onClick={() => {
-                                        client.api
-                                            .delete(followKey(client.ccid, person.did))
+                                        Promise.all(
+                                            followKeys().map((key) =>
+                                                client.api.delete(key).catch((err) => {
+                                                    if (!(err instanceof NotFoundError)) throw err
+                                                })
+                                            )
+                                        )
                                             .then(() => {
                                                 setFollowed(false)
                                             })
@@ -128,8 +140,7 @@ export const BskyPerson = ({ person }: Props) => {
                                             value: {
                                                 did: person.did
                                             },
-                                            createdAt: new Date(),
-                                            onUpdate: 'forget'
+                                            createdAt: new Date()
                                         }
                                         client.api
                                             .commit(document)
@@ -166,7 +177,7 @@ export const BskyPerson = ({ person }: Props) => {
                 <Text>{t('bskyUserNotice')}</Text>
                 <Button
                     onClick={() => {
-                        openUrl(bskyProfileUrl(person.handle || person.did), 'inAppBrowser')
+                        openUrl(bskyProfileUrl(person.handle || person.did))
                     }}
                 >
                     {t('openRemote')}

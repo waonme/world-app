@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useClient } from '../contexts/Client'
 
-import { Avatar, ListItem, Divider, Text, useTheme, List, Button } from '@concrnt/ui'
+import { Avatar, ListItem, Divider, Text, useTheme, List, Button, ExternalLink } from '@concrnt/ui'
 
 import { MdHome } from 'react-icons/md'
 import { MdExplore } from 'react-icons/md'
@@ -19,7 +19,7 @@ import { ProfileName } from './ProfileName'
 import { SidebarLists } from './SidebarLists'
 import { useNavigate } from 'react-router-dom'
 import { useComposer } from '../contexts/Composer'
-import { semantics } from '@concrnt/worldlib'
+import { currentPostContext } from '../contexts/PostContext'
 
 export const Sidebar = () => {
     const { t } = useTranslation('', { keyPrefix: 'components.sidebar' })
@@ -118,8 +118,9 @@ export const Sidebar = () => {
                 <SidebarLists />
                 <Button
                     onClick={() => {
-                        const home = semantics.homeTimeline(client.ccid, client.currentProfile)
-                        composer.open([home])
+                        // 最前面のビューが提供するデフォルト投稿先で開く。文脈のないページではホームのみ
+                        const postCtx = currentPostContext()
+                        composer.open(postCtx.destinations, undefined, undefined, undefined, postCtx.profile)
                     }}
                     style={{ width: '100%' }}
                 >
@@ -143,41 +144,35 @@ export const Sidebar = () => {
                 >
                     Concrnt World App
                     <br />
-                    <a
+                    <ExternalLink
                         style={{
                             color: CssVar.backdropText,
                             textDecoration: 'none'
                         }}
                         href="https://square.concrnt.net/"
-                        target="_blank"
-                        rel="noreferrer"
                     >
                         {t('documentation')}
-                    </a>
+                    </ExternalLink>
                     {' / '}
-                    <a
+                    <ExternalLink
                         style={{
                             color: CssVar.backdropText,
                             textDecoration: 'none'
                         }}
                         href="https://github.com/orgs/concrnt/discussions"
-                        target="_blank"
-                        rel="noreferrer"
                     >
                         {t('forum')}
-                    </a>
+                    </ExternalLink>
                     {' / '}
-                    <a
+                    <ExternalLink
                         style={{
                             color: CssVar.backdropText,
                             textDecoration: 'none'
                         }}
                         href="https://github.com/totegamma/concurrent-world"
-                        target="_blank"
-                        rel="noreferrer"
                     >
                         GitHub
-                    </a>
+                    </ExternalLink>
                 </div>
             </div>
         </>
