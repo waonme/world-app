@@ -1,7 +1,7 @@
 import { Suspense, use, useMemo } from 'react'
 import { ApObject, resolveApObject } from '../../utils/activitypub'
 import { MessageLayout } from './MessageLayout'
-import { Avatar, CssVar, GfmRenderer, MfmRenderer, Text, type EmojiLite } from '@concrnt/ui'
+import { Avatar, CssVar, ExternalLink, GfmRenderer, MfmRenderer, Text, type EmojiLite } from '@concrnt/ui'
 import { TimeDiff } from '../TimeDiff'
 import { useNavigate } from 'react-router-dom'
 import { useClient } from '../../contexts/Client'
@@ -10,9 +10,11 @@ import { NotFoundError } from '@concrnt/client'
 import { ApNoteSchema, Message, RerouteMessageSchema } from '@concrnt/worldlib'
 import { MessageFooter } from './Footer'
 import { CollapsibleBody } from './CollapsibleBody'
+import { AutoSummary } from '../AutoSummary'
 import { MediaGallery } from '../MediaGallery/main'
 import { usePreference } from '../../contexts/Preference'
 import { MdLock, MdMail, MdOpenInNew } from 'react-icons/md'
+import { SiActivitypub } from 'react-icons/si'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -86,10 +88,8 @@ const Note = (props: {
                 }}
             >
                 <Text style={{ opacity: 0.7 }}>{unreachable ? t('fetchFailed') : t('unavailable')}</Text>
-                <a
+                <ExternalLink
                     href={props.noteURL}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -101,7 +101,7 @@ const Note = (props: {
                 >
                     <MdOpenInNew size={14} />
                     {t('openRemote')}
-                </a>
+                </ExternalLink>
                 {devmode && <Text variant="caption">{props.noteURL}</Text>}
                 {devmode && (
                     <Text variant="caption">{note instanceof Error ? note.message : 'negative cache hit'}</Text>
@@ -138,17 +138,34 @@ const Note = (props: {
                         if (note.attributedTo) navigate('/activitypub/view/' + encodeURIComponent(note.attributedTo))
                     }}
                 >
-                    <Avatar ccid={note.attributedTo ?? ''} src={author?.getIcons()[0]?.url} />
+                    <Avatar
+                        ccid={note.attributedTo ?? ''}
+                        src={author?.getIcons()[0]?.url}
+                        style={{ width: '48px', height: '48px' }}
+                    />
                 </div>
             }
             headerLeft={
-                <Text
+                <span
                     style={{
-                        fontWeight: 'bold'
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: CssVar.space(1),
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
                     }}
                 >
-                    {author?.name ?? author?.preferredUsername ?? 'Unknown'}
-                </Text>
+                    <Text
+                        style={{
+                            fontWeight: 'bold',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                        }}
+                    >
+                        {author?.name ?? author?.preferredUsername ?? 'Unknown'}
+                    </Text>
+                    <SiActivitypub size={14} style={{ flexShrink: 0 }} title="ActivityPub" />
+                </span>
             }
             headerRight={
                 <span style={{ display: 'flex', alignItems: 'center', gap: CssVar.space(1) }}>
@@ -159,19 +176,18 @@ const Note = (props: {
             }
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
-                {note._misskey_content ? (
-                    <MfmRenderer messagebody={note._misskey_content} emojiDict={emojiDict} />
-                ) : (
-                    <GfmRenderer messagebody={note.content ?? ''} emojiDict={emojiDict} />
-                )}
+                <AutoSummary body={note._misskey_content ?? note.content ?? ''}>
+                    {note._misskey_content ? (
+                        <MfmRenderer messagebody={note._misskey_content} emojiDict={emojiDict} />
+                    ) : (
+                        <GfmRenderer messagebody={note.content ?? ''} emojiDict={emojiDict} />
+                    )}
+                </AutoSummary>
             </CollapsibleBody>
             {medias.length > 0 && <MediaGallery medias={medias} />}
             {props.detail && (
-                <a
+                <ExternalLink
                     href={note.url ?? note.id}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
                     style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -183,7 +199,7 @@ const Note = (props: {
                 >
                     <MdOpenInNew size={14} />
                     {t('openRemote')}
-                </a>
+                </ExternalLink>
             )}
             {devmode && <Text variant="caption">{props.noteURL}</Text>}
             {props.message && <MessageFooter message={props.message} rerouted={props.rerouted} />}

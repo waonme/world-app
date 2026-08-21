@@ -253,8 +253,7 @@ export const ApPerson = ({ person }: Props) => {
                                                 value: {
                                                     actorURI: person.id
                                                 },
-                                                createdAt: new Date(),
-                                                onUpdate: 'forget'
+                                                createdAt: new Date()
                                             }
                                             client.api
                                                 .commit(document)
@@ -308,7 +307,7 @@ export const ApPerson = ({ person }: Props) => {
                     {person.url && (
                         <Button
                             onClick={() => {
-                                openUrl(person.url!.toString(), 'inAppBrowser')
+                                openUrl(person.url!.toString())
                             }}
                         >
                             {t('openRemote')}

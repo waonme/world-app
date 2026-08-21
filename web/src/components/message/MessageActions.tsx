@@ -1,9 +1,10 @@
 import { Button, Confirm, ListItem, Text, useAnchor } from '@concrnt/ui'
 import { useTranslation } from 'react-i18next'
-import { Association, LikeAssociationSchema, Schemas, type Message } from '@concrnt/worldlib'
+import { Association, LikeAssociationSchema, Schemas, type Message, type RerouteMessageSchema } from '@concrnt/worldlib'
 import { useClient } from '../../contexts/Client'
 import { useComposer } from '../../contexts/Composer'
-import { hapticLight, hapticSuccess } from '../../utils/haptics'
+import { usePostContext } from '../../contexts/PostContext'
+import { useHaptics } from '../../contexts/Haptics'
 import { startTransition, useOptimistic, useState } from 'react'
 import { Select } from '../Select'
 import { Report } from '../Report'
@@ -23,6 +24,7 @@ import { useQueryTimelineContext } from '../QueryTimeline'
 
 interface Props {
     message: Message<any>
+    rerouted?: Message<RerouteMessageSchema>
     updateReactionState: React.Dispatch<React.SetStateAction<ReactionState>>
 }
 
@@ -34,7 +36,9 @@ interface LikeState {
 export const MessageActions = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'components.messageActions' })
     const { client } = useClient()
+    const { hapticLight, hapticSuccess } = useHaptics()
     const composer = useComposer()
+    const postCtx = usePostContext()
     const [menuOpen, setMenuOpen] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [reportOpen, setReportOpen] = useState(false)
@@ -59,8 +63,18 @@ export const MessageActions = (props: Props) => {
     // これをsocketイベント任せにすると、イベントがcommit応答より遅れたときに
     // 一瞬いいね/リアクションが消える
     const refreshMessage = async () => {
-        qt.update(messageHref)
-        await client?.getMessage(messageHref).catch(() => null)
+        if (props.rerouted) {
+            // リルート経由の場合: タイムライン項目のhrefはリルート文書のもの。
+            // qt.update(=invalidateMessage)がリルート文書とそのtargetの両キャッシュを破棄するので、
+            // 再レンダリングがuse()する両方を再取得してtransition内で解決させる
+            const rerouteHref = props.rerouted.key ?? props.rerouted.uri
+            qt.update(rerouteHref)
+            await client?.getMessage(props.message.uri).catch(() => null)
+            await client?.getMessage(rerouteHref).catch(() => null)
+        } else {
+            qt.update(messageHref)
+            await client?.getMessage(messageHref).catch(() => null)
+        }
     }
 
     return (
@@ -100,15 +114,8 @@ export const MessageActions = (props: Props) => {
                 variant="text"
                 onClick={(e) => {
                     e.stopPropagation()
-                    const communityDestinations =
-                        props.message.distributes?.filter(
-                            (uri) =>
-                                !uri.includes('/main/home-timeline') &&
-                                !uri.includes('/main/activity-timeline') &&
-                                !uri.includes('/main/notify-timeline')
-                        ) ?? []
-                    // 候補は省略してknownCommunities全体にする(リルート先は元メッセージの配信先に限らない)
-                    composer.open(communityDestinations, undefined, 'reroute', props.message)
+                    // リルート先は現在開いているビューのデフォルト投稿先。文脈のないページではホームのみ
+                    composer.open(postCtx.destinations, undefined, 'reroute', props.message, postCtx.profile)
                 }}
                 style={{ display: 'flex', alignItems: 'center' }}
             >

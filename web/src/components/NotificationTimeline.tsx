@@ -68,9 +68,9 @@ const KEY_SUFFIX_BSKYFOLLOW = '$bskyfollow'
 const KEY_SUFFIX_READACCESS = '$readaccess'
 
 // 左アイコンコラムの共通スタイル
-// - 幅 48px は既存 MessageLayout のアバタースペースと揃えるため
+// - 幅 56px は既存 MessageLayout のアバタースペース(48px+gap8px)と揃えるため
 // - paddingLeft 5px は画面端とアイコンの間の余白
-const ICON_COLUMN_WIDTH = '48px'
+const ICON_COLUMN_WIDTH = '56px'
 const ICON_COLUMN_PADDING_LEFT = '5px'
 const ICON_SIZE = 32
 
@@ -381,6 +381,7 @@ export const NotificationTimeline = (props: Props) => {
                     paddingTop: '5px',
                     overflowX: 'hidden',
                     overflowY: 'auto',
+                    touchAction: 'pan-y',
                     // iOS の慣性スクロール跨ね返りを抑制して PullToRefresh との干渉を防ぐ
                     overscrollBehaviorY: 'none'
                 }}
@@ -882,9 +883,7 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
                                 gap: '4px'
                             }}
                         >
-                            {url && (
-                                <CCImage src={url} maxHeight={128} style={{ width: '20px', height: '20px' }} alt="" />
-                            )}
+                            {url && <CCImage src={url} maxHeight={128} style={{ height: '32px' }} alt="" />}
                             {group.map((item) => (
                                 <div
                                     key={item.uri}
@@ -898,7 +897,7 @@ const SummarisedReaction = (props: { items: Message<ReactionAssociationSchema>[]
                                     <Avatar
                                         ccid={item.author}
                                         src={item.authorProfile?.avatar}
-                                        style={{ width: '20px', height: '20px' }}
+                                        style={{ width: '32px', height: '32px' }}
                                     />
                                 </div>
                             ))}

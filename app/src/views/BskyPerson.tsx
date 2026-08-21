@@ -128,8 +128,7 @@ export const BskyPerson = ({ person }: Props) => {
                                             value: {
                                                 did: person.did
                                             },
-                                            createdAt: new Date(),
-                                            onUpdate: 'forget'
+                                            createdAt: new Date()
                                         }
                                         client.api
                                             .commit(document)
@@ -166,7 +165,7 @@ export const BskyPerson = ({ person }: Props) => {
                 <Text>{t('bskyUserNotice')}</Text>
                 <Button
                     onClick={() => {
-                        openUrl(bskyProfileUrl(person.handle || person.did), 'inAppBrowser')
+                        openUrl(bskyProfileUrl(person.handle || person.did))
                     }}
                 >
                     {t('openRemote')}
