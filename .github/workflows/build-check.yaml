@@ -47,6 +47,12 @@ jobs:
             - name: Test fork world behavior
               run: pnpm --filter @concrnt/worldlib test:fork
 
+            - name: Test legacy WebKit popover placement
+              run: pnpm --filter @concrnt/ui test:popover
+
+            - name: Test web fork state transitions
+              run: pnpm --filter web test:fork
+
             - name: Build web deployment
               run: pnpm --workspace-concurrency=1 --filter web... build
 

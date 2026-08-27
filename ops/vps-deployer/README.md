@@ -4,7 +4,7 @@
 
 The source build runs in an unprivileged Kubernetes Job with no service-account token and explicit CPU/memory limits. A separate rootless BuildKit Job creates an OCI archive, which the host imports into MicroK8s containerd. The Deployment is changed only after both Jobs succeed.
 
-Before building the web bundle, the Job verifies the documented fork anchors and runs focused mute and legacy-compatibility contract tests. It also refuses to follow a rewritten/non-fast-forward `main`; an ordinary revert commit remains allowed.
+Before building the web bundle, the Job verifies the documented fork anchors and runs focused mute, legacy-data, recovery, reply-destination, and legacy-WebKit placement tests. It also refuses to follow a rewritten/non-fast-forward `main`; an ordinary revert commit remains allowed.
 
 Production verification requires all of the following:
 

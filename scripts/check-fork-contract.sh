@@ -31,7 +31,7 @@ require_match() {
 }
 
 require_file FORK.md
-for id in F-001 F-002 F-003 F-004 F-005; do
+for id in F-001 F-002 F-003 F-004 F-005 F-006; do
   require_match "$id" FORK.md
 done
 
@@ -71,10 +71,24 @@ require_match "canWriteBridgeSettings" app/src/views/Bluesky.tsx
 require_match "provisionSubkey" web/src/lib/subkey.ts
 require_match "recoveryBackupExported" web/src/components/EmergencyKit.tsx
 require_match "disabled={!exported}" web/src/components/ResetSessionButton.tsx
+require_match "runAfterSuccessfulBackup" app/src/components/BackupKeyButton.tsx
+require_match "onBackupComplete" app/src/components/ResetSessionButton.tsx
 require_match "resolverCCID" app/src/views/Welcome.tsx
 
 # F-005: immutable SHA image and deployed-commit smoke check.
 require_match 'expected_image="localhost/world-app:$target_sha"' ops/vps-deployer/deploy.sh
 require_match "/cc-info" ops/vps-deployer/deploy.sh
+
+# F-006: upstream UI refresh and legacy-WebKit compatibility guards.
+require_file web/src/views/postReplyDestinations.ts
+require_file web/test/post-reply-destinations.test.mjs
+require_match "reconcileReplyDestinations" web/src/views/Post.tsx
+require_file ui/src/ui/popoverPlacement.ts
+require_file ui/test/popover-placement.test.mjs
+require_match "getCenteredPopoverFallbackPlacement" ui/src/ui/Popover.tsx
+for path in web/src/components/TimelinePicker.tsx app/src/components/TimelinePicker.tsx; do
+  require_match "anchorRef={dropdownAnchorRef}" "$path"
+  require_match "matchAnchorWidth" "$path"
+done
 
 echo "fork contract anchors are present"

@@ -3,7 +3,7 @@
 - Contract ID: `world-app-upstream-friendly-fork-20260827`
 - Status: IMPLEMENTED / PRE-MERGE GATE
 - Risk tier: High
-- Source specification: user direction on 2026-08-27; [mute PR #2](https://github.com/waonme/world-app/pull/2); fork PRs #3-#15; production incident where the VPS moved from `dev` behavior to a `main` build without fork features
+- Source specification: user direction on 2026-08-27; [mute PR #2](https://github.com/waonme/world-app/pull/2); fork PRs #3-#15; production incident where the VPS moved from `dev` behavior to a `main` build without fork features; independent falsification review of upstream `75cc475` / `35a8f90`
 - Approved revision: integration branch based on production `85e58db`, frozen upstream cut `35a8f90`; final PR head is recorded by the review PR
 - Approved by: repository owner direction; final diff approval pending
 - Change boundary: branch policy, upstream integration workflow, production deployment contract, fork-specific web/app/client/worldlib behavior, regression tests and documentation
@@ -16,7 +16,7 @@ Make `main` the documented production fork branch, forward-port the still-requir
 
 ### User-visible outcome
 
-arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-recovery, and presentation behavior while receiving current upstream improvements.
+arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-recovery, reply-destination, and supported-WebKit presentation behavior while receiving current upstream improvements.
 
 ### Non-goals
 
@@ -28,7 +28,9 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 ### Protected surfaces
 
 - Existing accounts, subkeys, backups, legacy follows, and bridge settings must remain readable and recoverable.
+- Backup cancellation/failure must not unlock destructive account removal.
 - Mute records remain private and compatible with existing `cckv://<owner>/concrnt.world/mutes/<id>` data.
+- User-edited reply destinations must not be replaced by an equivalent message refresh.
 - ActivityPub access control and v1 fallback ownership validation must not be weakened.
 - Production deployment must retain exact-commit verification and rollback-on-failure.
 - App and web must retain equivalent user-visible behavior while preserving platform-specific navigation and UI code.
@@ -66,10 +68,11 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 | QC-004 | Blocked-user posts are completely hidden when block filtering is enabled. | A blocked post renders its body or a revealable placeholder. | Timeline contains a blocked author, including as an association target behind another mute. | Combined policy tests, both `MessageContainer` anchors, and app/web build checks. | A block or hard-hide match at either boundary cannot render a visible post or revealable placeholder. | Unit / Static / Integration | Yes |
 | QC-005 | The fork integration does not reapply obsolete ActivityPub patches over the current upstream implementation. | Conflict resolution replaces current upstream AP behavior with the historical fork copy. | Compare AP-specific files and conflict resolutions with the frozen upstream cut, then build both clients. | Upstream ancestry/diff review and component build/type checks. | AP-specific implementation follows the merged upstream cut; only documented generic message-boundary behavior may differ. | Static / Integration | No |
 | QC-006 | Legacy v1 messages remain retrievable without weakening owner or permission checks. | A response for another owner is accepted, 403 is bypassed, or uncertain association state causes a duplicate write. | v2 miss for a valid legacy URI, forged/mismatched envelope, 403, and own-association load failure. | Client/worldlib contract tests. | Valid legacy content loads; forged or unauthorized content is rejected; writes are disabled when state is unknown. | Unit / Contract | Yes |
-| QC-007 | Logout, restore, subkey, follow, bridge-setting, and retained-domain recovery preserve the `dev` safety fixes. | Logout provisions credentials, partial settings overwrite good state, or recovery material is deleted before backup. | Exercise old/new follow keys, logged-out/v1 migration sessions, bridge load/save states, logout retention and recovery anchors. | Pure fork-policy tests, component-use/static anchors, and app/web build checks. | No automatic reenrollment after ordinary logout, no settings write before a valid load state, save failure rolls back, and destructive reset remains backup-gated. | Unit / Integration | Yes |
+| QC-007 | Logout, restore, subkey, follow, bridge-setting, and retained-domain recovery preserve the `dev` safety fixes. | Logout provisions credentials, partial settings overwrite good state, or recovery material is deleted without a confirmed backup. | Exercise old/new follow keys, logged-out/v1 migration sessions, bridge load/save states, logout retention, and native backup success/cancel/failure ordering. | Pure fork-policy tests, component-use/static anchors, and app/web build checks. | No automatic reenrollment after ordinary logout, no settings write before a valid load state, save failure rolls back, and destructive reset unlocks only after backup success. | Unit / Integration | Yes |
 | QC-008 | Upstream synchronization is a reviewable merge into production, never an implicit reset. | `main` is force-reset to upstream or deploys before fork gates. | Run the documented sync command/workflow. | Git ancestry, generated integration branch/PR, required status checks. | No force push; production changes only after reviewed gates. | Static / Runtime | Yes |
 | QC-009 | Production deploys exactly the tested `main` commit and rolls back on failed rollout or smoke test. | `/cc-info` differs from the target, broken assets become current, or failure loses the previous image. | Deploy a good commit and simulate build/rollout/smoke failure. | Deployer state, Kubernetes rollout, `/cc-info`, root page and referenced JS asset. | Exact SHA match; failure retains/restores previous image; retry backoff remains bounded at 10 minutes. | E2E / Runtime | Yes |
 | QC-010 | Fork-specific behavior is discoverable without reading commit history. | A maintainer cannot tell which deltas must survive an upstream update. | Open the repository documentation. | Fork inventory maps each behavior to code anchors, tests, source PR and upstream status. | Every retained customization has a stable ID and owner/status. | Static | Yes |
+| QC-011 | Upstream UI refreshes and CSS feature gaps do not create misdelivery or unusable controls. | An action refresh restores an excluded reply destination, or a popover becomes unreachable on a supported legacy WebKit target. | Edit inline reply destinations and refresh the same message; calculate placement with and without CSS Anchor Positioning, including offset visual viewports. | Reply-state transition tests, fallback-placement tests, component anchors, and both production builds. | Equal refresh preserves the edit; post change resets intentionally; fallback remains inside the visual viewport while supporting engines retain native anchors. | Unit / Static / Integration | Yes |
 
 ## Invariants and state transitions
 
@@ -80,6 +83,8 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 - INV-005: Legacy fallback never converts an authorization failure into a successful fetch.
 - INV-006: Unknown own-association state prevents mutation rather than risking duplicate reactions.
 - INV-007: A failed production build or rollout does not advance `deployed-sha` and keeps a recoverable previous image.
+- INV-008: A backup completion callback cannot run before the native save promise resolves successfully.
+- INV-009: Equivalent message refreshes do not mutate a dirty reply-destination selection.
 
 ## Risk-to-gate matrix
 
@@ -89,6 +94,8 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 | Mute privacy/schema regression | Privacy/data compatibility | request/policy fixture | client/worldlib contract test | Yes | independent verifier |
 | Legacy fallback accepts forged content | Security/data integrity | mismatched owner/signer fixture | client/worldlib negative test | Yes | independent verifier |
 | Session recovery overwrites or provisions unexpectedly | Account loss/lockout | old-state and partial-failure fixtures | integration test/manual recovery matrix | Yes | repository maintainer |
+| Backup cancel is treated as success | Irrecoverable account/key loss | deferred success and rejected-save fixture | fork policy test + app anchor review | Yes | independent verifier |
+| Upstream UI refresh or WebKit feature gap changes a user action | Misdelivery / unusable composer | state-transition and viewport-placement fixtures | web/UI fork tests + both builds | Yes | independent verifier |
 | Wrong commit deployed | Production regression | `/cc-info` exact SHA plus asset smoke | VPS deployer acceptance | No | deployer |
 | Upstream sync has unresolved semantic conflicts | Broad regression | diff classification and build failures | PR review + full build | No | repository maintainer |
 
@@ -102,13 +109,16 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 6. Given own-association retrieval failure, the implementation is wrong if favorite/reaction writes remain enabled.
 7. Given an upstream update that deletes a fork anchor, the implementation is wrong if the sync gate passes without an explicit inventory decision.
 8. Given a production rollout whose `/cc-info` is not the target SHA, the implementation is wrong if the deployer records success.
+9. Given an edited inline reply destination, an equivalent like/reaction refresh is wrong if it restores an excluded default destination.
+10. Given a WebKit engine without CSS Anchor Positioning, the implementation is wrong if the destination picker or a legacy caller renders outside the visual viewport.
+11. Given a cancelled or failed native key backup, the implementation is wrong if account deletion becomes enabled.
 
 ## Required evidence
 
 ### Before merge
 
 - [x] Static analysis: `git diff --check`, conflict-marker scan, fork inventory/anchor check, changed-file ESLint/Prettier.
-- [x] Unit: mute policy/persistence and legacy fallback/partial-load negative-path tests.
+- [x] Unit: mute policy/persistence, legacy fallback/partial-load, backup ordering, reply-state, and popover-placement negative-path tests.
 - [x] Integration: `pnpm --workspace-concurrency=1 --filter web... build` and app build; session/bridge recovery review.
 - [x] Contract: production deployer syntax/non-fast-forward/static validation.
 - [ ] Release bootstrap: reviewed deployer installed and checksum-verified before merge, or the existing timer is paused.
@@ -118,6 +128,7 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 
 - [ ] Runtime: VPS exact-SHA, root and referenced-asset smoke checks complete for the merged commit.
 - [ ] Manual behavior: an existing account can create and remove a mute in both supported clients, and a covered timeline post is hidden according to its placeholder policy.
+- [ ] Manual compatibility: the destination picker is usable on the oldest supported iOS WebView, edited web reply destinations survive a reaction refresh, and cancelling native backup leaves deletion disabled.
 
 ## Explicit non-guarantees
 

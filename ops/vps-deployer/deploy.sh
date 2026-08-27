@@ -220,6 +220,8 @@ spec:
               scripts/check-fork-contract.sh
               pnpm --filter @concrnt/client test
               pnpm --filter @concrnt/worldlib test:fork
+              pnpm --filter @concrnt/ui test:popover
+              pnpm --filter web test:fork
               pnpm --workspace-concurrency=1 --filter web... build
               test -s web/dist/index.html
           resources:
