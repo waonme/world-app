@@ -33,6 +33,7 @@ require_match() {
 require_file FORK.md
 require_file .github/workflows/upstream-status.yaml
 require_match "merge-base --is-ancestor upstream/main origin/main" .github/workflows/upstream-status.yaml
+require_match "merge-base --is-ancestor refs/remotes/upstream/main HEAD" .github/workflows/build-check.yaml
 for id in F-001 F-002 F-003 F-004 F-005 F-006; do
   require_match "$id" FORK.md
 done
@@ -92,10 +93,20 @@ require_match "recover_inflight_deployment" ops/vps-deployer/deploy.sh
 require_match "create_deployment_transaction" ops/vps-deployer/deploy.sh
 require_match "commit_deployment_success" ops/vps-deployer/deploy.sh
 require_match "require_mirror_origin_repository" ops/vps-deployer/deploy.sh
-require_match "TimeoutStopSec=4min" ops/vps-deployer/world-app-vps-deploy.service
+require_match "TimeoutStopSec=6min" ops/vps-deployer/world-app-vps-deploy.service
 require_match "TimeoutStartSec=60min" ops/vps-deployer/world-app-vps-deploy.service
+require_match "KillMode=control-group" ops/vps-deployer/world-app-vps-deploy.service
+require_match "wait_for_deployment_rollout" ops/vps-deployer/deploy-lib.sh
+require_match "timeout --signal=TERM --kill-after=10s 210s" ops/vps-deployer/deploy-lib.sh
+require_match '"resourceVersion": "$prepatch_resource_version"' ops/vps-deployer/deploy.sh
+require_match "world-app.waon.me/deploy-transaction" ops/vps-deployer/deploy.sh
+require_match "require_mirror_without_url_rewrites" ops/vps-deployer/deploy.sh
+require_match "run_isolated_git clone --mirror https://github.com/waonme/world-app.git" ops/vps-deployer/deploy.sh
 require_match "require_remote_repository origin waonme/world-app" scripts/prepare-upstream-sync.sh
 require_match "require_remote_repository upstream concrnt/world-app" scripts/prepare-upstream-sync.sh
+require_match "require_no_local_url_rewrites" scripts/prepare-upstream-sync.sh
+require_match "fetch_canonical_main origin https://github.com/waonme/world-app.git" scripts/prepare-upstream-sync.sh
+require_match "fetch_canonical_main upstream https://github.com/concrnt/world-app.git" scripts/prepare-upstream-sync.sh
 require_match 'git merge --no-ff "$upstream_sha"' scripts/prepare-upstream-sync.sh
 for path in .github/workflows/build-check.yaml ops/vps-deployer/deploy.sh; do
   require_match "ops/vps-deployer/test-deploy.sh" "$path"

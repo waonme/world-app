@@ -111,6 +111,12 @@ mirror_repository="$task_test_dir/mirror.git"
 git init -q --bare "$mirror_repository"
 git --git-dir="$mirror_repository" remote add origin git@github.com:waonme/world-app.git
 require_mirror_origin_repository "$mirror_repository" waonme/world-app
+require_mirror_without_url_rewrites "$mirror_repository"
+git --git-dir="$mirror_repository" config url.file:///tmp/lookalike.insteadOf https://github.com/waonme/world-app.git
+if require_mirror_without_url_rewrites "$mirror_repository" >/dev/null 2>&1; then
+  fail "deployment mirror URL rewrite rules must be rejected"
+fi
+git --git-dir="$mirror_repository" config --unset-all url.file:///tmp/lookalike.insteadOf
 git --git-dir="$mirror_repository" remote set-url origin https://github.com/concrnt/world-app.git
 if require_mirror_origin_repository "$mirror_repository" waonme/world-app >/dev/null 2>&1; then
   fail "deployment mirror pointing at upstream must be rejected"
@@ -118,6 +124,35 @@ fi
 if require_github_repository_url file:///tmp/world-app.git waonme/world-app test >/dev/null 2>&1; then
   fail "local deployment repository URLs must be rejected"
 fi
+
+isolated_git_bin="$task_test_dir/isolated-git-bin"
+isolated_git_log="$task_test_dir/isolated-git.log"
+mkdir -p "$isolated_git_bin"
+cat > "$isolated_git_bin/git" <<'FAKE_ISOLATED_GIT'
+#!/usr/bin/env bash
+[ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] || exit 11
+[ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] || exit 12
+[ "${GIT_TERMINAL_PROMPT:-}" = 0 ] || exit 13
+[ -z "${GIT_CONFIG_COUNT+x}" ] || exit 14
+[ -z "${GIT_CONFIG_PARAMETERS+x}" ] || exit 15
+[ "${1:-}" = -c ] && [ "${2:-}" = protocol.file.allow=never ] || exit 16
+printf '%s\n' "$*" > "$WORLD_APP_TEST_ISOLATED_GIT_LOG"
+FAKE_ISOLATED_GIT
+chmod +x "$isolated_git_bin/git"
+(
+  export WORLD_APP_TEST_ISOLATED_GIT_LOG="$isolated_git_log"
+  export GIT_CONFIG_NOSYSTEM=0
+  export GIT_CONFIG_GLOBAL="$task_test_dir/hostile-global.gitconfig"
+  export GIT_TERMINAL_PROMPT=1
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0=http.extraHeader
+  export GIT_CONFIG_VALUE_0='Authorization: hostile-command-config'
+  export GIT_CONFIG_PARAMETERS=hostile
+  export PATH="$isolated_git_bin:$PATH"
+  run_isolated_git fetch canonical-sentinel
+) || fail "deployment Git transport did not isolate hostile config sources"
+assert_equal "-c protocol.file.allow=never fetch canonical-sentinel" "$(cat "$isolated_git_log")" \
+  "deployment Git transport must retain only its explicit protocol policy"
 
 stale_worktrees="$task_test_dir/worktrees"
 stale_artifacts="$task_test_dir/artifacts"
@@ -135,7 +170,12 @@ grep -Fq "simulated cleanup failure" "$cleanup_marker_dir/cleanup-required" || f
 record_text_state "$cleanup_marker_dir/inflight" 'transaction.valid123/../../outside'
 capture_status transaction_directory_from_marker "$cleanup_marker_dir"
 assert_equal 2 "$captured_status" "an inflight marker containing path traversal must be rejected"
+mkdir -p "$cleanup_marker_dir/transaction.keep1234"
+capture_status cleanup_orphaned_transactions "$cleanup_marker_dir"
+[ "$captured_status" -ne 0 ] || fail "orphan cleanup accepted an invalid inflight marker"
+[ -d "$cleanup_marker_dir/transaction.keep1234" ] || fail "orphan cleanup removed state after an invalid inflight marker"
 rm -f "$cleanup_marker_dir/inflight"
+rm -rf -- "$cleanup_marker_dir/transaction.keep1234"
 
 # A marker-removal failure must not be hidden by a later successful directory
 # removal (functions called from `if !` do not inherit reliable errexit behavior).
@@ -263,7 +303,16 @@ case " $* " in
   *) exit 2 ;;
 esac
 FAKE_KUBERNETES
-  chmod +x "$kubernetes_bin/microk8s"
+  cat > "$kubernetes_bin/timeout" <<'FAKE_TIMEOUT'
+#!/usr/bin/env bash
+printf 'timeout %s\n' "$*" >> "$WORLD_APP_TEST_KUBE_LOG"
+[ "${1:-}" = --signal=TERM ] || exit 2
+[ "${2:-}" = --kill-after=10s ] || exit 2
+[ "${3:-}" = 210s ] || exit 2
+shift 3
+exec "$@"
+FAKE_TIMEOUT
+  chmod +x "$kubernetes_bin/microk8s" "$kubernetes_bin/timeout"
   export PATH="$kubernetes_bin:$task_original_path"
 
   original_deployment="$kubernetes_state/original.json"
@@ -312,35 +361,78 @@ EOF_DEPLOYMENT
   transaction_state="$task_test_dir/transaction-state"
   mkdir -p "$transaction_state"
   record_sha_state "$transaction_state/deployed-sha" "$sha_a"
-  create_deployment_transaction "$transaction_state" "$original_deployment" world-app "$sha_b" "$sha_a" >/dev/null
-  "$real_jq" --arg target "$sha_b" '
+  transaction_dir=$(create_deployment_transaction "$transaction_state" "$original_deployment" world-app "$sha_b" "$sha_a")
+  transaction_name=${transaction_dir##*/}
+  "$real_jq" --arg target "$sha_b" --arg transaction_name "$transaction_name" '
     .metadata.resourceVersion = "2" |
     .spec.strategy = {"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}} |
     .spec.template.metadata.annotations["world-app.waon.me/source-revision"] = $target |
+    .spec.template.metadata.annotations["world-app.waon.me/deploy-transaction"] = $transaction_name |
     (.spec.template.spec.containers[] | select(.name == "world-app")) |=
       (.image = ("localhost/world-app:" + $target) | .imagePullPolicy = "IfNotPresent" |
        .startupProbe.httpGet.path = "/new-start" | .readinessProbe.httpGet.path = "/new-ready" |
        .livenessProbe.httpGet.path = "/new-live")
   ' "$original_deployment" > "$kubernetes_state/deployment.json"
+  cp "$kubernetes_state/deployment.json" "$transaction_dir/postpatch-deployment.json"
   # Simulate TERM after the target state rename but before the old success flag.
   record_sha_state "$transaction_state/deployed-sha" "$sha_b"
   restore_deployment_transaction concrnt world-app world-app "$transaction_state" localhost/world-app
   assert_equal "$sha_a" "$(read_sha_state "$transaction_state/deployed-sha")" "rollback must atomically restore the previous SHA"
   [ ! -e "$transaction_state/inflight" ] || fail "successful rollback must clear its journal"
-  diff -u \
-    <("$real_jq" -S '{strategy:.spec.strategy,template:.spec.template}' "$original_deployment") \
-    <("$real_jq" -S '{strategy:.spec.strategy,template:.spec.template}' "$kubernetes_state/deployment.json") >/dev/null ||
-    fail "rollback did not restore the complete strategy and pod template"
+  deployment_desired_state_matches "$original_deployment" "$kubernetes_state/deployment.json" ||
+    fail "rollback did not restore the complete Deployment desired state"
   "$real_jq" -e '
+    .metadata.labels.preserve == "label" and
+    .metadata.annotations.preserve == "deployment-annotation" and
+    .spec.replicas == 2 and
+    .spec.selector.matchLabels.app == "world-app" and
     .spec.strategy.type == "Recreate" and
     .spec.template.metadata.annotations["world-app.waon.me/source-revision"] == "old-revision" and
     (.spec.template.spec.containers[] | select(.name == "world-app") |
       .imagePullPolicy == "Always" and .startupProbe.httpGet.path == "/old-start" and
       .readinessProbe.httpGet.path == "/old-ready" and .livenessProbe.httpGet.path == "/old-live") and
     ([.spec.template.spec.containers[] | select(.name == "sidecar")] | length == 1)
-  ' "$kubernetes_state/deployment.json" >/dev/null || fail "rollback lost strategy, annotation, probe, pull-policy, or sidecar state"
+  ' "$kubernetes_state/deployment.json" >/dev/null || fail "rollback lost metadata, replicas, selector, strategy, annotation, probe, pull-policy, or sidecar state"
   grep -Fq "replace -f" "$WORLD_APP_TEST_KUBE_LOG" || fail "rollback did not use full Deployment replacement"
   grep -Fq "rollout status" "$WORLD_APP_TEST_KUBE_LOG" || fail "rollback did not wait for rollout"
+  grep -Fq "timeout --signal=TERM --kill-after=10s 210s microk8s kubectl -n concrnt rollout status deployment/world-app --timeout=180s" \
+    "$WORLD_APP_TEST_KUBE_LOG" || fail "rollback rollout must have a process-group hard timeout"
+
+  # A config-only external update after our patch must block automatic rollback
+  # instead of being overwritten by the saved snapshot.
+  cp "$original_deployment" "$kubernetes_state/deployment.json"
+  transaction_dir=$(create_deployment_transaction "$transaction_state" "$original_deployment" world-app "$sha_b" "$sha_a")
+  transaction_name=${transaction_dir##*/}
+  "$real_jq" --arg target "$sha_b" --arg transaction_name "$transaction_name" '
+    .metadata.resourceVersion = "20" |
+    .spec.template.metadata.annotations["world-app.waon.me/deploy-transaction"] = $transaction_name |
+    (.spec.template.spec.containers[] | select(.name == "world-app")).image = ("localhost/world-app:" + $target)
+  ' "$original_deployment" > "$transaction_dir/postpatch-deployment.json"
+  "$real_jq" '.spec.replicas = 7 | .metadata.resourceVersion = "21"' \
+    "$transaction_dir/postpatch-deployment.json" > "$kubernetes_state/deployment.json"
+  : > "$WORLD_APP_TEST_KUBE_LOG"
+  capture_status restore_deployment_transaction concrnt world-app world-app "$transaction_state" localhost/world-app
+  [ "$captured_status" -ne 0 ] || fail "rollback overwrote an external postpatch Deployment change"
+  [ -f "$transaction_state/inflight" ] || fail "an ambiguous postpatch Deployment must retain its journal"
+  if grep -Fq "replace -f" "$WORLD_APP_TEST_KUBE_LOG"; then
+    fail "ambiguous postpatch Deployment state reached kubectl replace"
+  fi
+  clear_deployment_transaction "$transaction_state"
+
+  # A config-only update between the prepatch GET and conditional PATCH is also
+  # outside the transaction and must not be reverted automatically.
+  cp "$original_deployment" "$kubernetes_state/deployment.json"
+  create_deployment_transaction "$transaction_state" "$original_deployment" world-app "$sha_b" "$sha_a" >/dev/null
+  "$real_jq" '.metadata.resourceVersion = "30" | .metadata.labels.external = "preserve-me"' \
+    "$original_deployment" > "$kubernetes_state/deployment.json"
+  : > "$WORLD_APP_TEST_KUBE_LOG"
+  capture_status restore_deployment_transaction concrnt world-app world-app "$transaction_state" localhost/world-app
+  [ "$captured_status" -ne 0 ] || fail "rollback overwrote a prepatch external Deployment change"
+  [ -f "$transaction_state/inflight" ] || fail "an ambiguous prepatch Deployment must retain its journal"
+  if grep -Fq "replace -f" "$WORLD_APP_TEST_KUBE_LOG"; then
+    fail "ambiguous prepatch Deployment state reached kubectl replace"
+  fi
+  clear_deployment_transaction "$transaction_state"
 
   # A failed rollback remains journaled and can be retried idempotently.
   cp "$original_deployment" "$kubernetes_state/deployment.json"
@@ -455,8 +547,14 @@ assert_equal 1 "$captured_status" "EXIT rollback should preserve the original fa
 assert_equal $'rollback\ncleanup' "$(cat "$exit_state/actions")" "EXIT rollback must finish rollback before cleanup"
 assert_equal "$sha_b" "$(read_sha_state "$exit_state/last-failed-sha")" "EXIT rollback must record the failed target"
 
-grep -Fq 'TimeoutStopSec=4min' "$service_unit" || fail "systemd must allow more than 180 seconds for rollback"
+grep -Fq 'TimeoutStopSec=6min' "$service_unit" || fail "systemd must allow bounded API calls plus the 180 second rollback"
 grep -Fq 'TimeoutStartSec=60min' "$service_unit" || fail "systemd must cover both build Jobs, rollout, and smoke verification"
-grep -Fq 'KillMode=mixed' "$service_unit" || fail "systemd must TERM only the main deployer before final SIGKILL"
+grep -Fq 'KillMode=control-group' "$service_unit" || fail "systemd must interrupt the active child so the deployer TERM trap runs promptly"
+grep -Fq 'wait_for_deployment_rollout "$production_namespace" "$deployment_name"' "$deploy_script" || fail "forward rollout must use the hard-bounded helper"
+grep -Fq 'timeout --signal=TERM --kill-after=10s 210s' "$deploy_library" || fail "rollout helper must hard-bound the complete kubectl process group"
+grep -Fq 'run_isolated_git clone --mirror https://github.com/waonme/world-app.git' "$deploy_script" || fail "mirror clone must use isolated canonical Git transport"
+grep -Fq 'run_isolated_git --git-dir="$repo_dir" fetch' "$deploy_script" || fail "mirror fetch must use isolated canonical Git transport"
+grep -Fq '"resourceVersion": "$prepatch_resource_version"' "$deploy_script" || fail "Deployment patch must be conditional on the prepatch resourceVersion"
+grep -Fq 'world-app.waon.me/deploy-transaction' "$deploy_script" || fail "Deployment patch must carry its transaction identity"
 
 echo "deployer safety tests passed"

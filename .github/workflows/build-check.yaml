@@ -21,7 +21,16 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
               with:
+                  fetch-depth: 0
                   persist-credentials: false
+
+            - name: Verify current upstream is included
+              run: |
+                  git fetch --no-tags https://github.com/concrnt/world-app.git +refs/heads/main:refs/remotes/upstream/main
+                  if ! git merge-base --is-ancestor refs/remotes/upstream/main HEAD; then
+                    echo "PR head is missing the current concrnt/world-app main." >&2
+                    exit 1
+                  fi
 
             - name: Setup pnpm
               uses: pnpm/action-setup@v4

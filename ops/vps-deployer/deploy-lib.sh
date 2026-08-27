@@ -43,6 +43,18 @@ wait_for_job() {
   return 124
 }
 
+wait_for_deployment_rollout() {
+  local rollout_namespace=$1
+  local rollout_deployment=$2
+
+  # kubectl's rollout timeout does not necessarily bound the initial API
+  # request. GNU timeout provides a process-group deadline for the complete
+  # command, including connection setup and any child processes.
+  timeout --signal=TERM --kill-after=10s 210s \
+    microk8s kubectl -n "$rollout_namespace" rollout status \
+      "deployment/$rollout_deployment" --timeout=180s
+}
+
 deployment_requires_rollback() {
   local deployment_was_mutated=$1
   local deployment_was_successful=$2
@@ -93,11 +105,35 @@ require_mirror_origin_repository() {
   local expected_repository=$2
   local origin_url
 
-  if ! origin_url=$(git --git-dir="$repository_git_dir" config --get remote.origin.url 2>/dev/null); then
+  if ! origin_url=$(git --git-dir="$repository_git_dir" config --local --get remote.origin.url 2>/dev/null); then
     echo "deployment mirror origin is missing" >&2
     return 1
   fi
   require_github_repository_url "$origin_url" "$expected_repository" "deployment mirror origin"
+}
+
+require_mirror_without_url_rewrites() {
+  local repository_git_dir=$1
+  local rewrite_config
+  local config_status
+
+  if rewrite_config=$(git --git-dir="$repository_git_dir" config --local --get-regexp '^url\..*\.(insteadof|pushinsteadof)$' 2>/dev/null); then
+    echo "deployment mirror contains forbidden Git URL rewrite rules:" >&2
+    printf '%s\n' "$rewrite_config" >&2
+    return 1
+  else
+    config_status=$?
+  fi
+  if [ "$config_status" -ne 1 ]; then
+    echo "failed to inspect deployment mirror URL rewrite rules" >&2
+    return 1
+  fi
+}
+
+run_isolated_git() {
+  env -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
+    git -c protocol.file.allow=never "$@"
 }
 
 require_fast_forward_update() {
@@ -420,7 +456,9 @@ cleanup_orphaned_transactions() {
   local active_transaction=""
   local candidate
 
-  active_transaction=$(transaction_directory_from_marker "$state_dir" 2>/dev/null || true)
+  if [ -f "$state_dir/inflight" ]; then
+    active_transaction=$(transaction_directory_from_marker "$state_dir") || return
+  fi
   for candidate in "$state_dir"/transaction.*; do
     [ -d "$candidate" ] || continue
     if [ "$candidate" = "$active_transaction" ]; then
@@ -442,6 +480,60 @@ deployment_container_image() {
   ' "$deployment_json"
 }
 
+deployment_desired_state() {
+  local deployment_json=$1
+  jq -S '
+    {
+      metadata: {
+        labels: (.metadata.labels // {}),
+        annotations: ((.metadata.annotations // {}) | del(."deployment.kubernetes.io/revision")),
+        finalizers: (.metadata.finalizers // []),
+        ownerReferences: (.metadata.ownerReferences // [])
+      },
+      spec: .spec
+    }
+  ' "$deployment_json"
+}
+
+deployment_desired_state_matches() {
+  local expected_json=$1
+  local actual_json=$2
+  local expected_state
+  local actual_state
+
+  expected_state=$(deployment_desired_state "$expected_json") || return 1
+  actual_state=$(deployment_desired_state "$actual_json") || return 1
+  [ "$expected_state" = "$actual_state" ]
+}
+
+validate_transaction_postpatch() {
+  local transaction_dir=$1
+  local snapshot_uid=$2
+  local container_name=$3
+  local image_repository=$4
+  local target_sha=$5
+  local transaction_name=${transaction_dir##*/}
+  local postpatch_json="$transaction_dir/postpatch-deployment.json"
+
+  [ -s "$postpatch_json" ] || {
+    echo "transaction postpatch Deployment is missing" >&2
+    return 1
+  }
+  if ! jq -e \
+    --arg snapshot_uid "$snapshot_uid" \
+    --arg container_name "$container_name" \
+    --arg target_image "$image_repository:$target_sha" \
+    --arg transaction_name "$transaction_name" '
+      .metadata.uid == $snapshot_uid and
+      .spec.template.metadata.annotations["world-app.waon.me/deploy-transaction"] == $transaction_name and
+      ([.spec.template.spec.containers[] |
+        select(.name == $container_name and .image == $target_image)] | length == 1)
+    ' "$postpatch_json" >/dev/null; then
+    echo "transaction postpatch Deployment is invalid" >&2
+    return 1
+  fi
+}
+
 restore_deployment_transaction() {
   local production_namespace=$1
   local deployment_name=$2
@@ -459,6 +551,8 @@ restore_deployment_transaction() {
   local current_resource_version
   local current_image
   local original_image
+  local current_matches_original=false
+  local current_matches_postpatch=false
 
   transaction_dir=$(transaction_directory_from_marker "$state_dir") || return 1
   [ -f "$transaction_dir/deployment.json" ] || return 1
@@ -471,7 +565,7 @@ restore_deployment_transaction() {
   replacement_json=$(mktemp "$transaction_dir/replacement.XXXXXXXX")
   verified_json=$(mktemp "$transaction_dir/verified.XXXXXXXX")
 
-  if ! microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o json > "$current_json"; then
+  if ! microk8s kubectl --request-timeout=20s -n "$production_namespace" get deployment "$deployment_name" -o json > "$current_json"; then
     return 1
   fi
   snapshot_uid=$(jq -er '.metadata.uid' "$transaction_dir/deployment.json") || return 1
@@ -482,37 +576,47 @@ restore_deployment_transaction() {
   fi
   current_image=$(deployment_container_image "$current_json" "$container_name") || return 1
   original_image=$(deployment_container_image "$transaction_dir/deployment.json" "$container_name") || return 1
-  case "$current_image" in
-    "$original_image" | "$image_repository:$target_sha") ;;
-    *)
-      echo "refusing rollback because current image is outside this transaction: $current_image" >&2
+  if [ "$current_image" = "$original_image" ] &&
+    deployment_desired_state_matches "$transaction_dir/deployment.json" "$current_json"; then
+    current_matches_original=true
+  elif [ "$current_image" = "$image_repository:$target_sha" ]; then
+    validate_transaction_postpatch "$transaction_dir" "$snapshot_uid" "$container_name" "$image_repository" "$target_sha" || return 1
+    if ! deployment_desired_state_matches "$transaction_dir/postpatch-deployment.json" "$current_json"; then
+      echo "refusing rollback because Deployment desired state changed after this transaction patch" >&2
       return 1
-      ;;
-  esac
-  current_resource_version=$(jq -er '.metadata.resourceVersion' "$current_json") || return 1
-  if ! jq --arg resource_version "$current_resource_version" '.metadata.resourceVersion = $resource_version' \
-    "$transaction_dir/restore-template.json" > "$replacement_json"; then
+    fi
+    current_matches_postpatch=true
+  else
+    echo "refusing rollback because current Deployment state is outside this transaction" >&2
     return 1
   fi
-  if ! microk8s kubectl -n "$production_namespace" replace -f "$replacement_json"; then
-    echo "failed to restore the previous Deployment object" >&2
-    return 1
+
+  if [ "$current_matches_postpatch" = true ]; then
+    current_resource_version=$(jq -er '.metadata.resourceVersion' "$current_json") || return 1
+    if ! jq --arg resource_version "$current_resource_version" '.metadata.resourceVersion = $resource_version' \
+      "$transaction_dir/restore-template.json" > "$replacement_json"; then
+      return 1
+    fi
+    if ! microk8s kubectl --request-timeout=20s -n "$production_namespace" replace -f "$replacement_json"; then
+      echo "failed to restore the previous Deployment object" >&2
+      return 1
+    fi
+  elif [ "$current_matches_original" = true ]; then
+    echo "Deployment already matches the saved prepatch state; restoring transaction metadata only" >&2
   fi
   if ! restore_sha_state "$state_dir/deployed-sha" "$previous_sha"; then
     echo "failed to restore previous deployed-sha state" >&2
     return 1
   fi
-  if ! microk8s kubectl -n "$production_namespace" rollout status "deployment/$deployment_name" --timeout=180s; then
+  if ! wait_for_deployment_rollout "$production_namespace" "$deployment_name"; then
     echo "rollback rollout did not complete" >&2
     return 1
   fi
-  if ! microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o json > "$verified_json"; then
+  if ! microk8s kubectl --request-timeout=20s -n "$production_namespace" get deployment "$deployment_name" -o json > "$verified_json"; then
     return 1
   fi
-  if ! diff -u \
-    <(jq -S '{strategy: .spec.strategy, template: .spec.template}' "$transaction_dir/deployment.json") \
-    <(jq -S '{strategy: .spec.strategy, template: .spec.template}' "$verified_json") >/dev/null; then
-    echo "restored Deployment strategy/template differs from the saved snapshot" >&2
+  if ! deployment_desired_state_matches "$transaction_dir/deployment.json" "$verified_json"; then
+    echo "restored Deployment desired state differs from the saved snapshot" >&2
     return 1
   fi
   clear_deployment_transaction "$state_dir"
@@ -545,7 +649,7 @@ recover_inflight_deployment() {
     deployed_sha=$(read_sha_state "$state_dir/deployed-sha") || return 1
   fi
   current_json=$(mktemp "$transaction_dir/recovery-current.XXXXXXXX")
-  if ! microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o json > "$current_json"; then
+  if ! microk8s kubectl --request-timeout=20s -n "$production_namespace" get deployment "$deployment_name" -o json > "$current_json"; then
     return 1
   fi
   current_image=$(deployment_container_image "$current_json" "$container_name") || return 1

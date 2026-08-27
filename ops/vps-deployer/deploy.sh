@@ -30,6 +30,11 @@ mkdir -p "$worktrees_dir" "$artifacts_dir" "$cache_dir/corepack" "$cache_dir/pnp
 # shellcheck source=deploy-lib.sh
 source "$script_dir/deploy-lib.sh"
 
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "GNU coreutils timeout is required for bounded Kubernetes rollout checks" >&2
+  exit 1
+fi
+
 exec 9>"$state_dir/deploy.lock"
 if ! flock -n 9; then
   echo "another world-app deployment is already running"
@@ -117,12 +122,12 @@ if [ ! -d "$repo_dir" ]; then
     esac
   done
   mirror_clone_dir=$(mktemp -d "$base_dir/.repository.git.clone.XXXXXXXX")
-  if ! GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
-    git -c protocol.file.allow=never clone --mirror "$repository_url" "$mirror_clone_dir"; then
+  if ! run_isolated_git clone --mirror https://github.com/waonme/world-app.git "$mirror_clone_dir"; then
     rm -rf -- "$mirror_clone_dir"
     exit 1
   fi
   require_mirror_origin_repository "$mirror_clone_dir" waonme/world-app
+  require_mirror_without_url_rewrites "$mirror_clone_dir"
   mv "$mirror_clone_dir" "$repo_dir"
 fi
 
@@ -131,6 +136,7 @@ if [ "$(git --git-dir="$repo_dir" rev-parse --is-bare-repository 2>/dev/null || 
   exit 1
 fi
 require_mirror_origin_repository "$repo_dir" waonme/world-app
+require_mirror_without_url_rewrites "$repo_dir"
 
 # Resolve any transaction left by TERM, SIGKILL, or power loss before starting
 # another build. A committed state is retained; an uncommitted state is fully
@@ -157,8 +163,9 @@ if [ "$startup_cleanup_failed" = false ]; then
   rm -f -- "$state_dir/cleanup-required"
 fi
 
-GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
-  git -c protocol.file.allow=never --git-dir="$repo_dir" fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
+require_mirror_without_url_rewrites "$repo_dir"
+run_isolated_git --git-dir="$repo_dir" fetch --no-tags --prune \
+    https://github.com/waonme/world-app.git '+refs/heads/main:refs/remotes/origin/main'
 target_sha=$(git --git-dir="$repo_dir" rev-parse 'refs/remotes/origin/main^{commit}')
 if [[ ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "refusing invalid target commit: $target_sha" >&2
@@ -166,7 +173,10 @@ if [[ ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 current_image=$(microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o "jsonpath={.spec.template.spec.containers[?(@.name=='$container_name')].image}")
-recorded_deployed_sha=$(test -f "$state_dir/deployed-sha" && tr -d '\n' < "$state_dir/deployed-sha" || true)
+recorded_deployed_sha=""
+if [ -f "$state_dir/deployed-sha" ]; then
+  recorded_deployed_sha=$(read_sha_state "$state_dir/deployed-sha") || exit 1
+fi
 if ! deployed_sha=$(resolve_deployed_sha "$recorded_deployed_sha" "$current_image" "$image_repository" "${WORLD_APP_ALLOW_INITIAL_BOOTSTRAP:-0}"); then
   exit 1
 fi
@@ -480,8 +490,10 @@ microk8s ctr images ls -q | grep -Fx "$expected_image"
 # minutes; never roll back to a stale pre-build image/spec if an operator changed
 # production while it was building.
 prepatch_snapshot="$attempt_dir/prepatch-deployment.json"
-microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o json > "$prepatch_snapshot"
+microk8s kubectl --request-timeout=20s -n "$production_namespace" get deployment "$deployment_name" -o json > "$prepatch_snapshot"
 prepatch_image=$(deployment_container_image "$prepatch_snapshot" "$container_name")
+prepatch_resource_version=$(jq -er '.metadata.resourceVersion' "$prepatch_snapshot")
+prepatch_uid=$(jq -er '.metadata.uid' "$prepatch_snapshot")
 prepatch_recorded_sha=""
 if [ -f "$state_dir/deployed-sha" ]; then
   prepatch_recorded_sha=$(read_sha_state "$state_dir/deployed-sha")
@@ -497,13 +509,17 @@ if [ -z "$deployed_sha" ] && [ "$prepatch_image" != "$current_image" ]; then
   echo "bootstrap source image changed during the build; refusing stale rollout" >&2
   exit 1
 fi
-create_deployment_transaction "$state_dir" "$prepatch_snapshot" "$container_name" "$target_sha" "$prepatch_deployed_sha" >/dev/null
+transaction_dir=$(create_deployment_transaction "$state_dir" "$prepatch_snapshot" "$container_name" "$target_sha" "$prepatch_deployed_sha")
+transaction_name=${transaction_dir##*/}
 
 # Mark the Deployment as potentially changed before patching. From this point,
 # every non-successful exit is routed through finish_deployment and rollback_once.
 deployment_mutated=true
-microk8s kubectl -n "$production_namespace" patch deployment "$deployment_name" --type=strategic -p "$(cat <<JSON
+microk8s kubectl --request-timeout=30s -n "$production_namespace" patch deployment "$deployment_name" --type=strategic -o json -p "$(cat <<JSON
 {
+  "metadata": {
+    "resourceVersion": "$prepatch_resource_version"
+  },
   "spec": {
     "strategy": {
       "type": "RollingUpdate",
@@ -511,7 +527,10 @@ microk8s kubectl -n "$production_namespace" patch deployment "$deployment_name" 
     },
     "template": {
       "metadata": {
-        "annotations": {"world-app.waon.me/source-revision": "$target_sha"}
+        "annotations": {
+          "world-app.waon.me/source-revision": "$target_sha",
+          "world-app.waon.me/deploy-transaction": "$transaction_name"
+        }
       },
       "spec": {
         "containers": [{
@@ -543,9 +562,10 @@ microk8s kubectl -n "$production_namespace" patch deployment "$deployment_name" 
   }
 }
 JSON
-)"
+)" > "$transaction_dir/postpatch-deployment.json"
+validate_transaction_postpatch "$transaction_dir" "$prepatch_uid" "$container_name" "$image_repository" "$target_sha"
 
-if ! microk8s kubectl -n "$production_namespace" rollout status "deployment/$deployment_name" --timeout=180s; then
+if ! wait_for_deployment_rollout "$production_namespace" "$deployment_name"; then
   exit 1
 fi
 
