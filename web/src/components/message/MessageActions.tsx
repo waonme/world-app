@@ -48,8 +48,10 @@ export const MessageActions = (props: Props) => {
     const emojiPicker = useEmojiPicker()
     const qt = useQueryTimelineContext()
     const menuAnchor = useAnchor()
+    const reactionAnchor = useAnchor()
     const isMobile = useIsMobile()
     const [linkCopied, setLinkCopied] = useState(false)
+    const [sourceCopied, setSourceCopied] = useState(false)
 
     // シェア用URLはデプロイ先ホストに関わらずconcrnt.world固定(OGP対応がconcrnt.worldのみのため)
     const shareURL = 'https://concrnt.world/post/' + encodeURIComponent(props.message.uri)
@@ -75,11 +77,11 @@ export const MessageActions = (props: Props) => {
             // 再レンダリングがuse()する両方を再取得してtransition内で解決させる
             const rerouteHref = props.rerouted.key ?? props.rerouted.uri
             qt.update(rerouteHref)
-            await client?.getMessage(props.message.uri).catch(() => null)
-            await client?.getMessage(rerouteHref).catch(() => null)
+            await client?.getMessage(props.message.uri, props.message.hint).catch(() => null)
+            await client?.getMessage(rerouteHref, props.rerouted.hint).catch(() => null)
         } else {
             qt.update(messageHref)
-            await client?.getMessage(messageHref).catch(() => null)
+            await client?.getMessage(messageHref, props.message.hint).catch(() => null)
         }
     }
 
@@ -216,9 +218,9 @@ export const MessageActions = (props: Props) => {
                         })
 
                         emojiPicker.close()
-                    })
+                    }, reactionAnchor)
                 }}
-                style={{ display: 'flex', alignItems: 'center' }}
+                style={{ display: 'flex', alignItems: 'center', anchorName: reactionAnchor } as React.CSSProperties}
             >
                 <MdAddReaction size={20} />
             </Button>
@@ -270,6 +272,21 @@ export const MessageActions = (props: Props) => {
                             <Text>{linkCopied ? t('linkCopied') : t('copyLink')}</Text>
                         </ListItem>
                     ),
+                    <ListItem
+                        key="copySource"
+                        onClick={() => {
+                            if (props.message.value.body) {
+                                navigator.clipboard?.writeText(props.message.value.body)
+                            }
+                            setSourceCopied(true)
+                            setTimeout(() => {
+                                setSourceCopied(false)
+                                setMenuOpen(false)
+                            }, 800)
+                        }}
+                    >
+                        <Text>{sourceCopied ? t('linkCopied') : t('copySource')}</Text>
+                    </ListItem>,
                     <ListItem key="delete" onClick={() => setDeleteConfirmOpen(true)}>
                         <Text>{t('deletePost')}</Text>
                     </ListItem>,

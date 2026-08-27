@@ -581,7 +581,8 @@
             "inspector": "Inspector",
             "share": "Share",
             "copyLink": "Copy link",
-            "linkCopied": "Copied"
+            "linkCopied": "Copied",
+            "copySource": "Copy source"
         },
         "muteNotice": {
             "mutedByUser": "Post from a muted user",
@@ -770,6 +771,11 @@
             "postProfile": "Posting profile",
             "addDestination": "Add destination"
         },
+        "serverChip": {
+            "codeOfConduct": "Code of Conduct",
+            "cocNotAvailable": "Code of Conduct is not available.",
+            "termsOfService": "Terms of Service"
+        },
         "timelineSettings": {
             "schema": "Schema",
             "attributes": "Attributes",
@@ -777,7 +783,10 @@
             "copyLink": "Copy link",
             "linkCopied": "Copied",
             "muteTimeline": "Mute this timeline",
-            "unmuteTimeline": "Unmute"
+            "unmuteTimeline": "Unmute",
+            "deleteTimeline": "Delete Community",
+            "confirmDeleteTimeline": "Really delete this community?",
+            "confirmDeleteTimelineDescription": "This action cannot be undone."
         },
         "policyEditor": {
             "modeEditor": "Policy Editor",
@@ -957,6 +966,7 @@
         },
         "qrSetup": {
             "scanWithApp": "Scan the QR code with the Concrnt app",
+            "scanWithAppHint": "You can find the scanner in the app under Settings > ID Management",
             "usePasskeyTitle": "Use a passkey?",
             "usePasskeyDescription": "Passkeys are recommended, but may not be available on some devices or browsers.",
             "no": "No",

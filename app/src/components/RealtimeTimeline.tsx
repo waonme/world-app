@@ -153,16 +153,18 @@ export const RealtimeTimeline = (props: Props) => {
                 if (!existing.haltUpdate) return
                 if (!item.href) return
 
-                client.getMessage(item.href).then(async (msg) => {
-                    if (!msg) return
-                    if (await isMutedMessageRef.current(msg)) return
-                    const icon = msg.authorProfile?.avatar
-                    if (!icon) return
-                    setNewArrivals((prev) => {
-                        if (prev.find((e) => e.src === icon)) return prev
-                        return [{ id: item.href!, author: msg.author, src: icon }, ...prev]
+                client
+                    .getMessage(item.href, item.source ? new URL(item.source).hostname : undefined)
+                    .then(async (msg) => {
+                        if (!msg) return
+                        if (await isMutedMessageRef.current(msg)) return
+                        const icon = msg.authorProfile?.avatar
+                        if (!icon) return
+                        setNewArrivals((prev) => {
+                            if (prev.find((e) => e.src === icon)) return prev
+                            return [{ id: item.href!, author: msg.author, src: icon }, ...prev]
+                        })
                     })
-                })
             }
             existing.resume()
             return () => {
@@ -194,18 +196,20 @@ export const RealtimeTimeline = (props: Props) => {
                         if (!t.haltUpdate) return
                         if (!item.href) return
 
-                        client.getMessage(item.href).then(async (msg) => {
-                            if (isCancelled) return
-                            if (!msg) return
-                            if (await isMutedMessageRef.current(msg)) return
-                            if (isCancelled) return
-                            const icon = msg.authorProfile?.avatar
-                            if (!icon) return
-                            setNewArrivals((prev) => {
-                                if (prev.find((e) => e.src === icon)) return prev
-                                return [{ id: item.href!, author: msg.author, src: icon }, ...prev]
+                        client
+                            .getMessage(item.href, item.source ? new URL(item.source).hostname : undefined)
+                            .then(async (msg) => {
+                                if (isCancelled) return
+                                if (!msg) return
+                                if (await isMutedMessageRef.current(msg)) return
+                                if (isCancelled) return
+                                const icon = msg.authorProfile?.avatar
+                                if (!icon) return
+                                setNewArrivals((prev) => {
+                                    if (prev.find((e) => e.src === icon)) return prev
+                                    return [{ id: item.href!, author: msg.author, src: icon }, ...prev]
+                                })
                             })
-                        })
                     }
 
                     reader.current = t
