@@ -1,10 +1,10 @@
 # Quality Contract: upstream-friendly production fork
 
 - Contract ID: `world-app-upstream-friendly-fork-20260827`
-- Status: READY WITH DECISIONS
+- Status: IMPLEMENTED / PRE-MERGE GATE
 - Risk tier: High
 - Source specification: user direction on 2026-08-27; [mute PR #2](https://github.com/waonme/world-app/pull/2); fork PRs #3-#15; production incident where the VPS moved from `dev` behavior to a `main` build without fork features
-- Approved revision: pending final integration commit
+- Approved revision: integration branch based on production `85e58db`, frozen upstream cut `35a8f90`; final PR head is recorded by the review PR
 - Approved by: repository owner direction; final diff approval pending
 - Change boundary: branch policy, upstream integration workflow, production deployment contract, fork-specific web/app/client/worldlib behavior, regression tests and documentation
 
@@ -39,9 +39,9 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 
 - `main` is polled and deployed by `ops/vps-deployer`; `/cc-info` reports the deployed main commit.
 - The previous fork feature line is `origin/dev`; mute was merged there by PR #2 and never existed on the pre-sync `main`.
-- Current upstream is an ancestor of the production `main`, so upstream is not presently missing from `main`.
+- The integration branch contains the frozen upstream cut `35a8f90`; production `main` remains at `85e58db` until the reviewed PR is merged.
 - `origin/dev` contains additional mute, ActivityPub, legacy-v1, theme/style, and session/bridge changes, but its historical tests were not all retained through earlier upstream integrations.
-- The current production deployment lacks the mute implementation.
+- The current production deployment at `85e58db` lacks the mute implementation.
 
 ### Assumptions
 
@@ -52,19 +52,21 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 ### Human decisions
 
 - [ ] After behavior is restored and verified, decide whether the old `dev` and merged feature branches should be archived or kept as historical references.
-- [ ] Before merge, review any style customization classified as obsolete rather than automatically retaining it.
+- [x] Use current upstream styling instead of reapplying obsolete PR #3/#4 implementation details.
+- [ ] Enable a GitHub `main` ruleset requiring PRs and the `build-check` job after this workflow exists on the default branch.
+- [ ] Before merging this PR, install and verify its deployer script on the VPS (or pause the old timer) so the release that introduces the gate is protected by it.
 
 ## Quality clauses
 
 | ID | Guarantee | Forbidden outcome | Precondition / stimulus | Oracle / observable | Expected result / tolerance | Test layer | Blocking |
 |---|---|---|---|---|---|---|---|
 | QC-001 | Production contains the documented fork delta on top of current upstream. | Updating upstream silently removes a documented customization. | Compare integration head with both `upstream/main` and the frozen fork inventory. | Upstream is an ancestor; inventory anchors and behavior tests pass. | Behind count is 0 at integration time and every retained customization has evidence. | Static / Integration | Yes |
-| QC-002 | User, word, and timeline mute support expiry, home/global scope, reroutes-only mode, placeholder policy, notification filtering, and unread-badge filtering. | Muted content leaks through a covered surface or unrelated content is hidden. | Load active, expired, malformed, scoped, and overlapping mute entries, including reroutes and associations. | Pure mute-policy tests plus web/app integration assertions. | Deterministic priority `block > user > word > timeline`; expired entries never match. | Unit / Integration | Yes |
+| QC-002 | User, word, and timeline mute support expiry, saved-entry home/global scope and placeholder policy, reroutes-only mode, normal-notification rendering, actor filtering for aggregated notifications, and envelope/target filtering for timeline new arrivals. | Muted content leaks through a documented covered surface or unrelated content is hidden. | Load active, expired, malformed, scoped, and overlapping mute entries, including outer/target association combinations. | Pure mute-policy/combination tests plus app/web type/build and anchor checks. | Deterministic priority `block > user > word > timeline`; any matched block/hard-hide boundary remains unrevealable; expired entries never match when evaluated. | Unit / Integration | Yes |
 | QC-003 | Mute records remain private and existing records remain usable. | A mute list is public, rewritten under an incompatible key, or lost during migration. | Read and update existing per-item KV mute records. | Client request URI, schema and policy assertions; compatibility fixture. | Same key namespace and private policy; re-mute updates the deterministic entry. | Unit / Contract | Yes |
-| QC-004 | Blocked-user posts are completely hidden when block filtering is enabled. | A blocked post renders its body or a revealable placeholder. | Timeline contains a blocked author. | Render/filter integration result. | No visible post or placeholder; disabling block filtering restores normal handling. | Integration | Yes |
-| QC-005 | ActivityPub actor identity, media rendering, retry/deduplication, and object-specific cache semantics remain intact. | Bridge identity replaces the remote actor, valid media disappears, private/access failures are bypassed, or a transient 404 is permanently cached. | Resolve remote actors/notes across success, transient 404, missing blurhash, and concurrent duplicate requests. | Restored ActivityPub unit tests and component build/type checks. | Remote profile override wins for display; one in-flight resolve per URL; documented cache/retry bounds hold. | Unit / Integration | Yes |
+| QC-004 | Blocked-user posts are completely hidden when block filtering is enabled. | A blocked post renders its body or a revealable placeholder. | Timeline contains a blocked author, including as an association target behind another mute. | Combined policy tests, both `MessageContainer` anchors, and app/web build checks. | A block or hard-hide match at either boundary cannot render a visible post or revealable placeholder. | Unit / Static / Integration | Yes |
+| QC-005 | The fork integration does not reapply obsolete ActivityPub patches over the current upstream implementation. | Conflict resolution replaces current upstream AP behavior with the historical fork copy. | Compare AP-specific files and conflict resolutions with the frozen upstream cut, then build both clients. | Upstream ancestry/diff review and component build/type checks. | AP-specific implementation follows the merged upstream cut; only documented generic message-boundary behavior may differ. | Static / Integration | No |
 | QC-006 | Legacy v1 messages remain retrievable without weakening owner or permission checks. | A response for another owner is accepted, 403 is bypassed, or uncertain association state causes a duplicate write. | v2 miss for a valid legacy URI, forged/mismatched envelope, 403, and own-association load failure. | Client/worldlib contract tests. | Valid legacy content loads; forged or unauthorized content is rejected; writes are disabled when state is unknown. | Unit / Contract | Yes |
-| QC-007 | Logout, restore, subkey, follow, bridge-setting, and retained-domain recovery preserve the `dev` safety fixes. | Logout provisions credentials, partial settings overwrite good state, or malformed legacy data prevents recovery. | Exercise old data, logged-out state, partial failure, malformed key and retry paths. | Targeted integration/static tests and build checks. | No silent destructive overwrite; failures remain recoverable and actionable. | Integration | Yes |
+| QC-007 | Logout, restore, subkey, follow, bridge-setting, and retained-domain recovery preserve the `dev` safety fixes. | Logout provisions credentials, partial settings overwrite good state, or recovery material is deleted before backup. | Exercise old/new follow keys, logged-out/v1 migration sessions, bridge load/save states, logout retention and recovery anchors. | Pure fork-policy tests, component-use/static anchors, and app/web build checks. | No automatic reenrollment after ordinary logout, no settings write before a valid load state, save failure rolls back, and destructive reset remains backup-gated. | Unit / Integration | Yes |
 | QC-008 | Upstream synchronization is a reviewable merge into production, never an implicit reset. | `main` is force-reset to upstream or deploys before fork gates. | Run the documented sync command/workflow. | Git ancestry, generated integration branch/PR, required status checks. | No force push; production changes only after reviewed gates. | Static / Runtime | Yes |
 | QC-009 | Production deploys exactly the tested `main` commit and rolls back on failed rollout or smoke test. | `/cc-info` differs from the target, broken assets become current, or failure loses the previous image. | Deploy a good commit and simulate build/rollout/smoke failure. | Deployer state, Kubernetes rollout, `/cc-info`, root page and referenced JS asset. | Exact SHA match; failure retains/restores previous image; retry backoff remains bounded at 10 minutes. | E2E / Runtime | Yes |
 | QC-010 | Fork-specific behavior is discoverable without reading commit history. | A maintainer cannot tell which deltas must survive an upstream update. | Open the repository documentation. | Fork inventory maps each behavior to code anchors, tests, source PR and upstream status. | Every retained customization has a stable ID and owner/status. | Static | Yes |
@@ -101,27 +103,35 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 7. Given an upstream update that deletes a fork anchor, the implementation is wrong if the sync gate passes without an explicit inventory decision.
 8. Given a production rollout whose `/cc-info` is not the target SHA, the implementation is wrong if the deployer records success.
 
-## Required evidence before merge
+## Required evidence
 
-- [ ] Static analysis: `git diff --check`, conflict-marker scan, fork inventory/anchor check, changed-file ESLint/Prettier.
-- [ ] Unit: mute policy and persistence contract tests; restored ActivityPub/profile tests; legacy fallback negative-path tests.
-- [ ] Integration: `pnpm --workspace-concurrency=1 --filter web... build` and app build; session/bridge recovery checks.
-- [ ] Contract/E2E: mute settings and timeline behavior in web/app; production deployer dry-run/static validation.
-- [ ] Runtime/rollout: VPS exact-SHA, root and referenced-asset smoke checks with rollback evidence.
-- [ ] Regression red-before / green-after: current `main` must fail the mute/fork-anchor gate; integration head must pass.
+### Before merge
+
+- [x] Static analysis: `git diff --check`, conflict-marker scan, fork inventory/anchor check, changed-file ESLint/Prettier.
+- [x] Unit: mute policy/persistence and legacy fallback/partial-load negative-path tests.
+- [x] Integration: `pnpm --workspace-concurrency=1 --filter web... build` and app build; session/bridge recovery review.
+- [x] Contract: production deployer syntax/non-fast-forward/static validation.
+- [ ] Release bootstrap: reviewed deployer installed and checksum-verified before merge, or the existing timer is paused.
+- [x] Regression red-before / green-after: current `main` must fail the mute/fork-anchor gate; integration head must pass.
+
+### After merge / rollout acceptance
+
+- [ ] Runtime: VPS exact-SHA, root and referenced-asset smoke checks complete for the merged commit.
+- [ ] Manual behavior: an existing account can create and remove a mute in both supported clients, and a covered timeline post is hidden according to its placeholder policy.
 
 ## Explicit non-guarantees
 
-- Server-side delivery filtering and push-notification mute are not guaranteed in this change.
+- Server-side delivery filtering, push-notification mute, filtering of the server-maintained unread counter, and word matching against ActivityPub/Bluesky content resolved outside the Concrnt envelope are not guaranteed in this change.
+- Expiry is guaranteed at the next mute evaluation/resource refresh, not by an exact-time UI timer. The UI does not currently edit `scope` or `hidePlaceholder`, although saved compatible entries are honored.
 - The old `dev` branch history will not be rewritten into a linear patch series.
 - Third-party ActivityPub servers are not guaranteed to be available; only client retry/cache behavior is covered.
 
 ## Readiness decision
 
-READY WITH DECISIONS: implementation and verification can proceed using `origin/dev` as the frozen behavior source. Branch archival and any proposed removal of historical style customizations require owner review before the final merge.
+CONDITIONAL PRE-MERGE: all local static, unit, contract, and production-build gates pass. Do not merge until the release-bootstrap item above is complete; decide the `main` ruleset policy as part of repository administration. Runtime and manual acceptance remain post-rollout gates.
 
 **この契約が保証対象にするもの:** 最新upstreamを含むproduction `main`で、文書化したフォーク独自挙動と安全なデプロイ・同期手順が維持されること。
 
 **この契約が意図的に保証対象外とするもの:** Phase 2のミュート、サーバー／Bridge側変更、旧ブランチ履歴の整理そのもの。
 
-**人間が決めなければならないこと:** 旧`dev`等の扱いと、upstreamで代替済みと判断したスタイル差分を最終的に削除してよいか。
+**人間が決めなければならないこと:** 旧`dev`等の扱い、`main` ruleset の有効化、VPS deployer の先行導入または timer 停止。

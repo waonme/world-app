@@ -75,6 +75,23 @@ current_image=$(microk8s kubectl -n "$production_namespace" get deployment "$dep
 deployed_sha=$(test -f "$state_dir/deployed-sha" && tr -d '\n' < "$state_dir/deployed-sha" || true)
 expected_image="localhost/world-app:$target_sha"
 
+# A normal revert remains a descendant and is allowed. A reset/force-push is not:
+# production must never follow rewritten main history without an explicit operator recovery.
+if [ -n "$deployed_sha" ]; then
+  if [[ ! "$deployed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "refusing invalid deployed commit state: $deployed_sha" >&2
+    exit 1
+  fi
+  if ! git --git-dir="$repo_dir" cat-file -e "$deployed_sha^{commit}"; then
+    echo "refusing deployment because the recorded commit is unavailable: $deployed_sha" >&2
+    exit 1
+  fi
+  if ! git --git-dir="$repo_dir" merge-base --is-ancestor "$deployed_sha" "$target_sha"; then
+    echo "refusing non-fast-forward main update: $deployed_sha -> $target_sha" >&2
+    exit 1
+  fi
+fi
+
 if [ "$deployed_sha" = "$target_sha" ] && [ "$current_image" = "$expected_image" ]; then
   echo "world-app is already deployed at $target_sha"
   deployment_succeeded=true
@@ -200,6 +217,9 @@ spec:
               export PATH=/tmp/corepack-bin:\$PATH
               pnpm config set store-dir /cache/pnpm-store
               pnpm install --frozen-lockfile
+              scripts/check-fork-contract.sh
+              pnpm --filter @concrnt/client test
+              pnpm --filter @concrnt/worldlib test:fork
               pnpm --workspace-concurrency=1 --filter web... build
               test -s web/dist/index.html
           resources:
