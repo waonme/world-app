@@ -9,14 +9,14 @@ import { View } from '../components/View'
 import { Header } from '../components/Header'
 import { Composer } from '../components/Composer'
 import { Timeline } from '@concrnt/worldlib'
-import { MdCreate, MdInfo } from 'react-icons/md'
+import { MdInfo } from 'react-icons/md'
 import { Drawer } from '../components/Drawer'
 import { TimelineSettings } from '../components/TimelineSettings'
 import { PrivateContentDoor } from '../components/PrivateContentDoor'
-import { FAB } from '../components/FAB'
-import { useComposer } from '../contexts/Composer'
+import { ComposeFAB } from '../components/ComposeFAB'
+import { PostContextProvider } from '../contexts/PostContext'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { hapticLight } from '../utils/haptics'
+import { useSubscribe } from '../hooks/useSubscribe'
 
 interface Props {
     uri: string
@@ -25,7 +25,6 @@ interface Props {
 export const TimelineView = (props: Props) => {
     const { client } = useClient()
     const [settingsOpen, setSettingsOpen] = useState(false)
-    const composer = useComposer()
     const isMobile = useIsMobile()
 
     const scrollRef = useRef<ScrollViewHandle>(null)
@@ -53,8 +52,19 @@ export const TimelineView = (props: Props) => {
 
     const restricted = timeline ? timeline.isRestrictedFor(client.ccid) : false
 
+    const [knownCommunities] = useSubscribe(client.knownCommunities)
+
+    // インラインエディタの投稿先。このタイムラインを初期値にしつつ、その場で編集できるようにする
+    const [destinations, setDestinations] = useState<string[]>([props.uri])
+    // 別のタイムラインに移ったら投稿先も差し替える
+    const [prevUri, setPrevUri] = useState(props.uri)
+    if (prevUri !== props.uri) {
+        setPrevUri(props.uri)
+        setDestinations([props.uri])
+    }
+
     return (
-        <>
+        <PostContextProvider destinations={[props.uri]}>
             <View>
                 <Header
                     onTitleTap={() => scrollRef.current?.scrollToTop()}
@@ -89,8 +99,10 @@ export const TimelineView = (props: Props) => {
                                         <div style={{ padding: CssVar.space(2) }}>
                                             <Composer
                                                 mode="normal"
-                                                destinations={[props.uri]}
-                                                options={timeline ? [timeline] : []}
+                                                destinations={destinations}
+                                                setDestinations={setDestinations}
+                                                defaultDestinations={[props.uri]}
+                                                options={knownCommunities}
                                             />
                                         </div>
                                         <Divider />
@@ -101,20 +113,10 @@ export const TimelineView = (props: Props) => {
                     )
                 )}
             </View>
-            {!restricted && (
-                <FAB
-                    onClick={() => {
-                        hapticLight()
-                        const options = timeline ? [timeline] : []
-                        composer.open([props.uri], options)
-                    }}
-                >
-                    <MdCreate size={24} />
-                </FAB>
-            )}
+            {!restricted && <ComposeFAB />}
             <Drawer open={settingsOpen} onClose={() => setSettingsOpen(false)}>
                 <TimelineSettings uri={props.uri} />
             </Drawer>
-        </>
+        </PostContextProvider>
     )
 }

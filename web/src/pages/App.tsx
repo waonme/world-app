@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import { DrawerMenu } from '../components/DrawerMenu'
@@ -10,7 +10,10 @@ import { PwaManager } from '../components/PwaManager'
 import { NavigationProvider } from '../contexts/Navigation'
 import { CssVar } from '../types/Theme'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { IconButton, Tabs, Tab, useTheme } from '@concrnt/ui'
+import { useNotificationCounter } from '../hooks/useNotificationCounter'
+import { useClient } from '../contexts/Client'
+import { setAppBadge } from '../lib/push'
+import { Badge, IconButton, Tabs, Tab, useTheme } from '@concrnt/ui'
 import { MdArrowBack, MdHome, MdExplore, MdNotifications, MdContacts } from 'react-icons/md'
 
 export const AppShell = () => {
@@ -110,6 +113,13 @@ const MobileShell = () => {
     const location = useLocation()
     const navigate = useNavigate()
     const theme = useTheme()
+    const { client } = useClient()
+    // 未読通知数はサーバーのカウンターが正(web/appで同期)。インストール済みPWAのアイコンにも追従
+    const unreadCount = useNotificationCounter(client)
+    useEffect(() => {
+        if (!client) return
+        setAppBadge(unreadCount)
+    }, [client, unreadCount])
 
     const isTabRoot = TABS.some((tab) => tab.path === location.pathname)
 
@@ -201,7 +211,19 @@ const MobileShell = () => {
                                         color: CssVar.backdropText
                                     }}
                                 >
-                                    {tab.icon}
+                                    {tab.path === '/notifications' ? (
+                                        <Badge
+                                            count={unreadCount}
+                                            style={{
+                                                backgroundColor: CssVar.backdropText,
+                                                color: CssVar.backdropBackground
+                                            }}
+                                        >
+                                            {tab.icon}
+                                        </Badge>
+                                    ) : (
+                                        tab.icon
+                                    )}
                                 </Tab>
                             ))}
                         </Tabs>

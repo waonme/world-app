@@ -34,8 +34,8 @@
     "views": {
         "settings": {
             "title": "Settings",
+            "general": "General",
             "theme": "Theme",
-            "language": "Language",
             "activitypub": "ActivityPub",
             "bluesky": "Bluesky",
             "id": "ID Management",
@@ -57,6 +57,11 @@
                 "commit": "Commit"
             }
         },
+        "generalSettings": {
+            "title": "General",
+            "language": "Language",
+            "haptics": "Haptic Feedback"
+        },
         "languageSettings": {
             "title": "Language"
         },
@@ -69,6 +74,8 @@
         },
         "notificationSettings": {
             "title": "Notifications",
+            "showBadge": "Show unread badge",
+            "showBadgeNote": "Shows the unread count on the notifications tab and the app icon.",
             "enablePush": "Receive push notifications",
             "singleDeviceNote": "Push notifications are delivered only to the last browser (or device) where they were enabled. Enabling them in another browser will stop delivery to this one.",
             "permissionDeniedApp": "Notification permission has been denied by the OS. Please allow notifications for this app in your device settings.",
@@ -196,11 +203,16 @@
             "urlCopied": "Copied URL",
             "loadFailed": "Failed to load",
             "brokenEntry": "Broken entry",
-            "fetchedAt": "Fetched at: {{date}}"
+            "fetchedAt": "Fetched at: {{date}}",
+            "addPackage": "Add",
+            "addPackageTitle": "Add Emoji Package"
         },
         "welcome": {
             "loadFailed": "Failed to load account information.\nThe key stored on this device has not been lost. Please try again.",
             "retry": "Retry",
+            "storedAccounts": "Accounts stored on this device",
+            "storedAccountsHint": "Selecting another account switches to it and restarts the app.",
+            "checkingAccount": "Checking account: {{ccid}}\nResolver: {{resolver}}",
             "getStarted": "Get Started",
             "login": "Log In",
             "welcomeBackTitle": "Welcome back",
@@ -221,7 +233,8 @@
                 "registrationNotFound": "Registration not found.",
                 "continue": "Continue",
                 "registerNew": "Register a new account",
-                "deleteBrowserAccount": "Delete account data from this browser"
+                "deleteBrowserAccount": "Delete account data from this browser",
+                "checkFailed": "Could not verify. Please check your connection or the server status and try again."
             }
         },
         "ageBlocked": {
@@ -268,7 +281,6 @@
             "descriptionDevice": "Enter your master key to use your account on this device.",
             "descriptionBrowser": "Enter your master key to use your account in this browser.",
             "masterKey": "Master Key",
-            "masterKeyPlaceholder": "Enter master key",
             "masterKeyValid": "This master key is valid.",
             "masterKeyInvalid": "Could not verify this master key.",
             "import": "Import",
@@ -276,7 +288,8 @@
             "existingAccountTitle": "A saved account already exists",
             "existingAccountDescription": "To import a new account, you must first delete the account data saved in this browser.",
             "existingMasterKeyNotice": "This browser already has a master key.",
-            "deleteBrowserAccount": "Delete account data from this browser"
+            "deleteBrowserAccount": "Delete account data from this browser",
+            "masterKeyHint": "Enter the 12 words in order. You can also paste all 12 words at once."
         },
         "profile": {
             "userNotFound": "User not found",
@@ -287,8 +300,12 @@
             "unblockConfirmDescription": "Unblocking will allow this user to reply to you and react to your posts again.",
             "unblock": "Unblock",
             "noDescription": "No description yet",
+            "followsYou": "Follows you",
             "following": "{{n}} Following",
-            "followers": "{{n}} Followers"
+            "followers": "{{n}} Followers",
+            "share": "Share",
+            "copyLink": "Copy link",
+            "linkCopied": "Copied"
         },
         "explorer": {
             "createCommunity": "Create Community",
@@ -309,10 +326,38 @@
             "alias": "Alias",
             "loginOnAnotherDevice": "Log in on another device",
             "backupMasterKey": "Back up master key",
-            "backupNotSaved": "Not saved",
-            "backupFileContent": "Concrnt Web login information\nThis file is a backup of your Concrnt Web login information.\nKeep this file in a safe place.\n\nCCID: {{ccid}}\nMaster private key: {{privateKey}}\nRegistered server at backup: {{server}}\n\nIf you lose your private key, you may not be able to recover your account.\nIf anyone else learns this information, your account could be taken over.",
+            "copySubkey": "Copy Subkey",
+            "subkeyCopied": "Copied!",
+            "backupUnavailable": "This browser does not hold your master key. Log in again with your master key (12 words) to back it up.",
+            "homeServer": {
+                "title": "Home Server",
+                "description": "View and edit your registration info stored on this server.",
+                "domain": "Domain",
+                "inviter": "Invited by",
+                "loading": "Loading...",
+                "fetchError": "Failed to load registration info",
+                "notRegistered": "No registration was found on this server",
+                "schemaUnavailable": "This server does not serve a registration form definition, so editing is unavailable.",
+                "save": "Save",
+                "saved": "Saved!",
+                "saveError": "Failed to save",
+                "dangerZone": {
+                    "title": "Danger Zone",
+                    "deleteAccount": "Delete Account",
+                    "confirmTitle": "Delete your registration",
+                    "warning": "This deletes your registration and posted data from this server. For a while after deletion, data already delivered to other servers or caches may remain and cannot be deleted from here. This cannot be undone.",
+                    "downloadArchive": "Download an archive of your data first",
+                    "downloaded": "Archive saved",
+                    "downloadFailed": "Failed to download the archive",
+                    "cancel": "Cancel",
+                    "delete": "Delete my account",
+                    "deleteFailed": "Failed to delete. Please try again."
+                }
+            },
             "subkeys": {
                 "title": "Subkeys",
+                "count_one": "{{count}} key",
+                "count_other": "{{count}} keys",
                 "description": "Subkeys authorized for this account. Devices you have logged in on sign with these keys.",
                 "loading": "Loading...",
                 "empty": "No subkeys",
@@ -327,6 +372,12 @@
                 "revokeConfirmCurrentDescription": "This is the subkey used by this device. Revoking it will log this device out.",
                 "revokeFailed": "Failed to revoke subkey",
                 "masterKeyRequired": "Revoking a subkey requires the master key."
+            },
+            "evacuated": {
+                "title": "Evacuated keys",
+                "description": "Master keys of previous accounts, preserved when you signed in with a different account. Download a backup and store it somewhere safe. Deletion becomes available after downloading.",
+                "download": "Download backup",
+                "delete": "Delete"
             }
         },
         "activitypub": {
@@ -338,14 +389,33 @@
             "enable": "Enable",
             "enabled": "ActivityPub integration is enabled.",
             "yourId": "Your ID: {{id}}",
+            "forwardTimeline": "Forwarding Timelines",
+            "forwardTimelineDesc": "Your posts to the selected timelines will be forwarded to ActivityPub. If none are set, your home timeline is used.",
+            "inboxNotListed": "The ActivityPub timeline is not in any of your lists. Add it to a list to see incoming posts.",
+            "addToList": "Add to list",
+            "inboxPolicyBroken": "There is a problem with the inbox list permissions. Posts from ActivityPub cannot be delivered.",
+            "repair": "Repair",
+            "repairing": "Repairing...",
+            "repairFailed": "Repair failed. Please try again later.",
+            "update": "Update",
             "inquiry": "Inquiry"
+        },
+        "apNote": {
+            "notImported": "This post has not been fetched to this server yet.",
+            "import": "Fetch as Concrnt message",
+            "importing": "Fetching...",
+            "importFailed": "Failed to fetch"
         },
         "apPerson": {
             "follow": "Follow",
             "unfollow": "Unfollow",
+            "followsYou": "Follows you",
             "noDescription": "No description yet",
             "apUserNotice": "This user is an ActivityPub user.",
-            "openRemote": "Open on remote server"
+            "openRemote": "Open on remote server",
+            "noPosts": "No posts to show",
+            "loadFailed": "Failed to load posts",
+            "boosted": "Boosted by {{name}}"
         },
         "bluesky": {
             "title": "Bluesky Settings",
@@ -366,6 +436,9 @@
             "active": "Bluesky integration is enabled.",
             "yourHandle": "Your handle: @{{handle}}",
             "enabledToggle": "Enable federation",
+            "forwardTimeline": "Forwarding Timelines",
+            "forwardTimelineDesc": "Your posts to the selected timelines will be forwarded to Bluesky. If none are set, your home timeline is used.",
+            "update": "Update",
             "following": "Following",
             "followers": "Followers",
             "loadMore": "Show more",
@@ -398,10 +471,14 @@
             "title": "Inquiry",
             "submit": "Inquiry"
         },
+        "list": {
+            "listNotFound": "List not found"
+        },
         "lists": {
             "createList": "Create List",
             "create": "Create",
-            "listTitle": "Title"
+            "listTitle": "Title",
+            "openSettings": "List settings"
         }
     },
     "components": {
@@ -415,7 +492,24 @@
             "submit": "Post",
             "replyPlaceholder": "Write a reply...",
             "placeholder": "What are you up to?",
-            "cannotPostOffline": "You can't post while offline"
+            "cannotPostOffline": "You can't post while offline",
+            "resetDestination": "Reset destinations to default",
+            "dropToUpload": "Drop to upload",
+            "flagTitle": "Content flag (optional)",
+            "flagNone": "None",
+            "flagWarn": "Content Warning",
+            "flagNude": "Nudity",
+            "flagPorn": "Pornography",
+            "flagHard": "Hard Violence",
+            "flagCustomPlaceholder": "You can write freely"
+        },
+        "mediaGallery": {
+            "clickToReveal": "Click to reveal",
+            "hideAgain": "Hide again",
+            "flagWarn": "Content Warning",
+            "flagNude": "Nudity",
+            "flagPorn": "Pornography",
+            "flagHard": "Hard Violence"
         },
         "report": {
             "reason": "Report reason",
@@ -445,6 +539,11 @@
             "userLiked": "{{name}} added this to favorites",
             "loading": "Loading..."
         },
+        "activitypubNote": {
+            "openRemote": "Open on remote server",
+            "unavailable": "This post could not be fetched (it may have been deleted or is private)",
+            "fetchFailed": "Failed to load this post (server unreachable)"
+        },
         "followAck": {
             "userFollowed": "{{name}} followed",
             "loading": "Loading..."
@@ -454,7 +553,10 @@
             "delete": "Delete",
             "deletePost": "Delete post",
             "report": "Report",
-            "inspector": "Inspector"
+            "inspector": "Inspector",
+            "share": "Share",
+            "copyLink": "Copy link",
+            "linkCopied": "Copied"
         },
         "collapsibleBody": {
             "showMore": "Show more"
@@ -466,6 +568,10 @@
             "verificationKey": "Verification key ({{type}})",
             "verificationError": "Verification error: {{error}}",
             "keyMismatch": "The key recovered from the signature does not match the verification key"
+        },
+        "mentionAssociation": {
+            "userMentioned": "{{name}} mentioned you",
+            "loading": "Loading..."
         },
         "onelineMessage": {
             "deletePost": "Delete post"
@@ -501,7 +607,8 @@
             "settings": "Settings",
             "post": "Post",
             "documentation": "Documentation",
-            "forum": "Forum"
+            "forum": "Forum",
+            "notFound": "Not found"
         },
         "themeEditor": {
             "title": "Theme Editor",
@@ -516,6 +623,14 @@
             "variantLabel": "Display type",
             "preview": "Preview",
             "currentlyInUse": "This theme is currently in use"
+        },
+        "emojiPackImporter": {
+            "title": "Import from v1",
+            "description": "Paste the JSON (an array of emoji package URLs) exported with \"Copy all\" in the v1 emoji settings. Packages that are already added will be skipped.",
+            "placeholder": "Paste JSON here",
+            "noPackagesFound": "No emoji packages found",
+            "importResult": "{{added}} added / {{skipped}} skipped",
+            "import": "Import"
         },
         "themeImporter": {
             "title": "Import from v1",
@@ -596,6 +711,16 @@
             "following": "Following",
             "followers": "Followers"
         },
+        "apFollowList": {
+            "following": "Following",
+            "followers": "Followers",
+            "follow": "Follow",
+            "unfollow": "Unfollow",
+            "pending": "Pending",
+            "loadMore": "Load more",
+            "empty": "No users",
+            "loadError": "Failed to load"
+        },
         "userPicker": {
             "addUser": "Add user",
             "loading": "Loading..."
@@ -606,7 +731,15 @@
         },
         "timelineSettings": {
             "schema": "Schema",
-            "attributes": "Attributes"
+            "attributes": "Attributes",
+            "share": "Share",
+            "copyLink": "Copy link",
+            "linkCopied": "Copied"
+        },
+        "policyEditor": {
+            "modeEditor": "Policy Editor",
+            "modeJson": "JSON",
+            "invalidJson": "Invalid JSON"
         },
         "listSettings": {
             "title": "List Settings",
@@ -623,7 +756,8 @@
             "community": "Community",
             "user": "User",
             "noTimelines": "No timelines",
-            "defaultPostTimelines": "Default destination"
+            "defaultPostTimelines": "Default destination",
+            "isIconTab": "Use icon on tab"
         },
         "subscription": {
             "addToList": "Add to List"
@@ -653,9 +787,20 @@
             "fav": "Favorite",
             "reaction": "Reaction",
             "readRequest": "Read Request"
+        },
+        "mnemonicInput": {
+            "wordLabel": "Word {{index}}",
+            "unknownWords": "Some words are not in the word list (word {{positions}}). Please check the spelling."
         }
     },
     "contexts": {
+        "commandPalette": {
+            "placeholder": "Search communities and users...",
+            "communities": "Communities",
+            "users": "Users",
+            "noResults": "No results matched your search",
+            "unavailable": "Could not reach the search service"
+        },
         "composer": {
             "cancel": "Cancel"
         },
@@ -665,7 +810,8 @@
             "searchPlaceholder": "Search emojis...",
             "noMatchingEmojis": "No matching emojis",
             "noEmojis": "No emojis",
-            "noRecentEmojis": "No emojis used yet"
+            "noRecentEmojis": "No emojis used yet",
+            "addEmojis": "Add emojis"
         },
         "client": {
             "checkingSession": "Checking session...",
@@ -717,16 +863,14 @@
             "masterKeyLogin": "Log in with master key",
             "methodQr": "App QR",
             "methodPasskey": "Passkey",
-            "methodMasterKey": "Master Key",
+            "methodManual": "Manual",
             "signup": "New here? Create an account",
             "checking": "Checking...",
             "usePasskey": "Use passkey",
-            "masterKey": "Master Key",
-            "masterKeyPlaceholder": "Enter your 12-word master key",
             "registeredServer": "Registered server",
             "serverPlaceholder": "e.g. v2dev.concrnt.net",
             "masterKeyInvalid": "Could not verify this master key.",
-            "masterKeyInvalidDetailed": "Could not verify this master key. Please enter your 12-word master key.",
+            "masterKeyInvalidDetailed": "Could not verify this master key. Please enter your 12-word master key or 64-char hex private key.",
             "loginWithThisServer": "Log in with this server",
             "clearInput": "Clear input",
             "passkeyUnavailable": "Passkeys are not available in this browser.",
@@ -741,7 +885,18 @@
             "registrationNotFoundOnServer": "No registration was found on the specified server.",
             "registeringKey": "Registering the key this browser will use...",
             "masterKeyLoginFailed": "Login with master key failed.",
-            "subkeyCommitFailed": "Subkey commit failed."
+            "subkeyCommitFailed": "Subkey commit failed.",
+            "subkeyLogin": "Log in with subkey",
+            "checkingSubkey": "Checking your subkey on {{domain}}...",
+            "subkeyInvalid": "This subkey is not in a valid format.",
+            "subkeyInvalidOnServer": "This subkey has been revoked or is not registered.",
+            "subkeyLoginFailed": "Login with subkey failed.",
+            "manualMasterKey": "Master key",
+            "manualMasterKeyHint": "Enter the 12 words in order. You can also paste all 12 words at once.",
+            "manualRawKey": "Subkey or private key",
+            "manualRawKeyPlaceholder": "Enter a subkey starting with concrnt-subkey, or a 64-char hex private key",
+            "switchToRawKey": "Use a subkey / private key instead",
+            "switchToMasterKey": "Use the 12-word master key instead"
         },
         "register": {
             "title": "Account Registration",
@@ -763,6 +918,9 @@
             "usePasskeyDescription": "Passkeys are recommended, but may not be available on some devices or browsers.",
             "no": "No",
             "yes": "Yes",
+            "passkeyUnavailable": "Passkeys are not available in this browser.",
+            "passkeyCreateFailed": "Could not create a passkey. Passkeys may not be available in this environment. Select \"No\" to log in with a regular key instead.",
+            "passkeyNoPrf": "Your passkey does not support the required PRF extension 😭 The passkey that was just created cannot be used for login, so please delete it manually from your device's passkey settings. Try another passkey provider, or select \"No\" to use a regular key.",
             "confirmEmoji": "Check the emoji shown on your device, and if it matches, select \"Yes\" on the device."
         },
         "guestBase": {
@@ -797,6 +955,78 @@
             "privateTimeline": "This timeline is private",
             "loginRequired": "You need to log in to request access",
             "login": "Login"
+        },
+        "welcome": {
+            "start": "Let's Get Started",
+            "arrivalTimelineDescription": "Welcome to the ariake.concrnt.net server! If you have any questions, feel free to post here.",
+            "devCentralDescription": "A place for developers to relax",
+            "pageTitle": "Concrnt | Concurrent",
+            "metaDescription": "Concrnt is a new era SNS that enriches your world just a little bit.",
+            "guide": "User Guide",
+            "gettingStarted": "Let's Get Started",
+            "import": "Log In",
+            "catch": "What if there was an SNS like this...",
+            "wish1": "You could know in real-time what your friends and people you're interested in are doing.",
+            "wish2": "You could interact with multiple communities using a single account.",
+            "wish3": "You could choose who manages the platform, rather than being controlled by a single entity.",
+            "wish4": "Wouldn't it be great if there was such an SNS?",
+            "wish5": "Concrnt was developed to fulfill this wish.",
+            "wish6": "Welcome to the new era of SNS.",
+            "feature1title": "An SNS for Enjoying Together",
+            "feature1subtitle": "Tired of recommendation feeds filled with strangers?",
+            "feature1p1": "Wouldn't you rather know more about the people you like than just seeing recommendations filled with strangers?",
+            "feature1p2": "With Concrnt, instead of relying on algorithms, you can use customizable lists to access information that truly matters to you. Select the people you like and the communities you're interested in, and create a timeline that fits you perfectly.",
+            "feature1p3": "Concrnt is an SNS focused on the connections that truly matter to you, making it enjoyable for everyone.",
+            "feature2title": "Your Account is Truly Yours",
+            "feature2subtitle": "Say goodbye to the days of fearing account suspension 👋",
+            "feature2p1": "Concrnt is a decentralized SNS that prioritizes user freedom and safety. It is free from the dictatorship of a single company or organization, with independent individuals and organizations running their own servers.",
+            "feature2p2": "This means you no longer have to live in fear of your account being suddenly suspended. Even if you experience unfair treatment on one server, you can easily move to another server, retaining your posts and followers, and continue your activities. Here, you'll find the security and freedom of being able to manage your account in a way that was unimaginable with conventional SNS.",
+            "feature2p3": "On Concrnt, your account truly belongs to you.",
+            "feature3title": "Countless Communities in One SNS",
+            "feature3subtitle": "The era of using separate accounts for different interests is over",
+            "feature3p1": "On Concrnt, in addition to the home timeline, you can switch between multiple community timelines. When posting, you can simultaneously share across multiple communities, making it easy to connect loosely with multiple communities, which is natural for humans.",
+            "feature3p2": "It's not about being overly connected to the world like X, nor is it about being too closed off like Discord. The charm of Concrnt is that you can find your place while moderately connecting with other communities.",
+            "crnt1": "It’s a new way of using SNS, but once you get used to it, it's comfortable!",
+            "crnt2": "What I depend on must be open!",
+            "crnt3": "I want to broadcast to multiple communities simultaneously!",
+            "crnt4": "Maybe I’ll try setting up my own server?",
+            "crnt5": "I want a decentralized SNS where I don’t have to be decentralized!",
+            "crnt6": "What are you up to?",
+            "crnt7": "Yay!",
+            "crnt8": "Good evening!",
+            "crnt9": "Anyone want to hang out?",
+            "crnt10": "Customizing themes is so fun!",
+            "crnt11": "Because my account is truly in my own hands, \n I can use it confidently as my internet identity.",
+            "crnt12": "Communicating with emoji reactions is so smooth!",
+            "crnt13": "Even if the server I’m on shuts down, \n I can easily move my relationships to a new server, so no worries!",
+            "crnt14": "I’m hungry YO",
+            "crnt_totegamma": "This is exactly it!",
+            "mock": {
+                "home": {
+                    "title": "Home",
+                    "crnt1": "I really love the quietness at this time. Solo time on holidays is the best.",
+                    "crnt2": "Speaking of music, lately I can't get anime songs out of my head. They really pump me up.",
+                    "crnt3": "Afternoon music selection—what should I listen to today? It's a tough choice.",
+                    "crnt4": "A new book has arrived! Time to brew some tea and dive into it. The perfect holiday.",
+                    "crnt5": "It's been a while, but they're rerunning my favorite anime today. Time to relax and watch."
+                },
+                "game": {
+                    "title": "Gaming Scene",
+                    "crnt1": "Lost my save data in 'Adventurers of the Netherworld'... I want to cry.",
+                    "crnt2": "The new VR game is incredibly realistic! I need to be careful not to get dizzy.",
+                    "crnt3": "Last night's online battle was flawless teamwork. Let's do it again, team!",
+                    "crnt4": "Found an old arcade game. The feeling of inserting a coin and playing is so nostalgic.",
+                    "crnt5": "Collecting game OSTs is my hobby. I got a new one today!"
+                },
+                "food": {
+                    "title": "Food",
+                    "crnt1": "Trying my hand at homemade vegan dishes. Today, it's tomato and quinoa salad.",
+                    "crnt2": "Discovered a new spice shop! Time to experiment with some exotic flavors.",
+                    "crnt3": "Today's ramen was exceptional. The spice level was just right.",
+                    "crnt4": "Homemade cold brew, a summer staple. The choice of coffee beans is key.",
+                    "crnt5": "The yakitori I had at the restaurant was crispy on the outside and juicy on the inside. Next time, I'm bringing friends!"
+                }
+            }
         }
     },
     "app": {
@@ -840,7 +1070,9 @@
             "cancel": "Cancel",
             "delete": "Delete",
             "deleteFailed": "Could not delete. Please try again.",
-            "resetSession": "Reset Session"
+            "resetSession": "Reset Session",
+            "noKeyToBackup": "This session does not hold a master key, so no key will be lost.",
+            "confirmDelete": "This will remove this account (including its master key) from this browser. Are you sure?"
         },
         "storeMocks": {
             "idTitle": "ID Management",

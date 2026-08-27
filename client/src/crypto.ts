@@ -53,6 +53,22 @@ const mnemonic_en2ja = (mnemonic_en: string): string | null => {
     }
 }
 
+let mnemonicWordsCache: Record<'en' | 'ja', readonly string[] | undefined> = { en: undefined, ja: undefined }
+
+// マスターキー入力UI向けにBIP39単語帳を公開する。
+// LoadIdentityと同じくNFKD正規化した語形で返す(JA語の濁点は結合文字に分解される)
+export const GetMnemonicWords = (lang: 'en' | 'ja'): readonly string[] => {
+    const cached = mnemonicWordsCache[lang]
+    if (cached) return cached
+    const wordlist = lang === 'en' ? LangEn.wordlist() : LangJa.wordlist()
+    const words: string[] = []
+    for (let i = 0; i < 2048; i++) {
+        words.push(wordlist.getWord(i).normalize('NFKD'))
+    }
+    mnemonicWordsCache = { ...mnemonicWordsCache, [lang]: words }
+    return words
+}
+
 export const GenerateIdentity = (): Identity => {
     const entrophy = randomBytes(16)
     const mnemonic = Mnemonic.fromEntropy(entrophy, null).phrase
@@ -172,6 +188,8 @@ export const ValidateSignature = (body: string, signature: string, expectedKeyID
 }
 
 export const LoadKey = (privateKey: string): KeyPair | null => {
+    // ellipticは非hex文字列からも黙って鍵を導出してしまうため、ここで弾く
+    if (!/^[0-9a-f]{64}$/i.test(privateKey)) return null
     try {
         const ellipsis = new Ec('secp256k1')
         const keyPair = ellipsis.keyFromPrivate(privateKey)

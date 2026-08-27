@@ -42,14 +42,24 @@ export const RerouteAssociation = (props: MessageProps<RerouteAssociationSchema>
                     gap: '8px',
                     fontSize: '12px',
                     opacity: 0.7,
-                    paddingLeft: '48px'
+                    paddingLeft: '56px'
                 }}
             >
-                <Avatar
-                    ccid={message.author}
-                    src={message.authorProfile?.avatar}
-                    style={{ width: '16px', height: '16px' }}
-                />
+                <div
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        if (rerouteAuthor) {
+                            navigate('/profile/' + rerouteAuthor.ccid)
+                        }
+                    }}
+                    style={{ display: 'flex', cursor: 'pointer' }}
+                >
+                    <Avatar
+                        ccid={message.author}
+                        src={message.authorProfile?.avatar}
+                        style={{ width: '16px', height: '16px' }}
+                    />
+                </div>
                 <MdRepeat size={14} />
                 <span
                     onClick={(e) => {
@@ -88,7 +98,7 @@ export const RerouteAssociation = (props: MessageProps<RerouteAssociationSchema>
 
             {/* ローディング */}
             {!targetMessage && (
-                <div style={{ paddingLeft: '48px', opacity: 0.5, fontSize: '12px' }}>{t('loading')}</div>
+                <div style={{ paddingLeft: '56px', opacity: 0.5, fontSize: '12px' }}>{t('loading')}</div>
             )}
         </div>
     )

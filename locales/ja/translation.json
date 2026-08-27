@@ -34,8 +34,8 @@
     "views": {
         "settings": {
             "title": "設定",
+            "general": "一般",
             "theme": "テーマ設定",
-            "language": "言語",
             "activitypub": "ActivityPub設定",
             "bluesky": "Bluesky設定",
             "id": "ID管理",
@@ -57,6 +57,11 @@
                 "commit": "コミット"
             }
         },
+        "generalSettings": {
+            "title": "一般",
+            "language": "言語",
+            "haptics": "触覚フィードバック"
+        },
         "languageSettings": {
             "title": "言語"
         },
@@ -69,6 +74,8 @@
         },
         "notificationSettings": {
             "title": "通知",
+            "showBadge": "未読バッジを表示",
+            "showBadgeNote": "通知タブやアプリアイコンに未読件数を表示します。",
             "enablePush": "プッシュ通知を受け取る",
             "singleDeviceNote": "通知を受け取れるのは最後に有効化した1ブラウザ(または1端末)のみです。別のブラウザで有効化すると、このブラウザでは受け取れなくなります。",
             "permissionDeniedApp": "通知の許可がOS側で拒否されています。端末の設定アプリからこのアプリの通知を許可してください。",
@@ -196,11 +203,16 @@
             "urlCopied": "URLをコピーしました",
             "loadFailed": "読み込みに失敗しました",
             "brokenEntry": "壊れた項目",
-            "fetchedAt": "取得日: {{date}}"
+            "fetchedAt": "取得日: {{date}}",
+            "addPackage": "追加",
+            "addPackageTitle": "絵文字パッケージを追加"
         },
         "welcome": {
             "loadFailed": "アカウント情報の読み込みに失敗しました。\n端末に保存された鍵が消えたわけではありません。もう一度お試しください。",
             "retry": "再試行",
+            "storedAccounts": "端末に保存されているアカウント",
+            "storedAccountsHint": "別のアカウントを選ぶと切り替えて再起動します。",
+            "checkingAccount": "照会中のアカウント: {{ccid}}\n照会先: {{resolver}}",
             "getStarted": "はじめる",
             "login": "ログイン",
             "welcomeBackTitle": "おかえりなさい",
@@ -221,7 +233,8 @@
                 "registrationNotFound": "登録情報が見つかりませんでした。",
                 "continue": "続行",
                 "registerNew": "新規登録する",
-                "deleteBrowserAccount": "ブラウザのアカウント情報を削除"
+                "deleteBrowserAccount": "ブラウザのアカウント情報を削除",
+                "checkFailed": "確認できませんでした。通信環境やサーバーの状態を確認して、もう一度お試しください。"
             }
         },
         "ageBlocked": {
@@ -268,7 +281,6 @@
             "descriptionDevice": "マスターキーを入力して、この端末でアカウントを使えるようにします。",
             "descriptionBrowser": "マスターキーを入力して、このブラウザでアカウントを使えるようにします。",
             "masterKey": "マスターキー",
-            "masterKeyPlaceholder": "マスターキーを入力",
             "masterKeyValid": "このマスターキーは利用できます。",
             "masterKeyInvalid": "マスターキーを確認できません。",
             "import": "インポート",
@@ -276,7 +288,8 @@
             "existingAccountTitle": "保存済みアカウントがあります",
             "existingAccountDescription": "新しくインポートするには、ブラウザに保存されたアカウント情報を先に削除する必要があります。",
             "existingMasterKeyNotice": "このブラウザには既にマスターキーがあります。",
-            "deleteBrowserAccount": "ブラウザのアカウント情報を削除"
+            "deleteBrowserAccount": "ブラウザのアカウント情報を削除",
+            "masterKeyHint": "12個の単語を順番に入力してください。12語をまとめて貼り付けることもできます。"
         },
         "profile": {
             "userNotFound": "ユーザーが見つかりませんでした",
@@ -287,8 +300,12 @@
             "unblockConfirmDescription": "ブロックを解除すると、このユーザーはあなたに対しリプライを送ったり、リアクションをつけたりすることが出来るようになります。",
             "unblock": "ブロック解除",
             "noDescription": "説明はまだありません",
+            "followsYou": "フォローされています",
             "following": "{{n}} フォロー",
-            "followers": "{{n}} フォロワー"
+            "followers": "{{n}} フォロワー",
+            "share": "シェア",
+            "copyLink": "リンクをコピー",
+            "linkCopied": "コピーしました"
         },
         "explorer": {
             "createCommunity": "コミュニティを作成",
@@ -309,10 +326,37 @@
             "alias": "エイリアス",
             "loginOnAnotherDevice": "他デバイスでログイン",
             "backupMasterKey": "マスターキーをバックアップ",
-            "backupNotSaved": "未保存",
-            "backupFileContent": "Concrnt Web ログイン情報\nこのファイルは Concrnt Web のログイン情報をバックアップするためのものです。\nこのファイルを安全な場所に保管してください。\n\nCCID: {{ccid}}\nマスター秘密鍵: {{privateKey}}\nバックアップ時登録サーバー: {{server}}\n\n秘密鍵を紛失した場合、アカウントを復元できなくなる可能性があります。\nこの内容を他人に知られると、アカウントが乗っ取られる可能性があります。",
+            "copySubkey": "サブキーをコピー",
+            "subkeyCopied": "コピーしました",
+            "backupUnavailable": "このブラウザはマスターキーを保持していません。マスターキー(12単語)でログインし直すとバックアップできます。",
+            "homeServer": {
+                "title": "ホームサーバー",
+                "description": "このサーバーに登録されているあなたの登録情報を確認・編集できます。",
+                "domain": "ドメイン",
+                "inviter": "招待者",
+                "loading": "読み込み中...",
+                "fetchError": "登録情報の取得に失敗しました",
+                "notRegistered": "このサーバーに登録情報が見つかりませんでした",
+                "schemaUnavailable": "このサーバーは登録フォームの定義を配信していないため、編集できません。",
+                "save": "保存",
+                "saved": "保存しました",
+                "saveError": "保存に失敗しました",
+                "dangerZone": {
+                    "title": "危険な操作",
+                    "deleteAccount": "アカウントを削除",
+                    "confirmTitle": "アカウント登録の削除",
+                    "warning": "このサーバーからあなたの登録と投稿データを削除します。削除後もしばらくの間、他のサーバーやキャッシュに配送済みのデータは残る可能性があり、それらをここから消すことはできません。この操作は取り消せません。",
+                    "downloadArchive": "データのアーカイブをダウンロードしておく",
+                    "downloaded": "アーカイブを保存しました",
+                    "downloadFailed": "アーカイブのダウンロードに失敗しました",
+                    "cancel": "キャンセル",
+                    "delete": "本当に削除する",
+                    "deleteFailed": "削除に失敗しました。もう一度お試しください。"
+                }
+            },
             "subkeys": {
                 "title": "サブキー",
+                "count": "{{count}}個",
                 "description": "このアカウントで承認されているサブキーの一覧です。ログインした各デバイスはこの鍵で署名を行います。",
                 "loading": "読み込み中...",
                 "empty": "サブキーはありません",
@@ -327,6 +371,12 @@
                 "revokeConfirmCurrentDescription": "これは今このデバイスが使用しているサブキーです。失効させるとこのデバイスはログアウトされます。",
                 "revokeFailed": "サブキーの失効に失敗しました",
                 "masterKeyRequired": "サブキーの失効にはマスターキーが必要です。"
+            },
+            "evacuated": {
+                "title": "退避された鍵",
+                "description": "別のアカウントでログインした際に退避された旧マスターキーです。バックアップをダウンロードして安全な場所に保管してください。削除はダウンロード後に可能になります。",
+                "download": "バックアップをダウンロード",
+                "delete": "削除"
             }
         },
         "activitypub": {
@@ -338,14 +388,33 @@
             "enable": "有効化",
             "enabled": "Activitypub連携は有効化されています。",
             "yourId": "あなたのID: {{id}}",
+            "forwardTimeline": "転送元タイムライン",
+            "forwardTimelineDesc": "選択したタイムラインへの自分の投稿がActivityPubへ転送されます。未設定の場合はホームタイムラインが使用されます。",
+            "inboxNotListed": "ActivityPubタイムラインがどのリストにも登録されていません。リストに追加しないと受信した投稿が表示されません。",
+            "addToList": "リストに追加",
+            "inboxPolicyBroken": "受信リストの権限設定に問題があり、ActivityPubからの投稿が届かない状態です。",
+            "repair": "修復する",
+            "repairing": "修復中...",
+            "repairFailed": "修復に失敗しました。時間をおいて再度お試しください。",
+            "update": "更新",
             "inquiry": "照会"
+        },
+        "apNote": {
+            "notImported": "この投稿はまだこのサーバーに取得されていません。",
+            "import": "concrntメッセージとして取得する",
+            "importing": "取得中...",
+            "importFailed": "取得に失敗しました"
         },
         "apPerson": {
             "follow": "フォロー",
             "unfollow": "フォロー解除",
+            "followsYou": "フォローされています",
             "noDescription": "説明はまだありません",
             "apUserNotice": "このユーザーはActivityPubのユーザーです。",
-            "openRemote": "リモートで開く"
+            "openRemote": "リモートで開く",
+            "noPosts": "表示できる投稿はありません",
+            "loadFailed": "投稿を読み込めませんでした",
+            "boosted": "{{name}}がブースト"
         },
         "bluesky": {
             "title": "Bluesky設定",
@@ -366,6 +435,9 @@
             "active": "Bluesky連携は有効化されています。",
             "yourHandle": "あなたのハンドル: @{{handle}}",
             "enabledToggle": "連携を有効にする",
+            "forwardTimeline": "転送元タイムライン",
+            "forwardTimelineDesc": "選択したタイムラインへの自分の投稿がBlueskyへ転送されます。未設定の場合はホームタイムラインが使用されます。",
+            "update": "更新",
             "following": "フォロー中",
             "followers": "フォロワー",
             "loadMore": "もっと見る",
@@ -398,10 +470,14 @@
             "title": "照会",
             "submit": "照会"
         },
+        "list": {
+            "listNotFound": "リストが見つかりませんでした"
+        },
         "lists": {
             "createList": "リストを作成",
             "create": "作成",
-            "listTitle": "タイトル"
+            "listTitle": "タイトル",
+            "openSettings": "リスト設定"
         }
     },
     "components": {
@@ -415,7 +491,24 @@
             "submit": "カレント",
             "replyPlaceholder": "返信を入力...",
             "placeholder": "今、なにしてる？",
-            "cannotPostOffline": "オフラインのため投稿できません"
+            "cannotPostOffline": "オフラインのため投稿できません",
+            "resetDestination": "投稿先をデフォルトに戻す",
+            "dropToUpload": "ドロップしてアップロード",
+            "flagTitle": "フラグ設定(任意)",
+            "flagNone": "なし",
+            "flagWarn": "注意",
+            "flagNude": "ヌード",
+            "flagPorn": "ポルノ",
+            "flagHard": "ハード",
+            "flagCustomPlaceholder": "自由に記述できます"
+        },
+        "mediaGallery": {
+            "clickToReveal": "タップして表示",
+            "hideAgain": "再度隠す",
+            "flagWarn": "注意",
+            "flagNude": "ヌード",
+            "flagPorn": "ポルノ",
+            "flagHard": "ハード"
         },
         "report": {
             "reason": "報告理由",
@@ -445,6 +538,11 @@
             "userLiked": "{{name}} がお気に入りに登録しました",
             "loading": "読み込み中..."
         },
+        "activitypubNote": {
+            "openRemote": "リモートで開く",
+            "unavailable": "この投稿は取得できませんでした(削除済みか、非公開の可能性があります)",
+            "fetchFailed": "この投稿を読み込めませんでした(サーバーに接続できません)"
+        },
         "followAck": {
             "userFollowed": "{{name}} がフォローしました",
             "loading": "読み込み中..."
@@ -454,7 +552,10 @@
             "delete": "削除",
             "deletePost": "投稿を削除",
             "report": "通報",
-            "inspector": "インスペクター"
+            "inspector": "インスペクター",
+            "share": "シェア",
+            "copyLink": "リンクをコピー",
+            "linkCopied": "コピーしました"
         },
         "collapsibleBody": {
             "showMore": "もっと見る"
@@ -466,6 +567,10 @@
             "verificationKey": "検証キー ({{type}})",
             "verificationError": "検証エラー: {{error}}",
             "keyMismatch": "署名から復元したキーが検証キーと一致しません"
+        },
+        "mentionAssociation": {
+            "userMentioned": "{{name}} がメンションしました",
+            "loading": "読み込み中..."
         },
         "onelineMessage": {
             "deletePost": "投稿を削除"
@@ -501,7 +606,8 @@
             "settings": "設定",
             "post": "投稿",
             "documentation": "ドキュメント",
-            "forum": "フォーラム"
+            "forum": "フォーラム",
+            "notFound": "見つかりません"
         },
         "themeEditor": {
             "title": "テーマエディタ",
@@ -516,6 +622,14 @@
             "variantLabel": "表示タイプ",
             "preview": "プレビュー",
             "currentlyInUse": "現在このテーマを使用しています"
+        },
+        "emojiPackImporter": {
+            "title": "v1からインポート",
+            "description": "v1の絵文字設定で「全部コピー」したJSON(絵文字パッケージURLの配列)を貼り付けてください。すでに追加済みのパッケージはスキップします。",
+            "placeholder": "ここにJSONを貼り付け",
+            "noPackagesFound": "絵文字パッケージが見つかりませんでした",
+            "importResult": "{{added}}件追加 / {{skipped}}件スキップ",
+            "import": "インポート"
         },
         "themeImporter": {
             "title": "v1からインポート",
@@ -596,6 +710,16 @@
             "following": "フォロー",
             "followers": "フォロワー"
         },
+        "apFollowList": {
+            "following": "フォロー中",
+            "followers": "フォロワー",
+            "follow": "フォロー",
+            "unfollow": "フォロー解除",
+            "pending": "承認待ち",
+            "loadMore": "もっと見る",
+            "empty": "ユーザーがいません",
+            "loadError": "読み込みに失敗しました"
+        },
         "userPicker": {
             "addUser": "ユーザーを追加",
             "loading": "読み込み中..."
@@ -606,7 +730,15 @@
         },
         "timelineSettings": {
             "schema": "スキーマ",
-            "attributes": "属性"
+            "attributes": "属性",
+            "share": "シェア",
+            "copyLink": "リンクをコピー",
+            "linkCopied": "コピーしました"
+        },
+        "policyEditor": {
+            "modeEditor": "ポリシーエディタ",
+            "modeJson": "JSON",
+            "invalidJson": "JSONが不正です"
         },
         "listSettings": {
             "title": "リスト設定",
@@ -623,7 +755,8 @@
             "community": "コミュニティ",
             "user": "ユーザー",
             "noTimelines": "タイムラインがありません",
-            "defaultPostTimelines": "デフォルト投稿先"
+            "defaultPostTimelines": "デフォルト投稿先",
+            "isIconTab": "タブ表示にアイコンを使用"
         },
         "subscription": {
             "addToList": "リストに追加"
@@ -653,9 +786,20 @@
             "fav": "お気に入り",
             "reaction": "リアクション",
             "readRequest": "閲覧リクエスト"
+        },
+        "mnemonicInput": {
+            "wordLabel": "{{index}}番目の単語",
+            "unknownWords": "単語帳にない単語が入力されています({{positions}}番目)。綴りを確認してください。"
         }
     },
     "contexts": {
+        "commandPalette": {
+            "placeholder": "コミュニティ・ユーザーを検索...",
+            "communities": "コミュニティ",
+            "users": "ユーザー",
+            "noResults": "該当する結果が見つかりませんでした",
+            "unavailable": "検索サービスに接続できませんでした"
+        },
         "composer": {
             "cancel": "キャンセル"
         },
@@ -665,7 +809,8 @@
             "searchPlaceholder": "絵文字を検索...",
             "noMatchingEmojis": "一致する絵文字がありません",
             "noEmojis": "絵文字がありません",
-            "noRecentEmojis": "まだ使った絵文字がありません"
+            "noRecentEmojis": "まだ使った絵文字がありません",
+            "addEmojis": "絵文字を追加"
         },
         "client": {
             "checkingSession": "セッションを確認しています...",
@@ -717,16 +862,14 @@
             "masterKeyLogin": "マスターキーでログイン",
             "methodQr": "アプリでQR",
             "methodPasskey": "パスキー",
-            "methodMasterKey": "マスターキー",
+            "methodManual": "手動入力",
             "signup": "アカウントをお持ちでない方は新規登録",
             "checking": "確認中...",
             "usePasskey": "パスキーを使う",
-            "masterKey": "マスターキー",
-            "masterKeyPlaceholder": "12語のマスターキーを入力",
             "registeredServer": "登録サーバー",
             "serverPlaceholder": "例: v2dev.concrnt.net",
             "masterKeyInvalid": "マスターキーを確認できません。",
-            "masterKeyInvalidDetailed": "マスターキーを確認できません。12語のマスターキーを入力してください。",
+            "masterKeyInvalidDetailed": "マスターキーを確認できません。12語のマスターキーまたは64桁のhex秘密鍵を入力してください。",
             "loginWithThisServer": "このサーバーでログイン",
             "clearInput": "入力をクリア",
             "passkeyUnavailable": "このブラウザではパスキーを利用できません。",
@@ -741,7 +884,18 @@
             "registrationNotFoundOnServer": "指定されたサーバーで登録情報が見つかりませんでした。",
             "registeringKey": "このブラウザで使う鍵を登録しています...",
             "masterKeyLoginFailed": "マスターキーでのログインに失敗しました。",
-            "subkeyCommitFailed": "サブキーの登録に失敗しました。"
+            "subkeyCommitFailed": "サブキーの登録に失敗しました。",
+            "subkeyLogin": "サブキーでログイン",
+            "checkingSubkey": "{{domain}} でサブキーを確認しています...",
+            "subkeyInvalid": "サブキーの形式が正しくありません。",
+            "subkeyInvalidOnServer": "このサブキーは無効化されているか、登録されていません。",
+            "subkeyLoginFailed": "サブキーでのログインに失敗しました。",
+            "manualMasterKey": "マスターキー",
+            "manualMasterKeyHint": "12個の単語を順番に入力してください。12語をまとめて貼り付けることもできます。",
+            "manualRawKey": "サブキーまたは秘密鍵",
+            "manualRawKeyPlaceholder": "concrnt-subkey から始まるサブキー、または64桁のhex秘密鍵を入力",
+            "switchToRawKey": "サブキー・秘密鍵で入力する",
+            "switchToMasterKey": "マスターキー(12語)で入力する"
         },
         "register": {
             "title": "アカウント登録",
@@ -763,6 +917,9 @@
             "usePasskeyDescription": "パスキーがおすすめですが、一部の端末やブラウザでは利用できない場合があります。",
             "no": "いいえ",
             "yes": "はい",
+            "passkeyUnavailable": "このブラウザではパスキーを利用できません。",
+            "passkeyCreateFailed": "パスキーを作成できませんでした。この環境ではパスキーを利用できない可能性があります。「いいえ」を選ぶと通常のキーでログインできます。",
+            "passkeyNoPrf": "お使いのパスキーは必要な拡張機能(PRF)に対応していませんでした😭 今作成されたパスキーはログインに使用できないため、お手数ですが端末のパスキー設定から削除してください。別のパスキーをお試しいただくか、「いいえ」で通常のキーを利用できます。",
             "confirmEmoji": "端末で表示されている絵文字を確認し、同じであれば端末で「はい」を選択してください。"
         },
         "guestBase": {
@@ -797,6 +954,78 @@
             "privateTimeline": "このタイムラインはプライベートです",
             "loginRequired": "閲覧をリクエストするにはログインが必要です",
             "login": "ログイン"
+        },
+        "welcome": {
+            "start": "はじめる",
+            "arrivalTimelineDescription": "ariake.concrnt.netサーバーへようこそ！わからない事があれば、ここで呟いてみましょう。",
+            "devCentralDescription": "開発者の憩い場",
+            "pageTitle": "Concrnt | コンカレント",
+            "metaDescription": "Concrntはあなたの世界をちょっとだけより豊かにする、新しい時代のSNSです",
+            "guide": "ユーザーガイド",
+            "gettingStarted": "さぁ、はじめよう",
+            "import": "ログイン",
+            "catch": "もし、こんなSNSがあったら...",
+            "wish1": "自分の友達や興味のある人が「いま、なにしてる」のかをリアルタイムで知れる。",
+            "wish2": "1つのアカウントで、複数のコミュニティと交流できる。",
+            "wish3": "運営が単一でなく、だれに管理をお願いするかを選べる。",
+            "wish4": "そんなSNSが、あったらいいですよね。",
+            "wish5": "Concrntは、この願いにこたえるために開発されました。",
+            "wish6": "新時代のSNSへ、ようこそ。",
+            "feature1title": "みんなで楽しむためのSNS",
+            "feature1subtitle": "知らない人しか流れてこないおすすめ欄に疲れた？",
+            "feature1p1": "知らない人しか流れてこないオススメより、自分の好きな人のことの方が、もっと知りたいですよね。",
+            "feature1p2": "Concrntでは、アルゴリズムに任せるのではなく、自分でカスタマイズできるリスト機能を活用して、自分にとって本当に価値のある情報を手に入れることができます。好きな人、興味のあるコミュニティを選び、自分にピッタリなタイムラインを作り上げましょう。",
+            "feature1p3": "Concrntは、あなたが本当に大切にしたいつながりを中心に据えた、みんなで楽しむためのSNSです。",
+            "feature2title": "あなたのアカウントはあなたのもの",
+            "feature2subtitle": "凍結に怯える日々とバイバイ👋",
+            "feature2p1": "Concrntは、ユーザーの自由と安全を最優先に考えた分散型SNSです。一つの企業や組織による独裁的な管理から解放され、複数の個人や組織が独立してサーバーを運営しています。",
+            "feature2p2": "これにより、あなたのアカウントが突然凍結されるリスクに怯える必要はもうありません。仮に一つのサーバーで理不尽な対応を受けたとしても、別のサーバーへと簡単に移行でき、投稿やフォロワーをそのまま引き継いで活動を続けることが可能です。従来のSNSでは考えられなかった、自分自身で管理できる安心感と自由がここにあります。",
+            "feature2p3": "Concrntでは、あなたのアカウントは本当に「あなたのもの」として存在します。",
+            "feature3title": "1つのSNSで無数の居場所を",
+            "feature3subtitle": "趣味に合わせてアカウントを使い分ける時代は終わり",
+            "feature3p1": "Concrntでは、ホームタイムラインに加え、複数のコミュニティタイムラインを使い分けることができます。投稿時には、複数のコミュニティに同時に投稿できるため、人間にとって自然な「複数のコミュニティとゆるくつながる」ことが簡単に行えます。",
+            "feature3p2": "Xのように世界と過剰につながりすぎることもなく、Discordのように閉じすぎることもない。適度に他のコミュニティと接続しながら、自分に合った居場所を見つけることができるのがConcrntの特徴です。",
+            "crnt1": "使い方が新しいけどなれたら快適！",
+            "crnt2": "自分が依存するものは、オープンなものじゃなくっちゃね",
+            "crnt3": "複数のコミュニティに同時に発信したい！",
+            "crnt4": "自分でサーバー建ててみようかな？",
+            "crnt5": "自分が分散しなくていい分散型SNSが欲しい！",
+            "crnt6": "いま、なにしてる？",
+            "crnt7": "わいわい",
+            "crnt8": "よるほー",
+            "crnt9": "誰か遊びに行こ！",
+            "crnt10": "テーマのカスタマイズが楽しい！",
+            "crnt11": "自分のアカウントが自分の手の内にあるから、\n安心してインターネットアイデンティティとして利用できる",
+            "crnt12": "絵文字リアクションでのコミュニケーションが快適！",
+            "crnt13": "いまいるサーバーが閉鎖しちゃっても、\n関係をそのまま引っ越せるから安心！",
+            "crnt14": "おなかすいたYO",
+            "crnt_totegamma": "こういうの、あれ！",
+            "mock": {
+                "home": {
+                    "title": "ホーム",
+                    "crnt1": "この時間の静かさ、ほんとに好き。休日はひとりの時間が一番。",
+                    "crnt2": "音楽といえば、最近アニソンが頭から離れない。聴くとなんかテンション上がる。",
+                    "crnt3": "昼下がりの音楽セレクト、今日は何を聴こう。ちょっと悩むな。",
+                    "crnt4": "新しい本が届いた！紅茶を淹れて読書の時間。最高の休日。",
+                    "crnt5": "今日は久々に好きなアニメの再放送。これからまったり視聴タイム。"
+                },
+                "game": {
+                    "title": "ゲーム界隈",
+                    "crnt1": "『魔界の冒険者』のセーブデータ、消失…。泣きたい。",
+                    "crnt2": "VRゲームの新作、現実感がすごい！酔わないよう気をつけないと。",
+                    "crnt3": "昨晩のオンラインバトル、完璧な連携だった。次も頼むぞ、チーム！",
+                    "crnt4": "古いアーケードゲームを発見。コイン入れてプレイする感覚、懐かしい。",
+                    "crnt5": "ゲームのOST集めるのが趣味。今日は新しい1枚ゲット！"
+                },
+                "food": {
+                    "title": "ごはん",
+                    "crnt1": "手作りのビーガン料理に挑戦中。今日はトマトとキヌアのサラダ。",
+                    "crnt2": "新しいスパイスショップを発見！エキゾチックな味で実験開始。",
+                    "crnt3": "今日のラーメン、絶品だった。辛さがちょうど良い。",
+                    "crnt4": "自家製のコールドブリュー、夏の定番。コーヒー豆の選び方が鍵。",
+                    "crnt5": "お店で食べた焼き鳥、外はサクサク、中はジューシー。次は友達を連れて行く！"
+                }
+            }
         }
     },
     "app": {
@@ -840,7 +1069,9 @@
             "cancel": "キャンセル",
             "delete": "削除",
             "deleteFailed": "削除できませんでした。もう一度お試しください。",
-            "resetSession": "セッションをリセット"
+            "resetSession": "セッションをリセット",
+            "noKeyToBackup": "このセッションはマスターキーを保持していないため、失われる鍵はありません。",
+            "confirmDelete": "このアカウントの情報(マスターキーを含む)をこのブラウザから削除します。よろしいですか？"
         },
         "storeMocks": {
             "idTitle": "ID管理",

@@ -5,19 +5,17 @@ import { useClient } from '../contexts/Client'
 import { Drawer } from '../ui/Drawer'
 
 import { Header } from '../ui/Header'
-import { FAB } from '../ui/FAB'
 import { View, Tabs, Tab, Text, Button } from '@concrnt/ui'
 import { ErrorBoundary } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 
 import { ListSettings } from '../components/ListSettings'
 import { RealtimeTimeline } from '../components/RealtimeTimeline'
+import { ComposeFAB } from '../components/ComposeFAB'
+import { PostContextProvider } from '../contexts/PostContext'
 
 import { MdTune } from 'react-icons/md'
-import { MdCreate } from 'react-icons/md'
-import { useComposer } from '../contexts/Composer'
 import { PinnedListItemClass, semantics, List } from '@concrnt/worldlib'
-import { hapticLight } from '../utils/haptics'
 import { CssVar } from '../types/Theme'
 import { ListName } from '../components/ListName'
 import { ProfileEditor } from '../components/ProfileEditor'
@@ -31,7 +29,8 @@ export const HomeView = (props: ScrollViewProps) => {
 
     const scrollRef = useRef<ScrollViewHandle>(null)
     useImperativeHandle(props.ref, () => ({
-        scrollToTop: () => scrollRef.current?.scrollToTop()
+        scrollToTop: () => scrollRef.current?.scrollToTop(),
+        reselect: () => scrollRef.current?.reselect?.()
     }))
 
     const [selectedTabUri, setSelectedTabUri] = useState<string>('')
@@ -134,6 +133,27 @@ const HomeMain = ({
 
     const pin = sortedPins.find((pin) => pin.uri === selectedTabUri)
 
+    // 下部タブのホーム再タップ: 先頭以外のリストを完全にトップで見ているときだけ先頭リストへ戻す。
+    // それ以外(スクロール中/先頭リスト/ピン1つ)は従来どおりスクロールトップ
+    const timelineRef = useRef<ScrollViewHandle>(null)
+    useImperativeHandle(
+        ref,
+        () => ({
+            scrollToTop: () => timelineRef.current?.scrollToTop(),
+            reselect: () => {
+                const first = sortedPins[0]
+                if (first && first.uri !== selectedTabUri && timelineRef.current?.isAtTop?.()) {
+                    startTransition(() => {
+                        setSelectedTabUri(first.uri)
+                    })
+                } else {
+                    timelineRef.current?.scrollToTop()
+                }
+            }
+        }),
+        [sortedPins, selectedTabUri, setSelectedTabUri]
+    )
+
     useEffect(() => {
         if (selectedTabUri === '' && sortedPins.length > 0) {
             setSelectedTabUri(sortedPins[0].uri)
@@ -145,7 +165,8 @@ const HomeMain = ({
             {sortedPins.length > 1 && (
                 <Tabs
                     style={{
-                        color: CssVar.contentLink
+                        color: CssVar.contentLink,
+                        justifyContent: 'flex-start'
                     }}
                 >
                     {sortedPins.map((tab) => (
@@ -160,15 +181,22 @@ const HomeMain = ({
                             groupId="home-timeline-tabs"
                             style={{
                                 color: CssVar.contentText,
-                                width: '120px'
+                                flex: '0 0 auto',
+                                width: 'auto',
+                                minWidth: '90px',
+                                maxWidth: '360px'
                             }}
                         >
-                            <ListName uri={tab.uri} />
+                            <ListName pin={tab} />
                         </Tab>
                     ))}
                 </Tabs>
             )}
-            {pin && <TimelineWrap ref={ref} pin={pin} />}
+            {pin && (
+                <PostContextProvider destinations={pin.defaultPostTimelines} profile={pin.defaultProfile}>
+                    <TimelineWrap ref={timelineRef} pin={pin} />
+                </PostContextProvider>
+            )}
         </>
     )
 }
@@ -182,7 +210,7 @@ const TimelineWrap = (props: { pin: PinnedListItemClass; ref?: ScrollViewRef }) 
     return (
         <>
             <Timeline ref={props.ref} list={list} excludeSelf={props.pin.excludeSelf} />
-            <InnerFab defaultPostTimelines={props.pin.defaultPostTimelines} defaultProfile={props.pin.defaultProfile} />
+            <ComposeFAB />
         </>
     )
 }
@@ -199,19 +227,4 @@ const Timeline = (props: { list: List; excludeSelf?: boolean; ref?: ScrollViewRe
     )
 
     return <RealtimeTimeline ref={props.ref} timelines={timelines} />
-}
-
-const InnerFab = (props: { defaultPostTimelines: string[]; defaultProfile?: string }) => {
-    const composer = useComposer()
-
-    return (
-        <FAB
-            onClick={() => {
-                hapticLight()
-                composer.open(props.defaultPostTimelines, undefined, undefined, undefined, props.defaultProfile)
-            }}
-        >
-            <MdCreate size={24} />
-        </FAB>
-    )
 }

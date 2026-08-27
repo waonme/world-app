@@ -8,8 +8,9 @@ import { Avatar, CfmRenderer, Text, IconButton, ListItem, useAnchor } from '@con
 import { useState } from 'react'
 import { MdMoreHoriz } from 'react-icons/md'
 import { Select } from '../Select'
-import { hapticSuccess } from '../../utils/haptics'
+import { useHaptics } from '../../contexts/Haptics'
 import { OnelineMessageLayout } from './OnelineLayout'
+import { Timestamp } from './Timestamp'
 import { TimeDiff } from '../TimeDiff'
 import { useNavigate } from 'react-router-dom'
 
@@ -17,6 +18,7 @@ export const OnelineMessage = (props: MessageProps<MarkdownMessageSchema>) => {
     const { t } = useTranslation('', { keyPrefix: 'components.onelineMessage' })
     const navigate = useNavigate()
     const { client } = useClient()
+    const { hapticSuccess } = useHaptics()
     const menuAnchor = useAnchor()
 
     const [menuOpen, setMenuOpen] = useState(false)
@@ -29,19 +31,22 @@ export const OnelineMessage = (props: MessageProps<MarkdownMessageSchema>) => {
                 <div
                     onClick={(e) => {
                         e.stopPropagation()
-                        navigate('/profile/' + message.author)
+                        navigate(
+                            '/profile/' +
+                                message.author +
+                                (message.authorProfileName && message.authorProfileName !== 'main'
+                                    ? '/' + message.authorProfileName
+                                    : '')
+                        )
                     }}
                 >
                     <Avatar
                         ccid={message.author}
-                        src={message.authorUser?.profile.avatar}
-                        style={{ width: '40px', height: '18px' }}
+                        src={message.authorProfile?.avatar}
+                        style={{ width: '48px', height: '18px' }}
                     />
                 </div>
             }
-            onClick={() => {
-                navigate('/post/' + encodeURIComponent(message.uri))
-            }}
         >
             <CfmRenderer oneline messagebody={message.value.body} emojiDict={message.value.emojis ?? {}} />
             <div style={{ flex: 1 }} />
@@ -54,7 +59,9 @@ export const OnelineMessage = (props: MessageProps<MarkdownMessageSchema>) => {
                     {
                         padding: 0,
                         margin: 0,
-                        anchorName: menuAnchor
+                        anchorName: menuAnchor,
+                        width: '15px',
+                        height: '15px'
                     } as React.CSSProperties
                 }
             >
@@ -76,9 +83,13 @@ export const OnelineMessage = (props: MessageProps<MarkdownMessageSchema>) => {
                 ]}
                 anchor={menuAnchor}
             />
-            <div style={{ flexShrink: 0 }}>
+            <Timestamp
+                onClick={() => {
+                    navigate('/post/' + encodeURIComponent(message.uri))
+                }}
+            >
                 <TimeDiff date={props.message.createdAt} />
-            </div>
+            </Timestamp>
         </OnelineMessageLayout>
     )
 }

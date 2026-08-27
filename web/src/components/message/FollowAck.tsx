@@ -46,12 +46,12 @@ export const FollowAck = (props: MessageProps<FollowAckSchema>) => {
                     gap: '8px',
                     fontSize: '12px',
                     opacity: 0.7,
-                    paddingLeft: '48px'
+                    paddingLeft: '56px'
                 }}
             >
                 <Avatar
                     ccid={message.author}
-                    src={followAuthor?.profile.avatar}
+                    src={message.authorProfile?.avatar}
                     style={{ width: '16px', height: '16px' }}
                 />
                 <MdPersonAdd size={14} />
@@ -64,7 +64,7 @@ export const FollowAck = (props: MessageProps<FollowAckSchema>) => {
                     }}
                     style={{ cursor: 'pointer' }}
                 >
-                    {t('userFollowed', { name: followAuthor?.profile.username ?? '' })}
+                    {t('userFollowed', { name: message.authorProfile?.username ?? '' })}
                 </span>
             </div>
 
@@ -74,13 +74,19 @@ export const FollowAck = (props: MessageProps<FollowAckSchema>) => {
                     onClick={() => {
                         navigate('/profile/' + followee.ccid)
                     }}
-                    left={<Avatar ccid={followee.ccid} src={followee.profile.avatar} />}
+                    left={
+                        <Avatar
+                            ccid={followee.ccid}
+                            src={followee.profile.avatar}
+                            style={{ width: '48px', height: '48px' }}
+                        />
+                    }
                     headerLeft={<div style={{ fontWeight: 'bold' }}>{followee.profile.username}</div>}
                 />
             )}
 
             {/* ローディング */}
-            {!followee && <div style={{ paddingLeft: '48px', opacity: 0.5, fontSize: '12px' }}>{t('loading')}</div>}
+            {!followee && <div style={{ paddingLeft: '56px', opacity: 0.5, fontSize: '12px' }}>{t('loading')}</div>}
         </div>
     )
 }

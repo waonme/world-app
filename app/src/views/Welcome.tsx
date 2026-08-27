@@ -5,10 +5,20 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AccountSetup } from '../views/AccountSetup'
 import { AccountImport } from '../views/AccountImport'
-import { Api, InMemoryKVS, Document, Entity, InMemoryAuthProvider, SignedDocument } from '@concrnt/client'
+import {
+    Api,
+    InMemoryKVS,
+    Document,
+    Entity,
+    InMemoryAuthProvider,
+    NotFoundError,
+    SignedDocument
+} from '@concrnt/client'
 import { Passport } from '@concrnt/ui'
 import { ProfileSchema, semantics } from '@concrnt/worldlib'
 import { TauriAuthProvider } from '../lib/authProvider'
+import { AccountSummary, listAccounts, performAccountSwitch } from '../lib/accounts'
+import { AccountListItem } from '../components/AccountListItem'
 import { useResetPreference } from '../contexts/Preference'
 import { LoadingFull } from '../components/LoadingFull'
 import { AuthActions, AuthBrand, AuthButton, AuthHeader, AuthScreen, AuthTextButton, authStyles } from './authLayout'
@@ -54,7 +64,14 @@ export const WelcomeView = () => {
     const [continuing, setContinuing] = useState(false)
     const [continueError, setContinueError] = useState<string | null>(null)
     const reset = useResetPreference()
-    const [resolver, setResolver] = useState<string>(resolveEntrypoint())
+    // null = 未解決。端末に残っている自分の登録サーバー(AccountRecord.domain)を最優先で使い、
+    // 無ければエントリポイント(ariake)、それでも見つからなければRecoveryViewの手入力にフォールバックする。
+    // エントリポイントはhint無しでは他ドメインのユーザーを解決できないため、これが無いと
+    // ログアウト後に他サーバーのユーザーが常に「登録なし」に誤診される
+    const [resolver, setResolver] = useState<string | null>(null)
+    // 端末に保存されている全アカウント(鍵)。エラー/登録なし画面で「どの鍵を見ているか」「他の鍵があるか」を
+    // 見せて切り替えられるようにするための診断用。取得失敗は空扱いにして画面を止めない
+    const [accounts, setAccounts] = useState<AccountSummary[]>([])
 
     useEffect(() => {
         const load = async () => {
@@ -81,12 +98,42 @@ export const WelcomeView = () => {
             }
             setExistingCCID(ccid)
 
+            let accountList: AccountSummary[] = []
+            try {
+                accountList = await listAccounts()
+            } catch (e) {
+                console.error('Failed to list accounts', e)
+            }
+            setAccounts(accountList)
+
+            // resolverの初期化は一度きり(RecoveryViewの手入力によるsetResolverをloadが巻き戻さないため)。
+            // setResolverでeffectが再実行され、次周回で照会に進む
+            if (resolver === null) {
+                const accountDomain = accountList.find((a) => a.ccid === ccid)?.domain ?? null
+                setResolver(accountDomain ?? resolveEntrypoint())
+                return
+            }
+
             const authProvider = new InMemoryAuthProvider()
             const kvs = new InMemoryKVS()
 
             const api = new Api(resolver, authProvider, kvs)
 
-            const entity = await api.getEntity(ccid).catch(() => undefined)
+            // 「登録なし」と断定するのはサーバーが404を返した時だけ。通信失敗やサーバーエラーを
+            // missingにすると、鍵が端末に残っているのに新規鍵生成への導線が開いてしまう
+            let entity: Document<Entity> | undefined
+            try {
+                entity = await api.getEntity(ccid)
+            } catch (e) {
+                if (e instanceof NotFoundError) {
+                    entity = undefined
+                } else {
+                    console.error('Failed to check registration', e)
+                    setLoadError(e instanceof Error ? e.message : String(e))
+                    setState('error')
+                    return
+                }
+            }
             const profile = await api.getDocument<ProfileSchema>(semantics.profile(ccid, 'main')).catch(() => undefined)
 
             setUser({
@@ -144,7 +191,22 @@ export const WelcomeView = () => {
                                 {loadError}
                             </Text>
                         )}
+                        {existingCCID && (
+                            <Text
+                                variant="caption"
+                                style={{
+                                    color: CssVar.uiText,
+                                    opacity: 0.6,
+                                    textAlign: 'center',
+                                    wordBreak: 'break-all',
+                                    whiteSpace: 'pre-line'
+                                }}
+                            >
+                                {t('checkingAccount', { ccid: existingCCID, resolver: resolver ?? '-' })}
+                            </Text>
+                        )}
                     </div>
+                    <StoredAccounts accounts={accounts} />
                     <div style={{ flex: 1 }} />
                     <AuthActions fixedBottom>
                         <AuthButton
@@ -160,7 +222,7 @@ export const WelcomeView = () => {
                 </AuthScreen>
             )
         case 'signup':
-            return <AccountSetup entrypoint={resolver} onBack={() => setState('welcome')} />
+            return <AccountSetup entrypoint={resolver ?? resolveEntrypoint()} onBack={() => setState('welcome')} />
         case 'signin':
             return <AccountImport onImported={reload} onBack={() => setState('welcome')} />
         case 'welcome':
@@ -198,6 +260,7 @@ export const WelcomeView = () => {
             return (
                 <RecoveryView
                     ccid={existingCCID!}
+                    accounts={accounts}
                     reload={reload}
                     giveup={() => setState('signup')}
                     setDomain={(domain) => {
@@ -252,7 +315,8 @@ export const WelcomeView = () => {
                                         value: {
                                             ckid
                                         },
-                                        createdAt: new Date()
+                                        createdAt: new Date(),
+                                        onUpdate: 'retain'
                                     }
 
                                     const authProvider = new TauriAuthProvider(user.ccid)
@@ -320,35 +384,58 @@ const RecoveryView = (props: {
     giveup: () => void
     setDomain?: (domain: string) => void
     ccid: string
+    accounts: AccountSummary[]
 }) => {
     const { t } = useTranslation('', { keyPrefix: 'views.welcome' })
-    const [found, setFound] = useState<boolean>(false)
+    // unknown=未入力(何も表示しない)。「見つからない」と表示・断定するのはサーバーが404を返した時だけで、
+    // 通信失敗はerrorとして区別する(誤って新規登録/削除に誘導しないため)
+    const [found, setFound] = useState<'unknown' | 'found' | 'notfound' | 'error'>('unknown')
     const [domain, setDomain] = useState<string>()
+
+    // 入力が変わったら判定結果を描画中にリセットする(照会完了までは何も表示しない)
+    const [checkedDomain, setCheckedDomain] = useState<string | undefined>(undefined)
+    if (domain !== checkedDomain) {
+        setCheckedDomain(domain)
+        setFound('unknown')
+    }
 
     useEffect(() => {
         if (!domain) return
 
-        const auth = new InMemoryAuthProvider()
-        const kvs = new InMemoryKVS()
-        const api = new Api(domain, auth, kvs)
+        // 打鍵ごとに照会が飛ばないようデバウンスする
+        const timer = setTimeout(() => {
+            const auth = new InMemoryAuthProvider()
+            const kvs = new InMemoryKVS()
+            const api = new Api(domain, auth, kvs)
 
-        api.getEntity(props.ccid)
-            .then((entity) => {
-                if (entity) {
-                    setFound(true)
-                    props.setDomain?.(entity.value.domain)
-                } else {
-                    setFound(false)
-                }
-            })
-            .catch(() => {
-                setFound(false)
-            })
+            api.getEntity(props.ccid)
+                .then((entity) => {
+                    if (entity) {
+                        setFound('found')
+                        props.setDomain?.(entity.value.domain)
+                    } else {
+                        setFound('notfound')
+                    }
+                })
+                .catch((e) => {
+                    setFound(e instanceof NotFoundError ? 'notfound' : 'error')
+                })
+        }, 500)
+
+        return () => {
+            clearTimeout(timer)
+        }
     }, [domain])
 
     return (
         <AuthScreen align="top">
             <AuthHeader title={t('recovery.title')} description={t('recovery.descriptionDevice')} />
+            <Text
+                variant="caption"
+                style={{ color: CssVar.uiText, opacity: 0.6, textAlign: 'center', wordBreak: 'break-all' }}
+            >
+                {props.ccid}
+            </Text>
             <div style={authStyles.section}>
                 <div style={authStyles.inputGroup}>
                     <Text style={{ color: CssVar.uiText }}>{t('recovery.serverAddress')}</Text>
@@ -359,14 +446,21 @@ const RecoveryView = (props: {
                     />
                 </div>
                 <Text style={authStyles.status}>
-                    {found ? t('recovery.registrationFound') : t('recovery.registrationNotFound')}
+                    {found === 'found'
+                        ? t('recovery.registrationFound')
+                        : found === 'notfound'
+                          ? t('recovery.registrationNotFound')
+                          : found === 'error'
+                            ? t('recovery.checkFailed')
+                            : ''}
                 </Text>
             </div>
-            {found ? (
+            <StoredAccounts accounts={props.accounts} />
+            {found === 'found' ? (
                 <AuthActions fixedBottom>
                     <AuthButton onClick={props.reload}>{t('recovery.continue')}</AuthButton>
                 </AuthActions>
-            ) : (
+            ) : found === 'error' ? null : (
                 <AuthActions fixedBottom>
                     <AuthButton
                         onClick={() => {
@@ -386,5 +480,31 @@ const RecoveryView = (props: {
                 </AuthActions>
             )}
         </AuthScreen>
+    )
+}
+
+// 端末に保存されているアカウント(鍵)の一覧。非アクティブな行をタップすると切り替えて再起動する。
+// 復旧画面では通信が出来ない前提なので、プロフィール取得に依存せずccidで識別できるようにする
+const StoredAccounts = (props: { accounts: AccountSummary[] }) => {
+    const { t } = useTranslation('', { keyPrefix: 'views.welcome' })
+    if (props.accounts.length === 0) return null
+    return (
+        <div style={authStyles.section}>
+            <Text style={{ color: CssVar.uiText }}>{t('storedAccounts')}</Text>
+            <Text variant="caption" style={{ color: CssVar.uiText, opacity: 0.6 }}>
+                {t('storedAccountsHint')}
+            </Text>
+            {props.accounts.map((account) => (
+                <AccountListItem
+                    key={account.ccid}
+                    account={account}
+                    showCCID
+                    onClick={() => {
+                        if (account.isActive) return
+                        performAccountSwitch(account.ccid)
+                    }}
+                />
+            ))}
+        </div>
     )
 }

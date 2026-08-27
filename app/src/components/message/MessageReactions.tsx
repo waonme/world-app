@@ -1,25 +1,52 @@
-import { Association, Message, ReactionAssociationSchema, Schemas } from '@concrnt/worldlib'
+import { Association, Message, ReactionAssociationSchema, RerouteMessageSchema, Schemas } from '@concrnt/worldlib'
 import { Document } from '@concrnt/client'
 import { useClient } from '../../contexts/Client'
 import { CssVar } from '../../types/Theme'
-import { hapticLight } from '../../utils/haptics'
+import { useHaptics } from '../../contexts/Haptics'
 import { startTransition } from 'react'
 import { ReactionState } from './Footer'
 import { ButtonBase, CCImage } from '@concrnt/ui'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
+import { useQueryTimelineContext } from '../QueryTimeline'
+
+// web版との意図的な差分: appはButtonBase+長押しでリアクション一覧へ遷移、
+// webは素のbutton+hoverでリアクションした人をtooltip表示する(tooltipはweb限定機能)
 
 interface Props {
     message: Message<any>
+    rerouted?: Message<RerouteMessageSchema>
     reactionState: ReactionState
     updateReactionState: React.Dispatch<React.SetStateAction<ReactionState>>
 }
 
 export const MessageReactions = (props: Props) => {
     const { client } = useClient()
+    const { hapticLight } = useHaptics()
     const { push } = useStack()
+    const qt = useQueryTimelineContext()
+    const messageHref = props.message.key ?? props.message.uri
 
     const { reactionCounts, ownReactions } = props.reactionState
+
+    // commit完了後、transitionが終わる(=useOptimisticがrevertする)前に
+    // メッセージ本体を再取得してベース値をサーバー状態に揃える。
+    // これをsocketイベント任せにすると、イベントがcommit応答より遅れたときに
+    // 一瞬リアクションが消える
+    const refreshMessage = async () => {
+        if (props.rerouted) {
+            // リルート経由の場合: タイムライン項目のhrefはリルート文書のもの。
+            // qt.update(=invalidateMessage)がリルート文書とそのtargetの両キャッシュを破棄するので、
+            // 再レンダリングがuse()する両方を再取得してtransition内で解決させる
+            const rerouteHref = props.rerouted.key ?? props.rerouted.uri
+            qt.update(rerouteHref)
+            await client?.getMessage(props.message.uri).catch(() => null)
+            await client?.getMessage(rerouteHref).catch(() => null)
+        } else {
+            qt.update(messageHref)
+            await client?.getMessage(messageHref).catch(() => null)
+        }
+    }
 
     const handleReactionClick = async (imageUrl: string) => {
         if (!client) return
@@ -41,6 +68,7 @@ export const MessageReactions = (props: Props) => {
                 await ownReactions[imageUrl].delete(client).catch((e) => {
                     console.error('Failed to delete reaction:', e)
                 })
+                await refreshMessage()
             })
         } else {
             startTransition(async () => {
@@ -85,6 +113,7 @@ export const MessageReactions = (props: Props) => {
                 await props.message.reaction(client, shortcode, imageUrl).catch((e) => {
                     console.error('Failed to add reaction:', e)
                 })
+                await refreshMessage()
             })
         }
     }
@@ -94,7 +123,7 @@ export const MessageReactions = (props: Props) => {
             style={{
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: '6px'
+                gap: '8px'
             }}
         >
             {Object.entries(reactionCounts).map(([imageUrl, count]) => {
@@ -113,14 +142,17 @@ export const MessageReactions = (props: Props) => {
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 8px',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            padding: '0 8px',
+                            minWidth: '64px',
+                            minHeight: '26px',
                             borderRadius: CssVar.round(1),
                             border: isOwn ? `1.5px solid ${CssVar.contentLink}` : `1px solid ${CssVar.divider}`,
                             backgroundColor: isOwn ? `rgb(from ${CssVar.contentLink} r g b / 0.15)` : 'transparent',
                             cursor: 'pointer',
                             color: CssVar.contentText,
-                            fontSize: '13px'
+                            fontSize: '1rem'
                         }}
                     >
                         <CCImage
@@ -128,9 +160,8 @@ export const MessageReactions = (props: Props) => {
                             maxHeight={128}
                             alt=""
                             style={{
-                                height: '18px',
-                                width: '18px',
-                                objectFit: 'contain'
+                                // width指定なし=アスペクト比維持(横長絵文字は潰さずそのまま伸ばす)
+                                height: '20px'
                             }}
                         />
                         <span>{count}</span>

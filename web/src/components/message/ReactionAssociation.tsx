@@ -36,12 +36,12 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                     gap: '8px',
                     fontSize: '12px',
                     opacity: 0.7,
-                    paddingLeft: '48px'
+                    paddingLeft: '56px'
                 }}
             >
                 <Avatar
                     ccid={message.author}
-                    src={reactionAuthor?.profile.avatar}
+                    src={message.authorProfile?.avatar}
                     style={{ width: '16px', height: '16px' }}
                 />
                 {reaction?.imageUrl ? (
@@ -66,7 +66,7 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                     }}
                     style={{ cursor: 'pointer' }}
                 >
-                    {t('userReacted', { name: reactionAuthor?.profile.username ?? '' })}
+                    {t('userReacted', { name: message.authorProfile?.username ?? '' })}
                 </span>
             </div>
 
@@ -79,17 +79,17 @@ export const ReactionAssociation = (props: MessageProps<ReactionAssociationSchem
                                 navigate('/profile/' + targetMessage.author)
                             }}
                         >
-                            <Avatar ccid={targetMessage.author} src={targetMessage.authorUser?.profile.avatar} />
+                            <Avatar ccid={targetMessage.author} src={targetMessage.authorProfile?.avatar} />
                         </div>
                     }
-                    headerLeft={<div style={{ fontWeight: 'bold' }}>{targetMessage.authorUser?.profile.username}</div>}
+                    headerLeft={<div style={{ fontWeight: 'bold' }}>{targetMessage.authorProfile?.username}</div>}
                 >
                     <CfmRenderer messagebody={targetMessage.value.body} emojiDict={targetMessage.value.emojis ?? {}} />
                 </MessageLayout>
             )}
 
             {!targetMessage && (
-                <div style={{ paddingLeft: '48px', opacity: 0.5, fontSize: '12px' }}>{t('loading')}</div>
+                <div style={{ paddingLeft: '56px', opacity: 0.5, fontSize: '12px' }}>{t('loading')}</div>
             )}
         </div>
     )

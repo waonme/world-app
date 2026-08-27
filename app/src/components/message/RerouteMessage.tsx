@@ -8,16 +8,20 @@ import { Avatar, Text, IconButton, ListItem, Select } from '@concrnt/ui'
 import { useState } from 'react'
 import { MdMoreHoriz } from 'react-icons/md'
 import { MdRepeat } from 'react-icons/md'
-import { hapticSuccess } from '../../utils/haptics'
+import { useHaptics } from '../../contexts/Haptics'
 import { OnelineMessageLayout } from './OnelineLayout'
 import { MessageContainer } from './main'
 import { TimeDiff } from '../TimeDiff'
 import { RenderError } from './RenderError'
 import { ErrorBoundary } from 'react-error-boundary'
+import { useStack } from '../../layouts/Stack'
+import { ProfileView } from '../../views/Profile'
 
 export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
     const { t } = useTranslation('', { keyPrefix: 'components.rerouteMessage' })
     const { client } = useClient()
+    const { push } = useStack()
+    const { hapticSuccess } = useHaptics()
 
     const [menuOpen, setMenuOpen] = useState(false)
 
@@ -36,17 +40,43 @@ export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
                         }}
                     >
                         <MdRepeat size={14} />
-                        <Avatar
-                            ccid={props.message.author}
-                            src={props.message.authorProfile?.avatar}
-                            style={{ width: '16px', height: '16px' }}
-                        />
+                        <div
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                push(
+                                    <ProfileView
+                                        ccid={props.message.author}
+                                        profileName={props.message.authorProfileName ?? undefined}
+                                    />
+                                )
+                            }}
+                            style={{ display: 'flex', cursor: 'pointer' }}
+                        >
+                            <Avatar
+                                ccid={props.message.author}
+                                src={props.message.authorProfile?.avatar}
+                                style={{ width: '16px', height: '16px' }}
+                            />
+                        </div>
                     </div>
                 }
             >
-                <Text variant="caption">
-                    {t('userRerouted', { name: props.message.authorProfile?.username || 'Anonymous' })}
-                </Text>
+                <span
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        push(
+                            <ProfileView
+                                ccid={props.message.author}
+                                profileName={props.message.authorProfileName ?? undefined}
+                            />
+                        )
+                    }}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <Text variant="caption">
+                        {t('userRerouted', { name: props.message.authorProfile?.username || 'Anonymous' })}
+                    </Text>
+                </span>
                 <div style={{ flex: 1 }} />
                 <IconButton
                     onClick={(e) => {
@@ -55,7 +85,9 @@ export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
                     }}
                     style={{
                         padding: 0,
-                        margin: 0
+                        margin: 0,
+                        width: '15px',
+                        height: '15px'
                     }}
                 >
                     <MdMoreHoriz size={15} />
@@ -79,7 +111,7 @@ export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
                 </div>
             </OnelineMessageLayout>
             <ErrorBoundary FallbackComponent={RenderError}>
-                <MessageContainer uri={props.message.value.targetURI} />
+                <MessageContainer uri={props.message.value.targetURI} rerouted={props.message} />
             </ErrorBoundary>
         </div>
     )

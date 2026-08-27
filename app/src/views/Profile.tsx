@@ -1,4 +1,4 @@
-import { ReactNode, startTransition, Suspense, use, useMemo, useState } from 'react'
+import { ReactNode, startTransition, Suspense, use, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     Avatar,
@@ -30,16 +30,43 @@ import { CssVar } from '../types/Theme'
 import { AcknowledgeButton } from '../components/AcknowledgeButton'
 import { AcknowledgeListView } from './AcknowledgeList'
 import { useStack } from '../layouts/Stack'
+import { shareText } from '../lib/share'
 import { useSubscribe } from '../hooks/useSubscribe'
 import { ProfileName } from '../components/ProfileName'
 import { PrivateContentDoor } from '../components/PrivateContentDoor'
-import { MdLock } from 'react-icons/md'
+import { MdLock, MdDns } from 'react-icons/md'
 import { useMediaViewer } from '../contexts/MediaViewer'
 import { useMediaProxy } from '../contexts/MediaProxy'
 
 interface Props {
     ccid: string
     profileName?: string
+}
+
+// useSubscribeはsuspendするので単独コンポーネントに分離し、利用側で<Suspense fallback={null}>に包む
+const FollowedBadge = (props: { ccid: string }) => {
+    const { t } = useTranslation('', { keyPrefix: 'views.profile' })
+    const { client } = useClient()
+    const [acknowledgers] = useSubscribe(client.acknowledgers)
+    const followed = acknowledgers.some((a) => a.author === props.ccid)
+    if (!followed) return null
+    return (
+        <Text
+            variant="caption"
+            style={{
+                fontSize: '0.65rem',
+                opacity: 0.6,
+                fontWeight: 'normal',
+                flexShrink: 0,
+                border: `1px solid ${CssVar.divider}`,
+                borderRadius: CssVar.round(0.5),
+                padding: `1px ${CssVar.space(1)}`,
+                whiteSpace: 'nowrap'
+            }}
+        >
+            {t('followsYou')}
+        </Text>
+    )
 }
 
 export const ProfileView = (props: Props) => {
@@ -49,7 +76,28 @@ export const ProfileView = (props: Props) => {
         return client.getUser(props.ccid).catch(() => null)
     }, [client, props.ccid])
 
+    const profileKey = semantics.profile(props.ccid, props.profileName ?? 'main')
+
+    // 表示はキャッシュ即出し(profilePromise)のまま、裏で最新を取得して置き換える(SWR)。
+    // no-cacheの結果はKVSにも書き戻されるので次回表示の即出しキャッシュも最新化される
+    const [freshProfile, setFreshProfile] = useState<Document<ProfileSchema> | null>(null)
+    const [prevProfileKey, setPrevProfileKey] = useState(profileKey)
+    if (prevProfileKey !== profileKey) {
+        setPrevProfileKey(profileKey)
+        setFreshProfile(null)
+    }
+
     const [reload, setReload] = useState(0)
+
+    useEffect(() => {
+        client.api
+            .getDocument<ProfileSchema>(profileKey, undefined, { cache: 'no-cache' })
+            .then((doc) => setFreshProfile(doc))
+            .catch(() => {
+                // 権限エラー/404等はキャッシュ由来の表示(restricted/Anonymous)を維持する
+            })
+    }, [client, profileKey, reload])
+
     const profilePromise = useMemo<Promise<Document<ProfileSchema> | 'restricted'>>(() => {
         return client.api
             .getDocument<ProfileSchema>(semantics.profile(props.ccid, props.profileName ?? 'main'))
@@ -81,6 +129,7 @@ export const ProfileView = (props: Props) => {
                     ccid={props.ccid}
                     userPromise={userPromise}
                     profilePromise={profilePromise}
+                    freshProfile={freshProfile}
                     profileName={props.profileName ?? 'main'}
                     reload={() => {
                         setReload((prev) => prev + 1)
@@ -95,6 +144,7 @@ interface InnerProps {
     ccid: string
     userPromise: Promise<User | null>
     profilePromise: Promise<Document<ProfileSchema> | 'restricted'>
+    freshProfile: Document<ProfileSchema> | null
     profileName: string
     reload: () => void
 }
@@ -102,7 +152,8 @@ interface InnerProps {
 const Inner = (props: InnerProps) => {
     const { t } = useTranslation('', { keyPrefix: 'views.profile' })
     const user = use(props.userPromise)
-    const profile = use(props.profilePromise)
+    // use()は条件付き呼び出しが許可されている。fresh値が届いたらキャッシュ側は読まない
+    const profile = props.freshProfile ?? use(props.profilePromise)
 
     if (user === null) {
         return <Text>{t('userNotFound')}</Text>
@@ -172,12 +223,28 @@ const Body = (props: BodyProps) => {
         }
     }, [props.ccid, props.profileName, tab])
 
+    // シェア用URLはデプロイ先ホストに関わらずconcrnt.world固定(OGP対応がconcrnt.worldのみのため)
+    const shareURL =
+        'https://concrnt.world/profile/' + props.ccid + (props.profileName !== 'main' ? '/' + props.profileName : '')
+
     const selectOptions = useMemo(() => {
         const options: ReactNode[] = []
+        options.push(
+            <ListItem
+                key="share"
+                onClick={() => {
+                    shareText(shareURL, profile.value.username ?? props.ccid).catch(() => {})
+                    setMenuOpen(false)
+                }}
+            >
+                <Text>{t('share')}</Text>
+            </ListItem>
+        )
         if (!isMe) {
             if (isBlocking) {
                 options.push(
                     <ListItem
+                        key="unblock"
                         onClick={() => {
                             setUnblockConfirmOpen(true)
                         }}
@@ -188,6 +255,7 @@ const Body = (props: BodyProps) => {
             } else {
                 options.push(
                     <ListItem
+                        key="block"
                         onClick={() => {
                             setBlockConfirmOpen(true)
                         }}
@@ -198,7 +266,7 @@ const Body = (props: BodyProps) => {
             }
         }
         return options
-    }, [isBlocking, isMe, t])
+    }, [isBlocking, isMe, t, shareURL, profile.value.username, props.ccid])
 
     return (
         <>
@@ -321,10 +389,28 @@ const Body = (props: BodyProps) => {
                                 >
                                     <ProfileName document={profile} />
                                 </Text>
-                                <Text>{props.user?.alias ? props.user.alias : null}</Text>
+                                <Text
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: CssVar.space(1),
+                                        flexWrap: 'wrap'
+                                    }}
+                                >
+                                    {props.user?.alias ? '@' + props.user.alias : null}
+                                    {client.ccid && !isMe && (
+                                        <Suspense fallback={null}>
+                                            <FollowedBadge ccid={props.ccid} />
+                                        </Suspense>
+                                    )}
+                                </Text>
                             </div>
                             <div>
                                 <Text variant="caption">{props.ccid}</Text>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: CssVar.space(0.5) }}>
+                                <MdDns size={14} style={{ opacity: 0.7 }} />
+                                <Text variant="caption">{props.user.domain}</Text>
                             </div>
                             <div>
                                 <Text>{profile.value.description || t('noDescription')}</Text>
@@ -537,10 +623,19 @@ const RestrictedBody = (props: RestrictedBodyProps) => {
                     >
                         {props.user.alias ?? props.ccid}
                         <MdLock />
+                        {client.ccid && !isMe && (
+                            <Suspense fallback={null}>
+                                <FollowedBadge ccid={props.ccid} />
+                            </Suspense>
+                        )}
                     </Text>
                 </div>
                 <div>
                     <Text variant="caption">{props.ccid}</Text>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: CssVar.space(0.5) }}>
+                    <MdDns size={14} style={{ opacity: 0.7 }} />
+                    <Text variant="caption">{props.user.domain}</Text>
                 </div>
             </div>
             <PrivateContentDoor

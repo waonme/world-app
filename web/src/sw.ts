@@ -16,23 +16,30 @@ self.addEventListener('message', (event) => {
 
 precacheAndRoute(self.__WB_MANIFEST)
 
+// Vite-internal URLs (/@fs, /@vite, /@id, bare node_modules) are dev-only and
+// unversioned — caching them serves stale linked-package code forever.
 const sameOriginAsset = (url: URL): boolean =>
     url.origin === self.location.origin &&
+    !url.pathname.startsWith('/@') &&
+    !url.pathname.startsWith('/node_modules/') &&
     /\.(?:js|css|woff2?|ttf|json|png|jpg|jpeg|gif|webp|svg|ico|mp3|mp4|webm|wasm)$/.test(url.pathname)
 
-registerRoute(
-    ({ url }) => sameOriginAsset(url),
-    new CacheFirst({
-        cacheName: 'app-assets',
-        plugins: [
-            new CacheableResponsePlugin({ statuses: [0, 200] }),
-            new ExpirationPlugin({
-                maxEntries: 500,
-                purgeOnQuotaError: true
-            })
-        ]
-    })
-)
+if (!import.meta.env.DEV) {
+    registerRoute(
+        ({ url }) => sameOriginAsset(url),
+        new CacheFirst({
+            cacheName: 'app-assets',
+            plugins: [
+                new CacheableResponsePlugin({ statuses: [0, 200] }),
+                new ExpirationPlugin({
+                    maxEntries: 500,
+                    maxAgeSeconds: 30 * 24 * 60 * 60,
+                    purgeOnQuotaError: true
+                })
+            ]
+        })
+    )
+}
 
 // --- Push notifications ---
 // The push carries only the minimal notification struct
@@ -232,14 +239,37 @@ const buildContent = async (payload: Record<string, any>): Promise<NotificationC
 const withTimeout = <T>(ms: number, promise: Promise<T>): Promise<T | undefined> =>
     Promise.race([promise, new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms))])
 
+// counter-reset: 他の端末で通知を見たので、アイコンバッジと表示中の通知を消して何も出さない。
+// userVisibleOnly購読でのサイレント受信はブラウザが汎用通知を出す/購読を失効させる恐れがあるが、
+// 頻度は「通知画面を開いた回数」程度なので許容している
+const handleCounterReset = async (): Promise<void> => {
+    if ('clearAppBadge' in self.navigator) await self.navigator.clearAppBadge().catch(() => {})
+    const shown = await self.registration.getNotifications()
+    for (const notification of shown) notification.close()
+}
+
 self.addEventListener('push', (event) => {
     const notify = async (): Promise<void> => {
+        let payload: any = undefined
+        try {
+            payload = event.data?.json()
+        } catch {
+            // 本文が壊れていても通知自体は出す(下のフォールバック)
+        }
+        if (payload?.type === 'counter-reset') {
+            return handleCounterReset()
+        }
+
         // Never skip showing a notification: the subscription is
         // userVisibleOnly, and a silent push risks the browser revoking it.
         let content = fallbackContent
         try {
-            const payload = event.data?.json()
             if (payload) {
+                // サーバー側の未読カウンター(加算後)をインストール済みPWAのアイコンに反映する。
+                // 本文の組み立て(5sタイムアウト)とは独立に、フォールバック時でも適用する
+                if (typeof payload.badge === 'number' && 'setAppBadge' in self.navigator) {
+                    self.navigator.setAppBadge(payload.badge).catch(() => {})
+                }
                 const built = await withTimeout(5000, buildContent(payload))
                 if (built) content = built
             }

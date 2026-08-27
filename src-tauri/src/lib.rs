@@ -30,6 +30,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_file_saver::init())
+        .plugin(tauri_plugin_share::init())
         .plugin(tauri_plugin_push::init())
         .manage(accounts::AccountsLock::default())
         .invoke_handler(tauri::generate_handler![
@@ -46,9 +47,9 @@ pub fn run() {
             commands::remove_account,
             commands::clear_session,
             commands::set_domain,
-            commands::clear_all,
             commands::load_identity,
             backup::backup_masterkey,
+            backup::save_backup_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

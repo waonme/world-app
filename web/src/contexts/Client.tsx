@@ -1,10 +1,26 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Client, migrateLegacyProfilePolicies } from '@concrnt/worldlib'
-import { InMemoryAuthProvider, NotFoundError, ServerOfflineError } from '@concrnt/client'
-import { Button } from '@concrnt/ui'
+import { Client, migrateLegacyProfilePolicies, semantics } from '@concrnt/worldlib'
+import {
+    Api,
+    ComputeCKID,
+    Document,
+    Entity,
+    ErrorCodeRegistrationNotFound,
+    GenerateIdentity,
+    InMemoryAuthProvider,
+    InMemoryKVS,
+    NotFoundError,
+    ServerOfflineError,
+    SignedDocument
+} from '@concrnt/client'
+import { Button, migrateTheme } from '@concrnt/ui'
 import { setupDefaultTimelines } from '../utils/clientSetup'
+import { EMOJI_PACKAGE_SCHEMA, ensureEmojiPackageList } from '../utils/emojiPackages'
+import { loadCustomThemes, saveCustomTheme } from '../utils/themeList'
+import { Themes } from '../data/themes'
+import { defaultPreference, type Preference } from './Preference'
 import { resourceCache } from '../lib/cache'
 import { isPushEnabled, unregisterPush } from '../lib/push'
 import { SubkeyInvalidDrawer } from '../components/SubkeyInvalidDrawer'
@@ -70,6 +86,12 @@ export const ClientProvider = (props: Props): ReactNode => {
     const bootedOfflineRef = useRef(false)
     const [isSwitching, setIsSwitching] = useState(false)
     const [switchError, setSwitchError] = useState<string | null>(null)
+    // client.profilesはミューテートされるだけなので、更新通知でcontext valueを再生成して
+    // client.profile直読みのコンポーネント(Sidebar等)へ反映する
+    const [profilesVersion, setProfilesVersion] = useState(0)
+    // client.server(well-known)も同様。復帰時リフレッシュでサービス広告が変わったら
+    // client.server.endpoints直読みのコンポーネント(Settings等)へ反映する
+    const [serverVersion, setServerVersion] = useState(0)
 
     const reload = useCallback(
         async (name?: string) => {
@@ -86,7 +108,7 @@ export const ClientProvider = (props: Props): ReactNode => {
 
                 const domain = readStoredString('Domain')
                 const masterKey = readStoredString('PrivateKey')
-                const subKey = readStoredString('SubKey')
+                let subKey = readStoredString('SubKey')
 
                 if (!domain || (!masterKey && !subKey)) {
                     console.log('No web session found')
@@ -94,6 +116,35 @@ export const ClientProvider = (props: Props): ReactNode => {
                     clientRef.current = null
                     setClient(null)
                     return
+                }
+
+                // マスターキーのみのセッションはv1(concrnt-world)からの引き継ぎでしか発生しない
+                // (v2のログインは必ずsubkeyを発行する)。通常の書き込みはsubkey署名なので、
+                // ここでログインフローと同様にsubkeyを発行して揃える。失敗してもマスターキーのみで
+                // 続行する(読み取りは可能・次回起動で再試行される)
+                if (masterKey && !subKey) {
+                    try {
+                        const masterProvider = new InMemoryAuthProvider(masterKey)
+                        const ccid = masterProvider.getCCID()
+                        const api = new Api(domain, masterProvider, new InMemoryKVS())
+                        const subIdentity = GenerateIdentity()
+                        const ckid = ComputeCKID(subIdentity.publicKey)
+                        const subkeyDoc: Document<any> = {
+                            kind: 'record',
+                            key: semantics.subkey(ccid, ckid),
+                            author: ccid,
+                            schema: 'https://schema.concrnt.net/subkey.json',
+                            value: { ckid },
+                            createdAt: new Date(),
+                            onUpdate: 'retain'
+                        }
+                        await api.commit(subkeyDoc, domain, { useMasterkey: true })
+                        subKey = `concrnt-subkey ${subIdentity.privateKey} ${ccid}@${domain} -`
+                        localStorage.setItem('SubKey', subKey)
+                        console.log('Provisioned a subkey for the migrated master key session')
+                    } catch (err) {
+                        console.error('Failed to provision subkey for master key session', err)
+                    }
                 }
 
                 // 選択中のサブプロフィールはログアウト時に他のセッションキーと一緒に破棄する
@@ -114,6 +165,100 @@ export const ClientProvider = (props: Props): ReactNode => {
                         await setupDefaultTimelines(client)
                         // v1から移行したアカウントの旧形式鍵垢設定をv2形式へ移行する。失敗してもログインは止めない
                         await migrateLegacyProfilePolicies(client).catch(console.error)
+
+                        // v1から自動移行されたエンティティ(proof:none)のマスターキーによる再コミット。
+                        // 通常はログイン画面(ensureEntityProof)が行うが、v1のlocalStorageからセッションを
+                        // 引き継いだ場合はログイン画面を通らないため、移行時に立てたフラグを見てここで行う。
+                        // 失敗してもログインは止めない(フラグが残るため次回起動で再試行される)
+                        if (
+                            localStorage.getItem('V1EntityProofPending') !== null &&
+                            client.api.authProvider.canSignMaster()
+                        ) {
+                            await (async () => {
+                                const self = await client.api.getResource<SignedDocument>(
+                                    semantics.user(client.ccid),
+                                    undefined,
+                                    { cache: 'no-cache' }
+                                )
+                                if (self.proof?.type === 'none') {
+                                    console.log('Entity proof type is "none", re-committing entity with master key...')
+                                    const entityDoc: Document<Entity> = {
+                                        kind: 'entity',
+                                        author: client.ccid,
+                                        schema: 'https://schema.concrnt.net/entity.json',
+                                        value: JSON.parse(self.document).value,
+                                        createdAt: new Date()
+                                    }
+                                    await client.api.commit(entityDoc, client.server.domain, { useMasterkey: true })
+                                }
+                                localStorage.removeItem('V1EntityProofPending')
+                            })().catch(console.error)
+                        }
+
+                        // v1のlocalStorageから退避したテーマ・絵文字パック設定(v1storage.ts)をv2形式へ反映する。
+                        // 後続でマウントされるPreference/Theme/EmojiPickerの各Providerがロード時に拾えるよう
+                        // awaitする。失敗時は退避キーを残して次回起動で再試行する
+                        const pendingRaw = localStorage.getItem('V1PreferencePending')
+                        if (pendingRaw !== null) {
+                            await (async () => {
+                                const pending = JSON.parse(pendingRaw) as {
+                                    ccid?: string
+                                    themeName?: string
+                                    emojiPackages?: string[]
+                                    customThemes?: Record<string, any>
+                                }
+                                // 別アカウントで再ログインした場合は他人の設定を適用しない
+                                if (pending.ccid !== client.ccid) {
+                                    localStorage.removeItem('V1PreferencePending')
+                                    return
+                                }
+
+                                const list = await ensureEmojiPackageList(client)
+                                const entries = await list.entries.value()
+                                const existingURLs = new Set(entries.map((e) => e.value?.href))
+                                for (const url of pending.emojiPackages ?? []) {
+                                    if (existingURLs.has(url)) continue
+                                    await list.addItem(client, url, EMOJI_PACKAGE_SCHEMA)
+                                }
+
+                                // v2側で既に同名テーマがある場合は上書きしない
+                                const customThemes = await loadCustomThemes(client)
+                                for (const [name, v1theme] of Object.entries(pending.customThemes ?? {})) {
+                                    if (name in customThemes || !v1theme || typeof v1theme !== 'object') continue
+                                    const saved = await saveCustomTheme(
+                                        client,
+                                        migrateTheme({ ...v1theme, meta: { ...(v1theme.meta ?? {}), name } })
+                                    )
+                                    customThemes[name] = saved
+                                }
+
+                                // テーマ選択はv2の設定が無い(=v2初回)時だけ引き継ぐ。v2に無いビルトイン名はデフォルトのまま
+                                const name = pending.themeName
+                                const settingsDoc = await client.api
+                                    .getDocument<Preference>(semantics.settings(client.ccid), undefined, {
+                                        cache: 'no-cache'
+                                    })
+                                    .catch(() => null)
+                                if (!settingsDoc && name && (name in Themes || name in customThemes)) {
+                                    const preference: Preference = { ...defaultPreference, themeName: name }
+                                    localStorage.setItem('preference', JSON.stringify(preference))
+                                    await client.api.commit({
+                                        kind: 'record',
+                                        key: semantics.settings(client.ccid),
+                                        author: client.ccid,
+                                        schema: 'https://schemas.concrnt.net/utils/settings',
+                                        value: preference,
+                                        createdAt: new Date(),
+                                        policy: { entries: [{ url: 'https://policy.concrnt.world/private.json' }] }
+                                    })
+                                }
+
+                                localStorage.removeItem('V1PreferencePending')
+                                console.log('Migrated v1 preference (themes/emoji packages)')
+                            })().catch((err) => {
+                                console.error('Failed to migrate v1 preference', err)
+                            })
+                        }
 
                         setProgress(t('loadingLists'))
                         await client.pinnedLists.value()
@@ -196,12 +341,36 @@ export const ClientProvider = (props: Props): ReactNode => {
                     if (err instanceof ServerOfflineError) {
                         setIsOffline(true)
                     } else if (err instanceof NotFoundError) {
-                        // サーバーは応答しているが、自分の登録が見つからない(サーバーのリセットや移行など)。
-                        // 再試行しても復帰しないため、ログアウトを促す専用画面を出す。
-                        setNotFoundOn(domain)
+                        // NotFoundErrorはwell-knownの404、セットアップ中のcommitの404、キャプティブポータルや
+                        // デプロイ中CDNの404でも届く。「登録が無い」と断定できるのは、認証付きGET /registerが
+                        // registration-not-foundコードを返した時だけ。それ以外(403=認証不成立/entityなし、
+                        // コード無し404=旧サーバー/経路の問題、その他)は一過性として再試行画面へ
+                        const probe = new Api(domain, authProvider, new InMemoryKVS())
+                        try {
+                            await probe.getRegistration(domain, { useMasterkey: !authProvider.canSignSub() })
+                            // 登録は健在 = 別の404が原因
+                            setSetupError(err.message)
+                        } catch (e2) {
+                            if (e2 instanceof NotFoundError && e2.code === ErrorCodeRegistrationNotFound) {
+                                setNotFoundOn(domain)
+                            } else if (e2 instanceof ServerOfflineError) {
+                                setIsOffline(true)
+                            } else {
+                                setSetupError(err.message)
+                            }
+                        }
                     } else {
                         setSetupError(err instanceof Error ? err.message : String(err))
                     }
+                }
+            } catch (err) {
+                // authProviderの構築(壊れた鍵素材でのthrow)など、内側のcatchが覆わない範囲の失敗。
+                // 放置するとunhandled rejectionになりロード画面のまま固まるため、エラー画面に落とす
+                console.error('Failed to set up client', err)
+                if (isLiveSwitch && clientRef.current) {
+                    setSwitchError(err instanceof Error ? err.message : String(err))
+                } else {
+                    setSetupError(err instanceof Error ? err.message : String(err))
                 }
             } finally {
                 setIsSwitching(false)
@@ -231,6 +400,16 @@ export const ClientProvider = (props: Props): ReactNode => {
         }
         client.subscribeOnlineStatus(onStatusChanged)
 
+        const onProfilesUpdated = () => {
+            setProfilesVersion((v) => v + 1)
+        }
+        client.subscribeProfilesUpdated(onProfilesUpdated)
+
+        const onServerUpdated = () => {
+            setServerVersion((v) => v + 1)
+        }
+        client.subscribeServerUpdated(onServerUpdated)
+
         // オンライン/オフラインとも即時プローブする(オフライン時はプローブが失敗して遷移が発火し、
         // リクエストが発生しないアイドル状態でもバナーが表示される)
         const onBrowserNetworkChange = () => {
@@ -239,10 +418,24 @@ export const ClientProvider = (props: Props): ReactNode => {
         window.addEventListener('online', onBrowserNetworkChange)
         window.addEventListener('offline', onBrowserNetworkChange)
 
+        // 起動/クライアント差し替え直後と、アプリ復帰時に鮮度重視リソースを裏で最新化する
+        // (キャッシュ即表示→取得後にpush通知でUI更新)。TauriのWebViewでも
+        // foreground/backgroundでvisibilitychangeが発火するためweb/app共通実装
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                client.refreshFreshResources()
+            }
+        }
+        document.addEventListener('visibilitychange', onVisibilityChange)
+        client.refreshFreshResources()
+
         return () => {
             client.unsubscribeOnlineStatus(onStatusChanged)
+            client.unsubscribeProfilesUpdated(onProfilesUpdated)
+            client.unsubscribeServerUpdated(onServerUpdated)
             window.removeEventListener('online', onBrowserNetworkChange)
             window.removeEventListener('offline', onBrowserNetworkChange)
+            document.removeEventListener('visibilitychange', onVisibilityChange)
         }
     }, [client])
 
@@ -252,10 +445,13 @@ export const ClientProvider = (props: Props): ReactNode => {
         if (current && isPushEnabled()) {
             await unregisterPush(current).catch(() => {})
         }
+        // ログアウトはセッション(サブキー/接続先)の破棄のみ。マスターキー(PrivateKey/Mnemonic)は
+        // 削除しない: 同じ鍵で他サーバーへ登録・再ログインできることがアカウントモデルの前提であり、
+        // 鍵を消す操作はバックアップDLを強制するResetSessionButtonだけに限定する(app版のclear_sessionと同じ方針)
         localStorage.removeItem('Domain')
-        localStorage.removeItem('PrivateKey')
         localStorage.removeItem('SubKey')
         localStorage.removeItem('SelectedProfile')
+        localStorage.removeItem('V1EntityProofPending')
         await resourceCache.clear()
         await reload()
     }, [reload])
@@ -285,7 +481,9 @@ export const ClientProvider = (props: Props): ReactNode => {
         subkeyInvalid,
         isSwitching,
         switchError,
-        dismissSwitchError
+        dismissSwitchError,
+        profilesVersion,
+        serverVersion
     ])
 
     if (isOffline) {
@@ -339,6 +537,14 @@ export const ClientProvider = (props: Props): ReactNode => {
             >
                 {t('registrationNotFound', { domain: notFoundOn })}
                 <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>{t('registrationNotFoundDesc')}</div>
+                <Button
+                    onClick={() => {
+                        setNotFoundOn(null)
+                        reload()
+                    }}
+                >
+                    {t('retry')}
+                </Button>
                 <Button
                     onClick={async () => {
                         await logout()

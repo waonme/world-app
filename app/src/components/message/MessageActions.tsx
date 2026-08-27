@@ -1,9 +1,10 @@
 import { Button, Confirm, ListItem, Select, Text } from '@concrnt/ui'
 import { useTranslation } from 'react-i18next'
-import { Association, LikeAssociationSchema, Schemas, type Message } from '@concrnt/worldlib'
+import { Association, LikeAssociationSchema, Schemas, type Message, type RerouteMessageSchema } from '@concrnt/worldlib'
 import { useClient } from '../../contexts/Client'
 import { useComposer } from '../../contexts/Composer'
-import { hapticLight, hapticSuccess } from '../../utils/haptics'
+import { usePostContext } from '../../contexts/PostContext'
+import { useHaptics } from '../../contexts/Haptics'
 import { startTransition, useOptimistic, useState } from 'react'
 import { Report } from '../Report'
 import { MessageInspector } from './MessageInspector'
@@ -20,9 +21,11 @@ import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
 import { useStack } from '../../layouts/Stack'
 import { PostView } from '../../views/Post'
+import { shareText } from '../../lib/share'
 
 interface Props {
     message: Message<any>
+    rerouted?: Message<RerouteMessageSchema>
     updateReactionState: React.Dispatch<React.SetStateAction<ReactionState>>
 }
 
@@ -34,7 +37,9 @@ interface LikeState {
 export const MessageActions = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'components.messageActions' })
     const { client } = useClient()
+    const { hapticLight, hapticSuccess } = useHaptics()
     const composer = useComposer()
+    const postCtx = usePostContext()
     const [menuOpen, setMenuOpen] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [reportOpen, setReportOpen] = useState(false)
@@ -44,6 +49,9 @@ export const MessageActions = (props: Props) => {
     const { push } = useStack()
     const messageHref = props.message.key ?? props.message.uri
 
+    // シェア用URLはデプロイ先ホストに関わらずconcrnt.world固定(OGP対応がconcrnt.worldのみのため)
+    const shareURL = 'https://concrnt.world/post/' + encodeURIComponent(props.message.uri)
+
     const replyCount = props.message.associationCounts?.[Schemas.replyAssociation] ?? 0
     const rerouteCount = props.message.associationCounts?.[Schemas.rerouteAssociation] ?? 0
 
@@ -51,6 +59,25 @@ export const MessageActions = (props: Props) => {
         ownLike: props.message.ownAssociations.find((a) => a.schema === Schemas.likeAssociation),
         count: props.message.associationCounts?.[Schemas.likeAssociation] ?? 0
     })
+
+    // commit完了後、transitionが終わる(=useOptimisticがrevertする)前に
+    // メッセージ本体を再取得してベース値をサーバー状態に揃える。
+    // これをsocketイベント任せにすると、イベントがcommit応答より遅れたときに
+    // 一瞬いいね/リアクションが消える
+    const refreshMessage = async () => {
+        if (props.rerouted) {
+            // リルート経由の場合: タイムライン項目のhrefはリルート文書のもの。
+            // qt.update(=invalidateMessage)がリルート文書とそのtargetの両キャッシュを破棄するので、
+            // 再レンダリングがuse()する両方を再取得してtransition内で解決させる
+            const rerouteHref = props.rerouted.key ?? props.rerouted.uri
+            qt.update(rerouteHref)
+            await client?.getMessage(props.message.uri).catch(() => null)
+            await client?.getMessage(rerouteHref).catch(() => null)
+        } else {
+            qt.update(messageHref)
+            await client?.getMessage(messageHref).catch(() => null)
+        }
+    }
 
     return (
         <div
@@ -75,7 +102,8 @@ export const MessageActions = (props: Props) => {
                                 !uri.includes('/main/activity-timeline') &&
                                 !uri.includes('/main/notify-timeline')
                         ) ?? []
-                    composer.open(communityDestinations, [], 'reply', props.message)
+                    // 候補は省略してknownCommunities全体にする(投稿先は元メッセージの配信先に限らない)
+                    composer.open(communityDestinations, undefined, 'reply', props.message)
                 }}
                 onLongPress={() => {
                     hapticLight()
@@ -92,14 +120,8 @@ export const MessageActions = (props: Props) => {
                 variant="text"
                 onClick={(e) => {
                     e.stopPropagation()
-                    const communityDestinations =
-                        props.message.distributes?.filter(
-                            (uri) =>
-                                !uri.includes('/main/home-timeline') &&
-                                !uri.includes('/main/activity-timeline') &&
-                                !uri.includes('/main/notify-timeline')
-                        ) ?? []
-                    composer.open(communityDestinations, [], 'reroute', props.message)
+                    // リルート先は現在開いているビューのデフォルト投稿先。文脈のないページではホームのみ
+                    composer.open(postCtx.destinations, undefined, 'reroute', props.message, postCtx.profile)
                 }}
                 onLongPress={() => {
                     hapticLight()
@@ -128,7 +150,7 @@ export const MessageActions = (props: Props) => {
                             })
                             if (likeState.ownLike) {
                                 await likeState.ownLike.delete(client)
-                                qt.update(messageHref)
+                                await refreshMessage()
                             }
                         })
                     } else {
@@ -146,7 +168,7 @@ export const MessageActions = (props: Props) => {
                                 }
                             })
                             await props.message.favorite(client)
-                            qt.update(messageHref)
+                            await refreshMessage()
                         })
                     }
                 }}
@@ -196,6 +218,7 @@ export const MessageActions = (props: Props) => {
                             await props.message.reaction(client, emoji.shortcode, emoji.imageURL).catch((err) => {
                                 console.error('Failed to add reaction:', err)
                             })
+                            await refreshMessage()
                         })
 
                         emojiPicker.close()
@@ -223,6 +246,15 @@ export const MessageActions = (props: Props) => {
                 open={menuOpen}
                 onClose={() => setMenuOpen(false)}
                 options={[
+                    <ListItem
+                        key="share"
+                        onClick={() => {
+                            shareText(shareURL, props.message.value.body ?? '').catch(() => {})
+                            setMenuOpen(false)
+                        }}
+                    >
+                        <Text>{t('share')}</Text>
+                    </ListItem>,
                     <ListItem key="delete" onClick={() => setDeleteConfirmOpen(true)}>
                         <Text>{t('deletePost')}</Text>
                     </ListItem>,

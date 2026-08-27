@@ -129,7 +129,7 @@ export const GuestPostView = (props: Props) => {
                 >
                     <ErrorBoundary FallbackComponent={RestrictedFallback}>
                         <Suspense fallback={<MessageSkeleton />}>
-                            <MessageContainer uri={props.uri} />
+                            <MessageContainer uri={props.uri} forceExpanded detail />
                         </Suspense>
                     </ErrorBoundary>
                 </div>
@@ -290,12 +290,7 @@ export const GuestPostView = (props: Props) => {
                                                 fontSize: '14px'
                                             }}
                                         >
-                                            <CCImage
-                                                src={imageUrl}
-                                                maxHeight={128}
-                                                alt=""
-                                                style={{ height: '20px', width: '20px', objectFit: 'contain' }}
-                                            />
+                                            <CCImage src={imageUrl} maxHeight={128} alt="" style={{ height: '20px' }} />
                                             <span>{count}</span>
                                         </button>
                                     ))}

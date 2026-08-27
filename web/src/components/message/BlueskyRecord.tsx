@@ -1,17 +1,19 @@
 import { Suspense, use, useMemo } from 'react'
 import { BskyPostView, getPostImages, getPostExternal } from '../../utils/bluesky'
 import { MessageLayout } from './MessageLayout'
-import { Avatar, CssVar, Text } from '@concrnt/ui'
+import { Avatar, CssVar, ExternalLink, Text } from '@concrnt/ui'
 import { TimeDiff } from '../TimeDiff'
 import { useNavigate } from 'react-router-dom'
 import { useClient } from '../../contexts/Client'
 import { MessageSkeleton } from './MessageSkeleton'
-import { AtprotoRecordSchema, Message } from '@concrnt/worldlib'
+import { AtprotoRecordSchema, Message, RerouteMessageSchema } from '@concrnt/worldlib'
 import { MessageFooter } from './Footer'
 
 interface Props {
     atUri: string
     message?: Message<AtprotoRecordSchema>
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
 }
 
 export const BlueskyRecord = (props: Props) => {
@@ -25,12 +27,17 @@ export const BlueskyRecord = (props: Props) => {
 
     return (
         <Suspense fallback={<MessageSkeleton />}>
-            <Post postPromise={postPromise} message={props.message} />
+            <Post postPromise={postPromise} message={props.message} detail={props.detail} rerouted={props.rerouted} />
         </Suspense>
     )
 }
 
-const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Message<AtprotoRecordSchema> }) => {
+const Post = (props: {
+    postPromise: Promise<BskyPostView | null>
+    message?: Message<AtprotoRecordSchema>
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
+}) => {
     const navigate = useNavigate()
 
     const post = use(props.postPromise)
@@ -53,6 +60,7 @@ const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Mess
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
                 navigate('/bluesky/view/' + encodeURIComponent(post.uri))
             }}
@@ -63,7 +71,7 @@ const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Mess
                         navigate('/bluesky/view/' + encodeURIComponent(post.author.did))
                     }}
                 >
-                    <Avatar ccid={post.author.did} src={post.author.avatar} />
+                    <Avatar ccid={post.author.did} src={post.author.avatar} style={{ width: '48px', height: '48px' }} />
                 </div>
             }
             headerLeft={
@@ -109,11 +117,8 @@ const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Mess
                 </div>
             )}
             {external && (
-                <a
+                <ExternalLink
                     href={external.uri}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
                     style={{
                         display: 'block',
                         border: `1px solid ${CssVar.divider}`,
@@ -124,9 +129,9 @@ const Post = (props: { postPromise: Promise<BskyPostView | null>; message?: Mess
                 >
                     <Text style={{ fontWeight: 'bold' }}>{external.title || external.uri}</Text>
                     {external.description && <Text variant="caption">{external.description}</Text>}
-                </a>
+                </ExternalLink>
             )}
-            {props.message && <MessageFooter message={props.message} />}
+            {props.message && <MessageFooter message={props.message} rerouted={props.rerouted} />}
         </MessageLayout>
     )
 }

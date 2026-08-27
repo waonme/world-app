@@ -24,6 +24,12 @@ class NotificationService: UNNotificationServiceExtension {
         }
         bestAttemptContent = content
 
+        // The relay's APNs payload carries no "sound" key, so without this
+        // the notification would slide into Notification Center silently.
+        if content.sound == nil {
+            content.sound = .default
+        }
+
         Task {
             await process(content: content)
         }
@@ -56,6 +62,11 @@ class NotificationService: UNNotificationServiceExtension {
                 uaPublicBytes: keys.publicKeyBytes,
                 auth: keys.auth
             )
+            // App icon badge mirrors the server-side unread counter; set it
+            // before enrichment so a timeout there can't drop it.
+            if let badge = NotificationContent.badgeCount(fromDecryptedEvent: decrypted) {
+                content.badge = NSNumber(value: badge)
+            }
             let result = await NotificationContent.build(fromDecryptedEvent: decrypted)
 
             content.title = result.title

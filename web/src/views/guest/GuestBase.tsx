@@ -1,3 +1,4 @@
+import { resolveEntrypoint } from '../../utils/entrypoint'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Outlet, useNavigate } from 'react-router-dom'
@@ -15,14 +16,6 @@ import { LoadingFull } from '../../components/LoadingFull'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { CCUserChip } from '../../components/CCUserChip'
 import { TimelineChip } from '../../components/TimelineChip'
-
-const resolveEntrypoint = (): string => {
-    const hostname = window.location.hostname
-    if (hostname === 'localhost') {
-        return 'ariake.concrnt.net'
-    }
-    return hostname
-}
 
 // 未ログイン閲覧用のシェル。鍵を持たないゲストクライアントを生成し、
 // 閲覧に必要な最小限のプロバイダのみをマウントする(書き込みを伴うプロバイダは置かない)
@@ -97,7 +90,24 @@ export const GuestShell = () => {
                         ),
                         renderTimelineChip: (fqid) => (
                             <TimelineChip fqid={fqid} style={{ display: 'inline-flex', verticalAlign: 'middle' }} />
-                        )
+                        ),
+                        // concrnt.worldオリジンの共有URLは外部ブラウザに出さず内部ルートで開く
+                        // (ゲストビューが存在するルートのみ)
+                        openInternal: (url) => {
+                            let parsed: URL
+                            try {
+                                parsed = new URL(url)
+                            } catch {
+                                return false
+                            }
+                            if (parsed.hostname !== 'concrnt.world') return false
+                            const path = parsed.pathname
+                            const isInternal =
+                                /^\/(post|timeline)\/[^/]+$/.test(path) || /^\/profile\/[^/]+(\/[^/]+)?$/.test(path)
+                            if (!isInternal) return false
+                            navigate(path + parsed.search + parsed.hash)
+                            return true
+                        }
                     }}
                 >
                     <OverlayStackProvider>
@@ -162,7 +172,7 @@ export const GuestShell = () => {
                                                     <Button variant="text" onClick={() => navigate('/login')}>
                                                         {t('login')}
                                                     </Button>
-                                                    <Button onClick={() => navigate('/register')}>
+                                                    <Button onClick={() => navigate('/signup')}>
                                                         {t('getStarted')}
                                                     </Button>
                                                 </div>

@@ -20,11 +20,18 @@ export class ServerOfflineError extends Error {
     }
 }
 
+// サーバーのエラーレスポンスが持つ機械可読コード(errorメッセージ文字列はAPI契約として不安定なため、
+// 種別判定は必ずcodeで行う)。サーバー側 internal/domain/errors.go の定数と対
+export const ErrorCodeRegistrationNotFound = 'net.concrnt.errors.registration-not-found'
+
 export class NotFoundError extends Error {
     uri: string
-    constructor(msg: string, uri: string) {
+    // 404ボディの{"code": "..."}。素の404(プロキシ/旧サーバー/障害)では未設定
+    code?: string
+    constructor(msg: string, uri: string, code?: string) {
         super(msg)
         this.uri = uri
+        this.code = code
     }
 }
 
@@ -56,6 +63,7 @@ export interface FetchOptions<T> {
     cache?: 'force-cache' | 'no-cache' | 'best-effort' | 'negative-only' | 'fallback'
     expressGetter?: (data: T) => void
     TTL?: number
+    negativeTTL?: number
     auth?: 'no-auth'
     timeoutms?: number
 }
@@ -63,6 +71,13 @@ export interface FetchOptions<T> {
 export interface RepositoryImportResult {
     document?: string
     error?: string
+}
+
+// GET /register のレスポンス。metaはサーバー側entity_metas.infoの生JSON(nullは正常な登録済み)
+export interface Registration {
+    ccid: string
+    inviter?: string
+    meta: any
 }
 
 export interface NotificationSubscription {
@@ -79,7 +94,9 @@ export class Api {
     authProvider: AuthProvider
     cache: KVS
     defaultHost: string = ''
-    defaultCacheTTL: number = Infinity
+    // 期限切れ後も即キャッシュを返しつつ裏で再取得する(SWR)ため、表示は常に高速なまま。
+    // 明示invalidateされないリソースが恒久的にstaleになるのを防ぐ安全弁として有限にしている
+    defaultCacheTTL: number = 1000 * 60 * 60 * 24
     negativeCacheTTL: number = 300
     tokens: Record<string, string> = {}
     self: SignedDocument | null = null
@@ -105,13 +122,17 @@ export class Api {
         this.authProvider = authProvider
     }
 
-    async signJWT(claim: JwtPayload): Promise<string> {
-        const ckid = this.authProvider.getCKID()
-
+    // useMasterkeyは明示指定のみ(自動フォールバック禁止: アプリのAuthProviderでは
+    // マスター鍵署名のたびにbiometrics認証が走る)。kidを省略するとサーバーは
+    // issuerをraw keyとして扱い、マスター鍵のecrecoverで検証する
+    async signJWT(claim: JwtPayload, opts?: { useMasterkey?: boolean }): Promise<string> {
         const headerJson: Record<string, string> = {
             alg: 'CONCRNT',
-            typ: 'JWT',
-            kid: `cckv://${this.authProvider.getCCID()}/keys/${ckid}`
+            typ: 'JWT'
+        }
+        if (!opts?.useMasterkey) {
+            const ckid = this.authProvider.getCKID()
+            headerJson.kid = `cckv://${this.authProvider.getCCID()}/keys/${ckid}`
         }
 
         const header = JSON.stringify(headerJson)
@@ -120,7 +141,9 @@ export class Api {
 
         const body = makeUrlSafe(btoa(header) + '.' + btoa(payload))
 
-        const [hexSig, _] = await this.authProvider.signSub(body)
+        const hexSig = opts?.useMasterkey
+            ? await this.authProvider.signMaster(body)
+            : (await this.authProvider.signSub(body))[0]
 
         const r_raw = parseHexString(hexSig.slice(0, 64))
         const s_raw = parseHexString(hexSig.slice(64, 128))
@@ -136,31 +159,34 @@ export class Api {
         return body + '.' + base64Sig
     }
 
-    async generateApiToken(remote: string): Promise<string> {
-        const token = await this.signJWT({
-            aud: remote,
-            iss: `cckv://${this.authProvider.getCCID()}@${this.defaultHost}`,
-            sub: 'concrnt',
-            jti: crypto.randomUUID(),
-            iat: Math.floor(new Date().getTime() / 1000).toString(),
-            exp: Math.floor((new Date().getTime() + 5 * 60 * 1000) / 1000).toString()
-        })
+    async generateApiToken(remote: string, opts?: { useMasterkey?: boolean }): Promise<string> {
+        const token = await this.signJWT(
+            {
+                aud: remote,
+                iss: `cckv://${this.authProvider.getCCID()}@${this.defaultHost}`,
+                sub: 'concrnt',
+                jti: crypto.randomUUID(),
+                iat: Math.floor(new Date().getTime() / 1000).toString(),
+                exp: Math.floor((new Date().getTime() + 5 * 60 * 1000) / 1000).toString()
+            },
+            opts
+        )
 
-        this.tokens[remote] = token
+        this.tokens[opts?.useMasterkey ? `${remote}#master` : remote] = token
         return token
     }
 
-    async getAuthToken(remote: string): Promise<string> {
-        let token = this.tokens[remote]
+    async getAuthToken(remote: string, opts?: { useMasterkey?: boolean }): Promise<string> {
+        let token = this.tokens[opts?.useMasterkey ? `${remote}#master` : remote]
         if (!token || !CheckJwtIsValid(token)) {
-            token = await this.generateApiToken(remote)
+            token = await this.generateApiToken(remote, opts)
         }
         return token
     }
 
-    async getHeaders(domain: string) {
+    async getHeaders(domain: string, opts?: { useMasterkey?: boolean }) {
         return {
-            authorization: `Bearer ${await this.getAuthToken(domain)}`
+            authorization: `Bearer ${await this.getAuthToken(domain, opts)}`
         }
     }
 
@@ -230,17 +256,28 @@ export class Api {
         return this.fetchWithCredential<T>(fetchHost, endpoint, init)
     }
 
-    async fetchWithCredential<T>(host: string, path: string, init: RequestInit = {}, timeoutms?: number): Promise<T> {
+    async fetchWithCredential<T>(
+        host: string,
+        path: string,
+        init: RequestInit = {},
+        timeoutms?: number,
+        opts?: { useMasterkey?: boolean }
+    ): Promise<T> {
         const fetchHost = host || this.defaultHost
 
-        try {
-            const authHeaders = await this.getHeaders(fetchHost)
-            init.headers = {
-                ...init.headers,
-                ...authHeaders
+        // 署名鍵を持たない(ゲスト等)場合は無認証で通信するのが正常系なので試行もログもしない
+        if (opts?.useMasterkey || this.authProvider.canSignSub()) {
+            try {
+                const authHeaders = await this.getHeaders(fetchHost, opts)
+                init.headers = {
+                    ...init.headers,
+                    ...authHeaders
+                }
+            } catch (e) {
+                // useMasterkey明示時は無認証で送っても意味がないので失敗させる
+                if (opts?.useMasterkey) throw e
+                console.error('failed to get auth headers', e)
             }
-        } catch (e) {
-            console.error('failed to get auth headers', e)
         }
 
         return this.fetchHost<T>(fetchHost, path, init, timeoutms)
@@ -266,8 +303,17 @@ export class Api {
                     switch (res.status) {
                         case 403:
                             throw new PermissionError(`fetch failed on transport: ${res.status} ${await res.text()}`)
-                        case 404:
-                            throw new NotFoundError(`fetch failed on transport: ${res.status} ${await res.text()}`, url)
+                        case 404: {
+                            const body = await res.text()
+                            let code: string | undefined
+                            try {
+                                const parsed = JSON.parse(body)
+                                if (typeof parsed?.code === 'string') code = parsed.code
+                            } catch {
+                                /* JSONでないボディはコード無し扱い */
+                            }
+                            throw new NotFoundError(`fetch failed on transport: ${res.status} ${body}`, url, code)
+                        }
                         case 502:
                         case 503:
                         case 504:
@@ -283,6 +329,8 @@ export class Api {
 
                     this.markHostOnline(fetchHost)
 
+                    // 204(購読解除・カウンターリセット等)は本文が無い
+                    if (res.status === 204) return undefined as T
                     return await res.json()
                 })
                 .catch(async (err) => {
@@ -325,7 +373,12 @@ export class Api {
                 cached = cachedEntry.data
 
                 const age = Date.now() - cachedEntry.timestamp
-                if (age < (cachedEntry.data ? (opts?.TTL ?? this.defaultCacheTTL) : this.negativeCacheTTL)) {
+                if (
+                    age <
+                    (cachedEntry.data
+                        ? (opts?.TTL ?? this.defaultCacheTTL)
+                        : (opts?.negativeTTL ?? this.negativeCacheTTL))
+                ) {
                     // return cached if TTL is not expired
                     // fallbackモードはネットワーク優先なのでここでは返さない
                     if (opts?.cache !== 'fallback' && !(opts?.cache === 'best-effort' && !cachedEntry.data)) {
@@ -348,24 +401,28 @@ export class Api {
                 return this.inFlightRequests.get(cacheKey)
             }
 
-            let authHeaders = {}
-            if (opts?.auth !== 'no-auth') {
-                try {
-                    authHeaders = await this.getHeaders(fetchHost)
-                } catch (e) {
-                    console.error('failed to get auth headers', e)
-                }
-            }
+            // getHeadersのawait中に別callerがすり抜けて同一リクエストが並列発火しないよう、
+            // in-flight登録(下のset)までをawaitなしで済ませる
+            // 署名鍵を持たない(ゲスト等)場合は無認証で読むのが正常系なので試行もログもしない
+            const authHeadersPromise: Promise<Record<string, string>> =
+                opts?.auth !== 'no-auth' && this.authProvider.canSignSub()
+                    ? this.getHeaders(fetchHost).catch((e) => {
+                          console.error('failed to get auth headers', e)
+                          return {}
+                      })
+                    : Promise.resolve({})
 
-            const requestOptions = {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    ...authHeaders
-                }
-            }
-
-            const req = fetchWithTimeout(url, requestOptions, opts?.timeoutms)
+            const req = authHeadersPromise
+                .then(async (authHeaders) => {
+                    const requestOptions = {
+                        method: 'GET',
+                        headers: {
+                            Accept: 'application/json',
+                            ...authHeaders
+                        }
+                    }
+                    return await fetchWithTimeout(url, requestOptions, opts?.timeoutms)
+                })
                 .then(async (res) => {
                     if (res.status === 403) {
                         return await Promise.reject(new PermissionError(await res.text()))
@@ -378,7 +435,9 @@ export class Api {
 
                     if (!res.ok) {
                         if (res.status === 404) {
-                            this.cache.set(cacheKey, null)
+                            // 書き込み完了前にin-flightが解除されると後続callerがキャッシュミスして
+                            // 同じリクエストを再発火するためawaitする(成功側も同様)
+                            await this.cache.set(cacheKey, null)
                             throw new NotFoundError(`fetch failed on transport: ${res.status} ${await res.text()}`, url)
                         }
                         return await Promise.reject(
@@ -391,7 +450,7 @@ export class Api {
                     const data: T = await res.json()
 
                     opts?.expressGetter?.(data)
-                    if (opts?.cache !== 'negative-only') this.cache.set(cacheKey, data)
+                    if (opts?.cache !== 'negative-only') await this.cache.set(cacheKey, data)
 
                     return data
                 })
@@ -472,6 +531,11 @@ export class Api {
         })
 
         const sd = await this.fetchWithCache<SignedDocument>(this.defaultHost, endpoint, uri, { ...opts })
+        // 負キャッシュ(404の記憶)にヒットするとfetchWithCacheはnullを返す。
+        // ネットワーク経由の404と同じ型のエラーにしないと、呼び出し側のNotFoundErrorハンドリングが機能しない
+        if (!sd) {
+            throw new NotFoundError(`fetch failed on negative cache: ${uri}`, uri)
+        }
 
         const document: Document<Entity> = JSON.parse(sd.document)
         if (!document.kind) document.kind = 'entity'
@@ -817,7 +881,11 @@ export class Api {
 
     // net.concrnt.world.repository (POST)
     // NDJSONをインポートする。レスポンスには失敗した行だけが返る
-    async importRepository(jsonl: string, host?: string): Promise<RepositoryImportResult[]> {
+    async importRepository(
+        jsonl: string,
+        host?: string,
+        opts?: { useMasterkey?: boolean }
+    ): Promise<RepositoryImportResult[]> {
         const fetchHost = host || this.defaultHost
         const server = await this.getServer(fetchHost)
         const endpoint = renderUriTemplate(server, 'net.concrnt.world.repository', {})
@@ -829,13 +897,46 @@ export class Api {
                 headers: { 'Content-Type': 'text/plain' },
                 body: jsonl
             },
-            60 * 1000
+            60 * 1000,
+            opts
+        )
+    }
+
+    // net.concrnt.world.register (GET)
+    // 自分(requester)の登録情報(entity meta)を取得する。本人認証必須。
+    // 未登録(entity metaなし)はNotFoundError(code=ErrorCodeRegistrationNotFound)がthrowされる。
+    // このcodeを持つ404だけが「このサーバーに登録が無い」ことの確定シグナルであり、
+    // 素の404(プロキシ/旧サーバー/障害)や403(認証不成立・entityなし)とは区別できる
+    async getRegistration(host?: string, opts?: { useMasterkey?: boolean }): Promise<Registration> {
+        const fetchHost = host || this.defaultHost
+        const server = await this.getServer(fetchHost)
+        const endpoint = renderUriTemplate(server, 'net.concrnt.world.register', {})
+        const resp = await this.fetchWithCredential<ApiResponse<Registration>>(fetchHost, endpoint, {}, undefined, opts)
+        return resp.content
+    }
+
+    // net.concrnt.world.register (PUT)
+    // 自分(requester)の登録情報のmetaを更新する。本人認証必須。
+    // metaは生JSONの全置換で、inviterはサーバー側で不変(送っても無視される)。
+    // 未登録はGET同様NotFoundError(code=ErrorCodeRegistrationNotFound)
+    async updateRegistration(meta: any, host?: string): Promise<void> {
+        const fetchHost = host || this.defaultHost
+        await this.callConcrntApi(
+            fetchHost,
+            'net.concrnt.world.register',
+            {},
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ meta })
+            }
         )
     }
 
     // net.concrnt.world.register (DELETE)
-    // 引っ越し完了後などに、このサーバー上の登録(entity meta)を解除する。
-    // entityが既に他ドメインを指していないとサーバー側で拒否される
+    // このサーバー上の登録(entity meta)を即時解除し、自分が単独ownerの
+    // commitをサーバー側でGC候補にする(実データはgc-commitlog実行時に消える)。
+    // アカウント削除と引っ越し後の後始末の両方で使う統一動作で、未登録でも成功する(冪等)
     async unregister(host?: string): Promise<void> {
         const fetchHost = host || this.defaultHost
         await this.callConcrntApi(fetchHost, 'net.concrnt.world.register', {}, { method: 'DELETE' })
@@ -905,6 +1006,32 @@ export class Api {
         await this.callConcrntApi<ApiResponse<NotificationSubscription>>(
             fetchHost,
             'net.concrnt.world.subscribe',
+            { owner, vendor_id: vendorID },
+            { method: 'DELETE' }
+        )
+    }
+
+    // 未読カウンター: 配送ごとにサーバーが加算し、通知画面を開いたらリセットする愚直方式。
+    // 旧サーバーはエンドポイントを広告しないので、その場合はundefined(=機能なし)を返す。
+    async getNotificationCounter(owner: string, vendorID: string, host?: string): Promise<number | undefined> {
+        const fetchHost = host ?? this.defaultHost
+        const server = await this.getServer(fetchHost)
+        if (!server.endpoints['net.concrnt.world.subscribe.counter']) return undefined
+        const resp = await this.callConcrntApi<ApiResponse<{ count: number }>>(
+            fetchHost,
+            'net.concrnt.world.subscribe.counter',
+            { owner, vendor_id: vendorID }
+        )
+        return resp.content.count
+    }
+
+    async resetNotificationCounter(owner: string, vendorID: string, host?: string): Promise<void> {
+        const fetchHost = host ?? this.defaultHost
+        const server = await this.getServer(fetchHost)
+        if (!server.endpoints['net.concrnt.world.subscribe.counter']) return
+        await this.callConcrntApi<ApiResponse<unknown>>(
+            fetchHost,
+            'net.concrnt.world.subscribe.counter',
             { owner, vendor_id: vendorID },
             { method: 'DELETE' }
         )

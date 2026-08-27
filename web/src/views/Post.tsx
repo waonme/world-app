@@ -4,6 +4,7 @@ import { MdAddReaction, MdReply } from 'react-icons/md'
 import { Suspense, startTransition, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClient } from '../contexts/Client'
+import { useSubscribe } from '../hooks/useSubscribe'
 import {
     Association,
     LikeAssociationSchema,
@@ -41,6 +42,7 @@ export const PostView = (props: Props) => {
     const emojiPicker = useEmojiPicker()
     const composer = useComposer()
     const isMobile = useIsMobile()
+    const [knownCommunities] = useSubscribe(client.knownCommunities)
     const [tab, setTab] = useState<PostTab>('replies')
     const [message, setMessage] = useState<Message<any> | null>(null)
 
@@ -64,6 +66,27 @@ export const PostView = (props: Props) => {
     useEffect(() => {
         messagePromise?.then((msg) => setMessage(msg ?? null)).catch(() => setMessage(null))
     }, [messagePromise])
+
+    // リプライの投稿先は元メッセージの配信先(自分のホーム系タイムラインを除く)
+    const replyDestinations = useMemo(
+        () =>
+            message?.distributes?.filter(
+                (uri: string) =>
+                    !uri.includes('/main/home-timeline') &&
+                    !uri.includes('/main/activity-timeline') &&
+                    !uri.includes('/main/notify-timeline')
+            ) ?? [],
+        [message]
+    )
+
+    // インラインのリプライ欄の投稿先。元メッセージ由来の値を初期値にしつつ、その場で編集できるようにする
+    // (元メッセージは非同期ロードなので、届いた時点および別メッセージに移った時点で差し替える)
+    const [destinations, setDestinations] = useState<string[]>(replyDestinations)
+    const [prevReplyDestinations, setPrevReplyDestinations] = useState(replyDestinations)
+    if (prevReplyDestinations !== replyDestinations) {
+        setPrevReplyDestinations(replyDestinations)
+        setDestinations(replyDestinations)
+    }
 
     const fetchAssociations = useCallback(
         async (targetTab: PostTab) => {
@@ -146,7 +169,8 @@ export const PostView = (props: Props) => {
                     !uri.includes('/main/activity-timeline') &&
                     !uri.includes('/main/notify-timeline')
             ) ?? []
-        composer.open(communityDestinations, [], 'reply', msg)
+        // 候補は省略してknownCommunities全体にする(投稿先は元メッセージの配信先に限らない)
+        composer.open(communityDestinations, undefined, 'reply', msg)
     }, [messagePromise, composer])
 
     return (
@@ -160,7 +184,7 @@ export const PostView = (props: Props) => {
                 >
                     <ErrorBoundary FallbackComponent={RenderError}>
                         <Suspense fallback={<MessageSkeleton />}>
-                            <MessageContainer uri={props.uri} forceExpanded />
+                            <MessageContainer uri={props.uri} forceExpanded detail />
                         </Suspense>
                     </ErrorBoundary>
                 </div>
@@ -228,14 +252,10 @@ export const PostView = (props: Props) => {
                                     <Composer
                                         mode="reply"
                                         targetMessage={message}
-                                        destinations={
-                                            message.distributes?.filter(
-                                                (uri: string) =>
-                                                    !uri.includes('/main/home-timeline') &&
-                                                    !uri.includes('/main/activity-timeline') &&
-                                                    !uri.includes('/main/notify-timeline')
-                                            ) ?? []
-                                        }
+                                        destinations={destinations}
+                                        setDestinations={setDestinations}
+                                        defaultDestinations={replyDestinations}
+                                        options={knownCommunities}
                                         onPost={() => fetchAssociations('replies')}
                                     />
                                 </div>
@@ -373,12 +393,7 @@ export const PostView = (props: Props) => {
                                                 fontSize: '14px'
                                             }}
                                         >
-                                            <CCImage
-                                                src={imageUrl}
-                                                maxHeight={128}
-                                                alt=""
-                                                style={{ height: '20px', width: '20px', objectFit: 'contain' }}
-                                            />
+                                            <CCImage src={imageUrl} maxHeight={128} alt="" style={{ height: '20px' }} />
                                             <span>{count}</span>
                                         </button>
                                     ))}

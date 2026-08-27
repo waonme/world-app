@@ -1,11 +1,14 @@
 import {
     Api,
+    ComputeCCID,
     ComputeCKID,
     DeriveIdentity,
     type Document,
     GenerateIdentity,
     InMemoryAuthProvider,
-    InMemoryKVS
+    InMemoryKVS,
+    LoadIdentity,
+    LoadKey
 } from '@concrnt/client'
 import { Button, CssVar, Passport, Text } from '@concrnt/ui'
 import { emojihash, type ProfileSchema, semantics, SignalLoginReceiver } from '@concrnt/worldlib'
@@ -33,6 +36,9 @@ export const QRSetup = () => {
 
     const keyTypeSelectionRef = useRef<((typ: 'instant' | 'passkey') => void) | null>(null)
     const [pendingKeyGeneration, setPendingKeyGeneration] = useState<{ ccid: string; domain: string } | null>(null)
+    const [passkeyError, setPasskeyError] = useState<string>('')
+
+    const passkeyAvailable = !!window.PublicKeyCredential && !!navigator.credentials
 
     const waitForKeyTypeSelection = (ccid: string, domain: string): Promise<'instant' | 'passkey'> => {
         setPendingKeyGeneration({ ccid, domain })
@@ -47,10 +53,11 @@ export const QRSetup = () => {
 
     useEffect(() => {
         let d = ''
+        let c = ''
         let subkey = ''
 
         const keyGenerationCallback = async (ccid: string, domain: string): Promise<string> => {
-            setCCID(ccid)
+            setCCID((c = ccid))
             setDomain((d = domain))
 
             const authProvider = new InMemoryAuthProvider()
@@ -63,58 +70,75 @@ export const QRSetup = () => {
                 }
             })
 
-            const keyType = await waitForKeyTypeSelection(ccid, domain)
+            // パスキー作成に失敗してもrejectせず、選択UIに戻して成功するまでやり直す
+            // (SignalLoginReceiverはこのコールバックを一度しか呼ばないため、rejectすると画面が進まなくなる)
+            while (true) {
+                const keyType = await waitForKeyTypeSelection(ccid, domain)
 
-            console.log('Selected key type:', keyType)
+                console.log('Selected key type:', keyType)
 
-            if (keyType === 'passkey') {
+                if (keyType !== 'passkey') {
+                    const identity = GenerateIdentity()
+                    const keyID = ComputeCKID(identity.publicKey)
+                    setKeyFingerprint(emojihash(keyID))
+                    subkey = `concrnt-subkey ${identity.privateKey} ${ccid}@${domain}`
+
+                    return keyID
+                }
+
                 let id = `${ccid}@${domain}`
                 if (id.length > 64) {
                     id = ccid
                 }
 
-                const challenge = new Uint8Array(32)
-                crypto.getRandomValues(challenge)
-                const cred = await navigator.credentials.create({
-                    publicKey: {
-                        challenge: challenge,
-                        rp: {
-                            name: 'concrnt.world',
-                            id: window.location.hostname
-                        },
-                        pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
-                        user: {
-                            id: string2Uint8Array(id),
-                            name: ccid,
-                            displayName: 'concrnt'
-                        },
-                        authenticatorSelection: {
-                            userVerification: 'required',
-                            residentKey: 'required'
-                        },
-                        extensions: {
-                            prf: {
-                                eval: {
-                                    first: string2Uint8Array('concrnt-world-passkey')
+                let cred
+                try {
+                    const challenge = new Uint8Array(32)
+                    crypto.getRandomValues(challenge)
+                    cred = await navigator.credentials.create({
+                        publicKey: {
+                            challenge: challenge,
+                            rp: {
+                                name: 'concrnt.world',
+                                id: window.location.hostname
+                            },
+                            pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+                            user: {
+                                id: string2Uint8Array(id),
+                                name: ccid,
+                                displayName: 'concrnt'
+                            },
+                            authenticatorSelection: {
+                                userVerification: 'required',
+                                residentKey: 'required'
+                            },
+                            extensions: {
+                                prf: {
+                                    eval: {
+                                        first: string2Uint8Array('concrnt-world-passkey')
+                                    }
                                 }
                             }
                         }
-                    }
-                })
-
-                if (!cred) {
-                    console.error('Credential creation failed')
-                    throw new Error('Failed to create credential')
+                    })
+                } catch (err) {
+                    console.error('Credential creation failed', err)
+                    cred = null
                 }
 
-                // @ts-expect-error - TypeScript does not yet recognize the prf extension results
+                if (!cred) {
+                    setPasskeyError(t('passkeyCreateFailed'))
+                    continue
+                }
+
                 const credentialResults = cred.getClientExtensionResults()
                 console.log('Credential Results:', credentialResults)
 
                 const prfRes = credentialResults?.prf?.results
                 if (!prfRes?.first) {
                     console.error('PRF results not available')
-                    throw new Error('PRF results not available')
+                    setPasskeyError(t('passkeyNoPrf'))
+                    continue
                 }
                 console.log('PRF First:', prfRes.first)
 
@@ -126,17 +150,41 @@ export const QRSetup = () => {
                 subkey = `concrnt-subkey ${identity.privateKey} ${ccid}@${domain}`
 
                 return keyID
-            } else {
-                const identity = GenerateIdentity()
-                const keyID = ComputeCKID(identity.publicKey)
-                setKeyFingerprint(emojihash(keyID))
-                subkey = `concrnt-subkey ${identity.privateKey} ${ccid}@${domain}`
-
-                return keyID
             }
         }
 
         const receiver = new SignalLoginReceiver(signalURL, keyGenerationCallback, (keyURI: string) => {
+            // 前セッションの別アカウントのマスターキーが残ったままだと、subkeyのccidと不一致のまま
+            // マスターキー署名が使われてしまう。削除はせずEvacuatedKeys:<旧ccid>へ退避して
+            // ID画面から回収できるようにする(同一アカウントならそのまま残す)
+            const prevKeyRaw = localStorage.getItem('PrivateKey')
+            const prevMnemonicRaw = localStorage.getItem('Mnemonic')
+            if (prevKeyRaw !== null || prevMnemonicRaw !== null) {
+                let prevCcid: string | null = null
+                try {
+                    if (prevKeyRaw) {
+                        const keypair = LoadKey(prevKeyRaw)
+                        prevCcid = keypair ? ComputeCCID(keypair.publickey) : null
+                    } else if (prevMnemonicRaw) {
+                        prevCcid = LoadIdentity(prevMnemonicRaw).CCID
+                    }
+                } catch {
+                    prevCcid = null
+                }
+                if (prevCcid !== c) {
+                    localStorage.setItem(
+                        `EvacuatedKeys:${prevCcid ?? 'unknown'}`,
+                        JSON.stringify({
+                            privateKey: prevKeyRaw ?? undefined,
+                            mnemonic: prevMnemonicRaw ?? undefined,
+                            evacuatedAt: new Date().toISOString()
+                        })
+                    )
+                    localStorage.removeItem('PrivateKey')
+                    localStorage.removeItem('Mnemonic')
+                }
+            }
+
             setPersistentDomain(d)
             setPersistentSubkey(subkey)
 
@@ -210,6 +258,10 @@ export const QRSetup = () => {
                     >
                         <Text variant="h4">{t('usePasskeyTitle')}</Text>
                         <Text>{t('usePasskeyDescription')}</Text>
+                        {!passkeyAvailable && (
+                            <Text style={{ color: 'var(--error, #f44336)' }}>{t('passkeyUnavailable')}</Text>
+                        )}
+                        {passkeyError && <Text style={{ color: 'var(--error, #f44336)' }}>{passkeyError}</Text>}
                         <div
                             style={{
                                 display: 'flex',
@@ -222,6 +274,7 @@ export const QRSetup = () => {
                         >
                             <Button
                                 onClick={() => {
+                                    setPasskeyError('')
                                     if (keyTypeSelectionRef.current) {
                                         keyTypeSelectionRef.current('instant')
                                     }
@@ -230,7 +283,9 @@ export const QRSetup = () => {
                                 {t('no')}
                             </Button>
                             <Button
+                                disabled={!passkeyAvailable}
                                 onClick={() => {
+                                    setPasskeyError('')
                                     if (keyTypeSelectionRef.current) {
                                         keyTypeSelectionRef.current('passkey')
                                     }

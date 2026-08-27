@@ -1,4 +1,5 @@
 import { ReactNode, startTransition, Suspense, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ScrollViewHandle, ScrollViewProps, ScrollViewRef } from '../types/ScrollView'
 
 import { useClient } from '../contexts/Client'
@@ -12,11 +13,10 @@ import { View } from '../components/View'
 
 import { ListSettings } from '../components/ListSettings'
 import { RealtimeTimeline } from '../components/RealtimeTimeline'
+import { MessageSkeleton } from '../components/message/MessageSkeleton'
 
 import { MdTune } from 'react-icons/md'
-import { MdCreate } from 'react-icons/md'
 import { PinnedListItemClass, semantics, List } from '@concrnt/worldlib'
-import { hapticLight } from '../utils/haptics'
 import { CssVar } from '../types/Theme'
 import { ListName } from '../components/ListName'
 import { ProfileEditor } from '../components/ProfileEditor'
@@ -24,8 +24,8 @@ import { useSubscribe } from '../hooks/useSubscribe'
 import { usePreference } from '../contexts/Preference'
 import { sortByListOrder } from '../utils/listOrder'
 import { Composer } from '../components/Composer'
-import { FAB } from '../components/FAB'
-import { useComposer } from '../contexts/Composer'
+import { ComposeFAB } from '../components/ComposeFAB'
+import { PostContextProvider } from '../contexts/PostContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 export const HomeView = (props: ScrollViewProps) => {
@@ -37,7 +37,18 @@ export const HomeView = (props: ScrollViewProps) => {
         scrollToTop: () => scrollRef.current?.scrollToTop()
     }))
 
-    const [selectedTabUri, setSelectedTabUri] = useState<string>('')
+    const location = useLocation()
+    const navigate = useNavigate()
+    let hashTabUri = ''
+    try {
+        hashTabUri = location.hash ? decodeURIComponent(location.hash.slice(1)) : ''
+    } catch (e) {
+        console.warn('HomeView decodeURIComponent error', e)
+    }
+    const selectTab = (uri: string) => {
+        if (uri === hashTabUri) return
+        navigate({ hash: encodeURIComponent(uri) })
+    }
     const [listSettingsOpen, setListSettingsOpen] = useState(false)
 
     // fix default settings
@@ -78,9 +89,6 @@ export const HomeView = (props: ScrollViewProps) => {
                 >
                     Home
                 </Header>
-                <Drawer open={listSettingsOpen} onClose={() => setListSettingsOpen(false)}>
-                    <ListSettings uri={selectedTabUri} onComplete={() => setListSettingsOpen(false)} />
-                </Drawer>
                 <Drawer open={profileSetupOpen} onClose={() => setProfileSetupOpen(false)}>
                     <ProfileEditor
                         noLoading
@@ -108,8 +116,10 @@ export const HomeView = (props: ScrollViewProps) => {
                     <Suspense>
                         <HomeMain
                             ref={scrollRef}
-                            selectedTabUri={selectedTabUri}
-                            setSelectedTabUri={setSelectedTabUri}
+                            hashTabUri={hashTabUri}
+                            selectTab={selectTab}
+                            listSettingsOpen={listSettingsOpen}
+                            closeListSettings={() => setListSettingsOpen(false)}
                         />
                     </Suspense>
                 </ErrorBoundary>
@@ -120,12 +130,16 @@ export const HomeView = (props: ScrollViewProps) => {
 
 const HomeMain = ({
     ref,
-    selectedTabUri,
-    setSelectedTabUri
+    hashTabUri,
+    selectTab,
+    listSettingsOpen,
+    closeListSettings
 }: {
     ref?: ScrollViewRef
-    selectedTabUri: string
-    setSelectedTabUri: (uri: string) => void
+    hashTabUri: string
+    selectTab: (uri: string) => void
+    listSettingsOpen: boolean
+    closeListSettings: () => void
 }) => {
     const { client } = useClient()
 
@@ -135,46 +149,52 @@ const HomeMain = ({
     const order = listOrder?.[client.currentProfile] ?? []
     const sortedPins = sortByListOrder(pinnedLists, order)
 
-    const pin = sortedPins.find((pin) => pin.uri === selectedTabUri)
-
-    useEffect(() => {
-        if (selectedTabUri === '' && sortedPins.length > 0) {
-            setSelectedTabUri(sortedPins[0].uri)
-        }
-    }, [selectedTabUri])
+    // ハッシュ無し・ピン解除済み等で該当しないときは先頭のピンにフォールバックする
+    const effectiveTabUri = sortedPins.some((pin) => pin.uri === hashTabUri) ? hashTabUri : (sortedPins[0]?.uri ?? '')
+    const pin = sortedPins.find((pin) => pin.uri === effectiveTabUri)
 
     return (
         <>
+            <Drawer open={listSettingsOpen} onClose={closeListSettings}>
+                <ListSettings uri={effectiveTabUri} onComplete={closeListSettings} />
+            </Drawer>
             {sortedPins.length > 1 && (
                 <Tabs
                     style={{
                         color: CssVar.contentLink,
-                        overflowX: 'auto',
                         justifyContent: 'flex-start'
                     }}
                 >
                     {sortedPins.map((tab) => (
                         <Tab
                             key={tab.uri}
-                            selected={selectedTabUri === tab.uri}
+                            selected={effectiveTabUri === tab.uri}
                             onClick={() =>
                                 startTransition(() => {
-                                    setSelectedTabUri(tab.uri)
+                                    selectTab(tab.uri)
                                 })
                             }
                             groupId="home-timeline-tabs"
                             style={{
                                 color: CssVar.contentText,
-                                width: '120px',
-                                flexShrink: 0
+                                flex: '0 0 auto',
+                                width: 'auto',
+                                minWidth: '90px',
+                                maxWidth: '360px'
                             }}
                         >
-                            <ListName uri={tab.uri} />
+                            <ListName pin={tab} />
                         </Tab>
                     ))}
                 </Tabs>
             )}
-            {pin && <TimelineWrap ref={ref} pin={pin} />}
+            {pin && (
+                <Suspense key={pin.uri} fallback={<MessageSkeleton />}>
+                    <PostContextProvider destinations={pin.defaultPostTimelines} profile={pin.defaultProfile}>
+                        <TimelineWrap ref={ref} pin={pin} />
+                    </PostContextProvider>
+                </Suspense>
+            )}
         </>
     )
 }
@@ -185,6 +205,15 @@ const TimelineWrap = (props: { pin: PinnedListItemClass; ref?: ScrollViewRef }) 
     const [list] = useSubscribe(props.pin.list)
     const [knownCommunities] = useSubscribe(client.knownCommunities)
     const isMobile = useIsMobile()
+
+    // インラインエディタの投稿先。リストのデフォルトを初期値にしつつ、その場で編集できるようにする
+    const [destinations, setDestinations] = useState<string[]>(props.pin.defaultPostTimelines)
+    // タブでリストを切り替えたらそのリストのデフォルト投稿先に戻す
+    const [prevPinUri, setPrevPinUri] = useState(props.pin.uri)
+    if (prevPinUri !== props.pin.uri) {
+        setPrevPinUri(props.pin.uri)
+        setDestinations(props.pin.defaultPostTimelines)
+    }
 
     if (!list) return <Text>{t('listNotFound')}</Text>
 
@@ -202,7 +231,9 @@ const TimelineWrap = (props: { pin: PinnedListItemClass; ref?: ScrollViewRef }) 
                                 <Composer
                                     mode="normal"
                                     autoGrow
-                                    destinations={props.pin.defaultPostTimelines}
+                                    destinations={destinations}
+                                    setDestinations={setDestinations}
+                                    defaultDestinations={props.pin.defaultPostTimelines}
                                     options={knownCommunities}
                                     initialProfile={props.pin.defaultProfile}
                                 />
@@ -212,23 +243,8 @@ const TimelineWrap = (props: { pin: PinnedListItemClass; ref?: ScrollViewRef }) 
                     )
                 }
             />
-            <InnerFab defaultPostTimelines={props.pin.defaultPostTimelines} defaultProfile={props.pin.defaultProfile} />
+            <ComposeFAB />
         </>
-    )
-}
-
-const InnerFab = (props: { defaultPostTimelines: string[]; defaultProfile?: string }) => {
-    const composer = useComposer()
-
-    return (
-        <FAB
-            onClick={() => {
-                hapticLight()
-                composer.open(props.defaultPostTimelines, undefined, undefined, undefined, props.defaultProfile)
-            }}
-        >
-            <MdCreate size={24} />
-        </FAB>
     )
 }
 

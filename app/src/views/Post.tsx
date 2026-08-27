@@ -17,7 +17,7 @@ import {
     User
 } from '@concrnt/worldlib'
 import { useEmojiPicker } from '../contexts/EmojiPicker'
-import { hapticLight } from '../utils/haptics'
+import { useHaptics } from '../contexts/Haptics'
 import { CssVar } from '../types/Theme'
 import { useStack } from '../layouts/Stack'
 import { ProfileView } from './Profile'
@@ -39,6 +39,7 @@ export const PostView = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'views.post' })
     const { client } = useClient()
     const { push } = useStack()
+    const { hapticLight } = useHaptics()
     const composer = useComposer()
     const emojiPicker = useEmojiPicker()
     const [tab, setTab] = useState<PostTab>(props.initialTab ?? 'replies')
@@ -155,7 +156,8 @@ export const PostView = (props: Props) => {
                     !uri.includes('/main/activity-timeline') &&
                     !uri.includes('/main/notify-timeline')
             ) ?? []
-        composer.open(communityDestinations, [], 'reply', msg)
+        // 候補は省略してknownCommunities全体にする(投稿先は元メッセージの配信先に限らない)
+        composer.open(communityDestinations, undefined, 'reply', msg)
     }, [messagePromise, composer])
 
     return (
@@ -169,7 +171,7 @@ export const PostView = (props: Props) => {
                 >
                     <ErrorBoundary FallbackComponent={RenderError}>
                         <Suspense fallback={<MessageSkeleton />}>
-                            <MessageContainer uri={props.uri} forceExpanded />
+                            <MessageContainer uri={props.uri} forceExpanded detail />
                         </Suspense>
                     </ErrorBoundary>
                 </div>
@@ -360,12 +362,7 @@ export const PostView = (props: Props) => {
                                                 fontSize: '14px'
                                             }}
                                         >
-                                            <CCImage
-                                                src={imageUrl}
-                                                maxHeight={128}
-                                                alt=""
-                                                style={{ height: '20px', width: '20px', objectFit: 'contain' }}
-                                            />
+                                            <CCImage src={imageUrl} maxHeight={128} alt="" style={{ height: '20px' }} />
                                             <span>{count}</span>
                                         </button>
                                     ))}

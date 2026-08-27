@@ -4,6 +4,7 @@ import { MediaMessageSchema } from '@concrnt/worldlib'
 import { Avatar, CfmRenderer } from '@concrnt/ui'
 
 import { MessageLayout } from './MessageLayout'
+import { MessageAuthor } from './MessageAuthor'
 import { TimeDiff } from '../TimeDiff'
 import { useNavigate } from 'react-router-dom'
 import { MessageFooter } from './Footer'
@@ -18,6 +19,7 @@ export const MediaMessage = (props: MessageProps<MediaMessageSchema>) => {
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
                 navigate('/post/' + encodeURIComponent(message.uri))
             }}
@@ -25,21 +27,23 @@ export const MediaMessage = (props: MessageProps<MediaMessageSchema>) => {
                 <div
                     onClick={(e) => {
                         e.stopPropagation()
-                        navigate('/profile/' + message.author)
+                        navigate(
+                            '/profile/' +
+                                message.author +
+                                (message.authorProfileName && message.authorProfileName !== 'main'
+                                    ? '/' + message.authorProfileName
+                                    : '')
+                        )
                     }}
                 >
-                    <Avatar ccid={message.author} src={message.authorUser?.profile.avatar} />
+                    <Avatar
+                        ccid={message.author}
+                        src={message.authorProfile?.avatar}
+                        style={{ width: '48px', height: '48px' }}
+                    />
                 </div>
             }
-            headerLeft={
-                <div
-                    style={{
-                        fontWeight: 'bold'
-                    }}
-                >
-                    {message.authorUser?.profile.username || 'Anonymous'}
-                </div>
-            }
+            headerLeft={<MessageAuthor message={message} />}
             headerRight={<TimeDiff date={message.createdAt} />}
         >
             {message.value.body && (
@@ -51,7 +55,7 @@ export const MediaMessage = (props: MessageProps<MediaMessageSchema>) => {
             )}
 
             <MediaGallery medias={message.value.medias ?? []} />
-            <MessageFooter message={message} />
+            <MessageFooter message={message} rerouted={props.rerouted} />
         </MessageLayout>
     )
 }

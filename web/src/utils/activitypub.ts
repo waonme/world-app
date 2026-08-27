@@ -1,4 +1,5 @@
-import { CDID } from '@concrnt/client'
+import { CDID, renderUriTemplate, type FetchOptions } from '@concrnt/client'
+import { type Client } from '@concrnt/worldlib'
 
 export interface ApImage {
     type: 'Image'
@@ -11,6 +12,43 @@ export interface ApImage {
 // ハッシュはブリッジ側の CDID.makeHash と同一(keccak256先頭15バイトのx-CDID)。
 export const apFollowKey = (ccid: string, actorURI: string): string => {
     return `cckv://${ccid}/activitypub.concrnt.world/follows/${CDID.newFromStringX(actorURI).toString()}`
+}
+
+// APブリッジのユーザー設定レコードキー(listenTimelines等)。ブリッジが直接読む。
+export const apSettingsKey = (ccid: string): string => {
+    return `cckv://${ccid}/activitypub.concrnt.world/settings`
+}
+
+// APブリッジのホームストリーム(受信タイムライン)。ブリッジがインバウンド投稿を配布する先。
+export const apInboxKey = (ccid: string): string => {
+    return `cckv://${ccid}/activitypub.concrnt.world/inbox`
+}
+
+// ブリッジがインバウンドnoteを保存するレコードキー(ブリッジ側inboxKeyと同一の決定的導出)。
+// serviceCcidはブリッジのサービスアカウント(net.concrnt.activitypub.infoのserviceAccountId)。
+export const apNoteKey = (serviceCcid: string, noteURL: string): string => {
+    return `cckv://${serviceCcid}/activitypub.concrnt.world/inbox/${CDID.newFromStringX(noteURL).toString()}`
+}
+
+// noteはほぼ不変・actorの更新もSWR(stale表示+裏で再取得)で追従できるため1hで共通
+export const AP_RESOLVE_TTL = 1000 * 60 * 60
+// 死んだインスタンス/410はブリッジが404で返すため、失敗resolveの連打を5分抑止
+export const AP_RESOLVE_NEGATIVE_TTL = 1000 * 60 * 5
+
+// resolveはネットワーク素通しだと表示中のノート数×2(note+author)のリクエストが飛ぶため、
+// 通常メッセージと同じfetchWithCache(KVS永続+in-flight dedup+negative cache)に乗せる
+export const resolveApObject = async (
+    client: Client,
+    uri: string,
+    opts?: FetchOptions<Partial<ApObject> | null>
+): Promise<ApObject | null> => {
+    const endpoint = renderUriTemplate(client.server, 'net.concrnt.activitypub.resolve', { uri })
+    const res = await client.api.fetchWithCache<Partial<ApObject> | null>(client.server.domain, endpoint, `ap:${uri}`, {
+        TTL: AP_RESOLVE_TTL,
+        negativeTTL: AP_RESOLVE_NEGATIVE_TTL,
+        ...opts
+    })
+    return res ? new ApObject(res) : null
 }
 
 export class ApObject {
@@ -42,13 +80,25 @@ export class ApObject {
         publicKeyPem: string
     }
     attachment?: ApObject | ApObject[]
+    mediaType?: string
+    sensitive?: boolean
+    blurhash?: string
     attributedTo?: string
     content?: string
     _misskey_content?: string
     published?: string
-    to?: string[]
-    cc?: string[]
+    // fedifyの再シリアライズ経路は単一要素を配列でなく文字列で返すため両方あり得る
+    to?: string | string[]
+    cc?: string | string[]
     inReplyTo?: string
+    // コレクション(outbox等)とアクティビティ(Create/Announce)用。
+    // 参照はサーバーによりURL文字列か埋め込みオブジェクトの両方があり得る
+    first?: string | Partial<ApObject>
+    next?: string | Partial<ApObject>
+    orderedItems?: Partial<ApObject> | string | (Partial<ApObject> | string)[]
+    items?: Partial<ApObject> | string | (Partial<ApObject> | string)[]
+    object?: string | Partial<ApObject>
+    actor?: string
 
     constructor(ld: Partial<ApObject>) {
         Object.assign(this, ld)
@@ -66,6 +116,30 @@ export class ApObject {
         return [this.image]
     }
 
+    // oneline表示などHTMLを描画できない場所向けに本文をプレーンテキスト化する。
+    // MisskeyはMFMソース(_misskey_content)を持つのでそちらを優先し、それ以外はHTMLのタグ除去+エンティティ復号
+    getPlainText(): string {
+        if (this._misskey_content) return this._misskey_content.replace(/\s+/g, ' ').trim()
+        return (this.content ?? '')
+            .replace(/<br\s*\/?>|<\/p>/gi, ' ')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&quot;/g, '"')
+            .replace(/&#0?39;/g, "'")
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/\s+/g, ' ')
+            .trim()
+    }
+
+    // アクター用。concrntネイティブのaliasに相当する @user@host 形式のハンドルを返す。
+    // hostは(WebFingerを引かず)アクターIDのホストで代用する
+    getHandle(): string | undefined {
+        if (!this.preferredUsername) return undefined
+        const host = URL.parse(this.id)?.host
+        return host ? `@${this.preferredUsername}@${host}` : `@${this.preferredUsername}`
+    }
+
     getTags(): ApObject[] {
         if (!this.tag) return []
         if (Array.isArray(this.tag)) return this.tag
@@ -76,5 +150,54 @@ export class ApObject {
         if (!this.attachment) return []
         if (Array.isArray(this.attachment)) return this.attachment
         return [this.attachment]
+    }
+
+    // 添付をMediaGallery互換の形に正規化する。actorのattachmentに入るPropertyValue等の非メディアは落とす。
+    // mediaType欠落時はAPのtypeから補う(空だとMediaBodyのsplit('/')分岐でUnsupported扱いになる)
+    getMedias(): { mediaURL: string; mediaType: string; altText?: string; flag?: string; blurhash?: string }[] {
+        const fallbackMediaType: Record<string, string> = {
+            Image: 'image/*',
+            Video: 'video/*',
+            Audio: 'audio/*',
+            Document: 'image/*'
+        }
+        const medias = []
+        for (const a of this.getAttachments()) {
+            const fallback = fallbackMediaType[a.type]
+            if (!fallback) continue
+            // urlはサーバーにより文字列/Linkオブジェクト/それらの配列のいずれもあり得る
+            const urls = (a.url ? [a.url].flat() : []) as (string | { href?: string })[]
+            const mediaURL = urls.map((u) => (typeof u === 'string' ? u : u?.href)).find((u) => u)
+            if (!mediaURL) continue
+            medias.push({
+                mediaURL,
+                mediaType: a.mediaType ?? fallback,
+                altText: a.name ?? undefined,
+                flag: a.sensitive ? 'warn' : undefined,
+                blurhash: a.blurhash
+            })
+        }
+        return medias
+    }
+
+    getItems(): (Partial<ApObject> | string)[] {
+        const items = this.orderedItems ?? this.items
+        if (!items) return []
+        if (Array.isArray(items)) return items
+        return [items]
+    }
+
+    // Mastodon準拠: toにPublic=public / ccにPublic=unlisted / followers URI宛=followers / それ以外=direct。
+    // 宛先情報が無い場合はpublic、author未解決でfollowersURI不明ならdirect断定を避けてfollowersに倒す。
+    getVisibility(followersURI?: string): 'public' | 'unlisted' | 'followers' | 'direct' {
+        const to = this.to ? [this.to].flat() : []
+        const cc = this.cc ? [this.cc].flat() : []
+        if (to.length === 0 && cc.length === 0) return 'public'
+        const isPublic = (uri: string): boolean =>
+            uri === 'https://www.w3.org/ns/activitystreams#Public' || uri === 'as:Public' || uri === 'Public'
+        if (to.some(isPublic)) return 'public'
+        if (cc.some(isPublic)) return 'unlisted'
+        if (!followersURI || to.includes(followersURI) || cc.includes(followersURI)) return 'followers'
+        return 'direct'
     }
 }

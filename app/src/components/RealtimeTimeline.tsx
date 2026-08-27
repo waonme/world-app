@@ -14,6 +14,7 @@ import { useClient } from '../contexts/Client'
 import { useRefWithUpdate } from '../hooks/useRefWithUpdate'
 import { TimelineItemWithUpdate, TimelineReader } from '@concrnt/client'
 import { MessageContainer } from './message'
+import { QueryTimelineContext } from './QueryTimeline'
 import { Avatar, CssVar, Divider } from '@concrnt/ui'
 import { ErrorBoundary } from 'react-error-boundary'
 import { PullToRefresh } from './PullToRefresh'
@@ -219,7 +220,8 @@ export const RealtimeTimeline = (props: Props) => {
             if (scrollRef.current) {
                 scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' })
             }
-        }
+        },
+        isAtTop: () => (scrollRef.current?.scrollTop ?? 0) <= 0
     }))
 
     /** Pull to Refreshのリフレッシュ処理 */
@@ -235,6 +237,16 @@ export const RealtimeTimeline = (props: Props) => {
             setIsFetching(false)
         }
     }, [reader])
+
+    // リアクション等のcommit後に、そのアイテムだけ再取得させる。
+    // socketのassociatedイベント任せだとcommit応答より遅れて届いたときに
+    // useOptimisticのrevertが先に走り、リアクションが一瞬消える
+    const itemUpdated = useCallback(
+        (href: string) => {
+            reader.current?.updateItem(href)
+        },
+        [reader]
+    )
 
     /** 新着バッジクリック時の処理 */
     const handleNewArrivalClick = useCallback(() => {
@@ -286,10 +298,14 @@ export const RealtimeTimeline = (props: Props) => {
         }
 
         el.addEventListener('scroll', handleScroll)
+        // コンテンツがコンテナを満たしていないとscrollイベントが発生せず次ページが永遠に読まれないため、
+        // 読み込みが落ち着いた1秒後に一度だけ手動で判定する(不足していればreadMore→loadingが戻って再判定)
+        const fill = setTimeout(handleScroll, 1000)
         return () => {
             el.removeEventListener('scroll', handleScroll)
+            clearTimeout(fill)
         }
-    }, [scrollRef, reader, hasMoreData, initialLoaded])
+    }, [scrollRef, reader, hasMoreData, initialLoaded, loading])
 
     const maxDisplayAvatars = 4
     const displayedArrivals = newArrivals.slice(0, maxDisplayAvatars)
@@ -409,9 +425,11 @@ export const RealtimeTimeline = (props: Props) => {
                                 <MessageSkeleton />
                             </div>
                         ))}
-                    {reader.current?.body.map((item) => (
-                        <Cell key={item.href} item={item} lastUpdate={item.lastUpdate?.getTime() ?? 0} />
-                    ))}
+                    <QueryTimelineContext.Provider value={{ update: itemUpdated }}>
+                        {reader.current?.body.map((item) => (
+                            <Cell key={item.href} item={item} lastUpdate={item.lastUpdate?.getTime() ?? 0} />
+                        ))}
+                    </QueryTimelineContext.Provider>
                     {loading && <Loading message={'Loading...'} />}
                     {!hasMoreData && (
                         <div

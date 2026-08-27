@@ -13,6 +13,7 @@ export const LegacyNoteMessage = (props: MessageProps<any>) => {
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
                 navigate('/post/' + encodeURIComponent(message.uri))
             }}
@@ -20,10 +21,16 @@ export const LegacyNoteMessage = (props: MessageProps<any>) => {
                 <div
                     onClick={(e) => {
                         e.stopPropagation()
-                        navigate('/profile/' + message.author)
+                        navigate(
+                            '/profile/' +
+                                message.author +
+                                (message.authorProfileName && message.authorProfileName !== 'main'
+                                    ? '/' + message.authorProfileName
+                                    : '')
+                        )
                     }}
                 >
-                    <Avatar ccid={message.author} />
+                    <Avatar ccid={message.author} style={{ width: '48px', height: '48px' }} />
                 </div>
             }
             headerLeft={
@@ -42,9 +49,9 @@ export const LegacyNoteMessage = (props: MessageProps<any>) => {
                     >
                         {message.author.slice(0, 16)}...
                     </div>
-                    <div>{new Date(message.createdAt).toLocaleString()}</div>
                 </div>
             }
+            headerRight={<div>{new Date(message.createdAt).toLocaleString()}</div>}
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
                 <CfmRenderer messagebody={legacyMessage.body} emojiDict={{}} />

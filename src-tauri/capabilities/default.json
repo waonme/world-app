@@ -15,11 +15,16 @@
     "haptics:allow-vibrate",
     "keyboard:default",
     "push:default",
+    "share:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
         {
           "url": "https://*",
+          "app": true
+        },
+        {
+          "url": "http://*",
           "app": true
         }
       ]

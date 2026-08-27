@@ -1,8 +1,8 @@
 import { ReactNode, use } from 'react'
 
 import { useClient } from '../../contexts/Client'
-import { Text } from '@concrnt/ui'
-import { ApNoteSchema, AtprotoRecordSchema, Message, Schemas } from '@concrnt/worldlib'
+import { HorizontalLayout, Text } from '@concrnt/ui'
+import { ApNoteSchema, AtprotoRecordSchema, Message, RerouteMessageSchema, Schemas } from '@concrnt/worldlib'
 import { MarkdownMessage } from './MarkdownMessage'
 import { GfmMessage } from './GfmMessage'
 import { MfmMessage } from './MfmMessage'
@@ -14,10 +14,12 @@ import { LikeAssociation } from './LikeAssociation'
 import { ReactionAssociation } from './ReactionAssociation'
 import { ReplyAssociation } from './ReplyAssociation'
 import { RerouteAssociation } from './RerouteAssociation'
+import { MentionAssociation } from './MentionAssociation'
 import { FollowAck } from './FollowAck'
 import { LegacyNoteMessage } from './legacy/note'
 import { OnelineMessage } from './OnelineMessage'
 import { ActivitypubNote } from './ActivitypubNote'
+import { ActivitypubNoteOneline } from './ActivitypubNoteOneline'
 import { BlueskyRecord } from './BlueskyRecord'
 
 interface Props {
@@ -26,6 +28,8 @@ interface Props {
     content?: string
     oneline?: boolean
     forceExpanded?: boolean
+    detail?: boolean
+    rerouted?: Message<RerouteMessageSchema>
 }
 
 export const MessageContainer = (props: Props): ReactNode | null => {
@@ -37,22 +41,67 @@ export const MessageContainer = (props: Props): ReactNode | null => {
     if (!message) return <div>Message not found</div>
 
     if (props.oneline) {
+        if (message.schema === Schemas.apNote) {
+            return <ActivitypubNoteOneline message={message as Message<ApNoteSchema>} />
+        }
         return <OnelineMessage message={message} />
     }
 
     switch (message.schema) {
         case Schemas.markdownMessage:
-            return <MarkdownMessage message={message} forceExpanded={props.forceExpanded} />
+            return (
+                <MarkdownMessage
+                    message={message}
+                    forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         case Schemas.gfmMessage:
-            return <GfmMessage message={message} forceExpanded={props.forceExpanded} />
+            return (
+                <GfmMessage
+                    message={message}
+                    forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         case Schemas.mfmMessage:
-            return <MfmMessage message={message} forceExpanded={props.forceExpanded} />
+            return (
+                <MfmMessage
+                    message={message}
+                    forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         case Schemas.plaintextMessage:
-            return <PlaintextMessage message={message} forceExpanded={props.forceExpanded} />
+            return (
+                <PlaintextMessage
+                    message={message}
+                    forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         case Schemas.mediaMessage:
-            return <MediaMessage message={message} forceExpanded={props.forceExpanded} />
+            return (
+                <MediaMessage
+                    message={message}
+                    forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         case Schemas.replyMessage:
-            return <ReplyMessage message={message} forceExpanded={props.forceExpanded} />
+            return (
+                <ReplyMessage
+                    message={message}
+                    forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         case Schemas.rerouteMessage:
             return <RerouteMessage message={message} />
         case Schemas.likeAssociation:
@@ -63,6 +112,8 @@ export const MessageContainer = (props: Props): ReactNode | null => {
             return <ReplyAssociation message={message} />
         case Schemas.rerouteAssociation:
             return <RerouteAssociation message={message} />
+        case Schemas.mentionAssociation:
+            return <MentionAssociation message={message} />
         case Schemas.followAck:
             return <FollowAck message={message} />
         case Schemas.apNote: {
@@ -73,15 +124,24 @@ export const MessageContainer = (props: Props): ReactNode | null => {
                     noteURL={noteMessage.value.noteURL}
                     message={message}
                     forceExpanded={props.forceExpanded}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
                 />
             )
         }
         case Schemas.atprotoRecord: {
             const recordMessage = message as Message<AtprotoRecordSchema>
-            return <BlueskyRecord atUri={recordMessage.value.atUri} message={recordMessage} />
+            return (
+                <BlueskyRecord
+                    atUri={recordMessage.value.atUri}
+                    message={recordMessage}
+                    detail={props.detail}
+                    rerouted={props.rerouted}
+                />
+            )
         }
         case 'https://raw.githubusercontent.com/totegamma/concurrent-schemas/master/messages/note/0.0.1.json':
-            return <LegacyNoteMessage message={message} forceExpanded={props.forceExpanded} />
+            return <LegacyNoteMessage message={message} forceExpanded={props.forceExpanded} detail={props.detail} />
         default:
             return (
                 <div
@@ -90,13 +150,9 @@ export const MessageContainer = (props: Props): ReactNode | null => {
                     }}
                 >
                     <Text>Unsupported message schema: {message.schema}</Text>
-                    <pre
-                        style={{
-                            overflowX: 'auto'
-                        }}
-                    >
-                        {JSON.stringify(message, null, 2)}
-                    </pre>
+                    <HorizontalLayout>
+                        <pre>{JSON.stringify(message, null, 2)}</pre>
+                    </HorizontalLayout>
                 </div>
             )
     }

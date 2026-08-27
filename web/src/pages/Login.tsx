@@ -1,3 +1,4 @@
+import { resolveEntrypoint } from '../utils/entrypoint'
 import { CssVar, Text, TextField, ToggleGroup } from '@concrnt/ui'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -7,6 +8,7 @@ import { QRSetup } from '../components/QRSetup'
 import { string2Uint8Array } from '../util'
 import {
     Api,
+    ComputeCCID,
     ComputeCKID,
     DeriveIdentity,
     Document,
@@ -14,28 +16,43 @@ import {
     GenerateIdentity,
     InMemoryAuthProvider,
     InMemoryKVS,
+    IsValid256k1PrivateKey,
     LoadIdentity,
+    LoadKey,
+    LoadSubKey,
+    NotFoundError,
     SignedDocument,
-    type Identity
+    type Identity,
+    type SubKey
 } from '@concrnt/client'
 import { semantics } from '@concrnt/worldlib'
 import { AuthActions, AuthButton, AuthHeader, AuthScreen, AuthTextButton, authStyles } from '../views/authLayout'
 import { useResetPreference } from '../contexts/Preference'
-
-const resolveEntrypoint = (): string => {
-    const hostname = window.location.hostname
-    if (hostname === 'localhost') {
-        return 'ariake.concrnt.net'
-    }
-    return hostname
-}
+import { MNEMONIC_WORD_COUNT, MnemonicInput } from '../components/MnemonicInput'
 
 type LoginMethod = 'qr' | 'passkey' | 'recovery'
+type ManualMode = 'mnemonic' | 'raw'
 
 const normalizeRecoveryPhrase = (value: string) => value.trim().normalize('NFKD').toLowerCase().replace(/\s+/g, ' ')
 
 const loadRecoveryIdentity = (value: string): Identity | null => {
     if (!value) return null
+
+    // 旧webバックアップファイルやv1環境からの復元用に、64桁hexの生秘密鍵も受け付ける
+    const hexMatch = value.match(/^(?:0x)?([0-9a-f]{64})$/)
+    if (hexMatch) {
+        // ellipticのkeyFromPrivateは曲線オーダー外の鍵も黙って受けるため先に弾く
+        if (!IsValid256k1PrivateKey(hexMatch[1])) return null
+        const keypair = LoadKey(hexMatch[1])
+        if (!keypair) return null
+        return {
+            mnemonic: '',
+            mnemonic_ja: '',
+            privateKey: keypair.privatekey,
+            publicKey: keypair.publickey,
+            CCID: ComputeCCID(keypair.publickey)
+        }
+    }
 
     try {
         return LoadIdentity(value)
@@ -44,12 +61,50 @@ const loadRecoveryIdentity = (value: string): Identity | null => {
     }
 }
 
-const storeWebSession = (domain: string, masterKey: string | undefined, subKey: string) => {
+const storeWebSession = (
+    domain: string,
+    ccid: string,
+    masterKey: string | undefined,
+    mnemonic: string | undefined,
+    subKey: string
+) => {
+    // ログインし直しで既存のマスターキーが黙って消える事故を防ぐ。同一アカウントなら
+    // 既存のPrivateKey/Mnemonicをそのまま残し(パスキー/サブキーで入り直してもバックアップDL可能なまま)、
+    // 別アカウントなら削除せずEvacuatedKeys:<旧ccid>へ退避してID画面から回収できるようにする
+    const prevKeyRaw = localStorage.getItem('PrivateKey')
+    const prevMnemonicRaw = localStorage.getItem('Mnemonic')
+    if (prevKeyRaw !== null || prevMnemonicRaw !== null) {
+        let prevCcid: string | null = null
+        try {
+            if (prevKeyRaw) {
+                const keypair = LoadKey(prevKeyRaw)
+                prevCcid = keypair ? ComputeCCID(keypair.publickey) : null
+            } else if (prevMnemonicRaw) {
+                prevCcid = LoadIdentity(prevMnemonicRaw).CCID
+            }
+        } catch {
+            prevCcid = null
+        }
+        if (prevCcid !== ccid) {
+            localStorage.setItem(
+                `EvacuatedKeys:${prevCcid ?? 'unknown'}`,
+                JSON.stringify({
+                    privateKey: prevKeyRaw ?? undefined,
+                    mnemonic: prevMnemonicRaw ?? undefined,
+                    evacuatedAt: new Date().toISOString()
+                })
+            )
+            localStorage.removeItem('PrivateKey')
+            localStorage.removeItem('Mnemonic')
+        }
+    }
+
     localStorage.setItem('Domain', domain)
     if (masterKey) {
         localStorage.setItem('PrivateKey', masterKey)
-    } else {
-        localStorage.removeItem('PrivateKey')
+    }
+    if (mnemonic) {
+        localStorage.setItem('Mnemonic', mnemonic)
     }
     localStorage.setItem('SubKey', subKey)
 }
@@ -78,7 +133,8 @@ const createAndCommitSubkey = async (identity: Identity, domain: string) => {
         value: {
             ckid
         },
-        createdAt: new Date()
+        createdAt: new Date(),
+        onUpdate: 'retain'
     }
 
     const committed = await api.commit(subkeyDoc, domain, { useMasterkey: true })
@@ -117,15 +173,37 @@ export const Login = () => {
     const [method, setMethod] = useState<LoginMethod>('qr')
     const [status, setStatus] = useState('')
     const [busy, setBusy] = useState(false)
-    const [mnemonic, setMnemonic] = useState('')
+    const [manualMode, setManualMode] = useState<ManualMode>('mnemonic')
+    const [words, setWords] = useState<string[]>(() => Array(MNEMONIC_WORD_COUNT).fill(''))
+    const [rawInput, setRawInput] = useState('')
     const [manualServer, setManualServer] = useState('')
     const [needsServer, setNeedsServer] = useState(false)
     const [resolvedCCID, setResolvedCCID] = useState<string>()
+
+    // 12語入力は全欄が埋まったときだけ1本の文字列として扱う(途中の入力で検証を走らせない)
+    const mnemonic = useMemo(
+        () => (manualMode === 'mnemonic' ? (words.every((w) => w !== '') ? words.join(' ') : '') : rawInput),
+        [manualMode, words, rawInput]
+    )
+
+    const resetManualInput = () => {
+        setNeedsServer(false)
+        setResolvedCCID(undefined)
+        setStatus('')
+    }
 
     const normalizedMnemonic = useMemo(() => normalizeRecoveryPhrase(mnemonic), [mnemonic])
     const recoveryIdentity = useMemo(() => {
         return loadRecoveryIdentity(normalizedMnemonic)
     }, [normalizedMnemonic])
+
+    // normalizeRecoveryPhraseはNFKD+小文字化するため、サブキー文字列は正規化前の生入力で判定する
+    const parsedSubkey = useMemo((): { str: string; key: SubKey } | null => {
+        const trimmed = mnemonic.trim()
+        if (!trimmed.startsWith('concrnt-subkey')) return null
+        const key = LoadSubKey(trimmed)
+        return key ? { str: trimmed, key } : null
+    }, [mnemonic])
 
     const continueWithSession = () => {
         reset()
@@ -187,11 +265,46 @@ export const Login = () => {
             const identity = DeriveIdentity(new Uint8Array(prfRes.first))
             const subkeyStr = `concrnt-subkey ${identity.privateKey} ${ccid}@${domain} -`
 
-            storeWebSession(domain, undefined, subkeyStr)
+            storeWebSession(domain, ccid, undefined, undefined, subkeyStr)
             continueWithSession()
         } catch (error) {
             console.error(error)
             setStatus(error instanceof Error ? error.message : t('passkeyLoginFailed'))
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const startSubkeyLogin = async (subkeyStr: string, subkey: SubKey) => {
+        setBusy(true)
+        setResolvedCCID(subkey.ccid)
+        setStatus(t('checkingSubkey', { domain: subkey.domain }))
+
+        try {
+            const authProvider = new InMemoryAuthProvider(undefined, subkeyStr)
+            const kvs = new InMemoryKVS()
+            const api = new Api(subkey.domain, authProvider, kvs)
+
+            let valid = false
+            try {
+                const doc = await api.getDocument(semantics.subkey(subkey.ccid, subkey.ckid), undefined, {
+                    cache: 'no-cache'
+                })
+                // revoked-subkey.jsonによる同一キー上書き(CIP-13)はrevoke扱い
+                valid = doc.kind === 'record' && doc.schema === 'https://schema.concrnt.net/subkey.json'
+            } catch (err) {
+                if (!(err instanceof NotFoundError)) throw err
+            }
+            if (!valid) {
+                setStatus(t('subkeyInvalidOnServer'))
+                return
+            }
+
+            storeWebSession(subkey.domain, subkey.ccid, undefined, undefined, subkeyStr)
+            continueWithSession()
+        } catch (error) {
+            console.error(error)
+            setStatus(error instanceof Error ? error.message : t('subkeyLoginFailed'))
         } finally {
             setBusy(false)
         }
@@ -231,7 +344,7 @@ export const Login = () => {
                 console.error('Failed to migrate entity proof type', err)
             })
 
-            storeWebSession(domain, identity.privateKey, subkeyStr)
+            storeWebSession(domain, identity.CCID, identity.privateKey, identity.mnemonic, subkeyStr)
             continueWithSession()
         } catch (error) {
             console.error(error)
@@ -250,7 +363,7 @@ export const Login = () => {
                     options={[
                         { value: 'qr', label: t('methodQr') },
                         { value: 'passkey', label: t('methodPasskey') },
-                        { value: 'recovery', label: t('methodMasterKey') }
+                        { value: 'recovery', label: t('methodManual') }
                     ]}
                     value={method}
                     onChange={(value: LoginMethod) => {
@@ -284,17 +397,53 @@ export const Login = () => {
                 <>
                     <div style={authStyles.section}>
                         <div style={authStyles.inputGroup}>
-                            <Text style={{ color: CssVar.uiText }}>{t('masterKey')}</Text>
-                            <TextField
-                                value={mnemonic}
-                                onChange={(e) => {
-                                    setMnemonic(e.target.value)
-                                    setNeedsServer(false)
-                                    setResolvedCCID(undefined)
-                                    setStatus('')
+                            <Text style={{ color: CssVar.uiText }}>
+                                {manualMode === 'mnemonic' ? t('manualMasterKey') : t('manualRawKey')}
+                            </Text>
+                            {manualMode === 'mnemonic' ? (
+                                <>
+                                    <Text
+                                        style={{
+                                            color: CssVar.uiText,
+                                            opacity: 0.78,
+                                            fontSize: '0.9rem',
+                                            lineHeight: 1.6
+                                        }}
+                                    >
+                                        {t('manualMasterKeyHint')}
+                                    </Text>
+                                    <MnemonicInput
+                                        words={words}
+                                        onChange={(next) => {
+                                            setWords(next)
+                                            resetManualInput()
+                                        }}
+                                        onRawInput={(text) => {
+                                            // サブキー/hex秘密鍵が貼られたら単一欄へ切り替えてそのまま受け取る
+                                            setManualMode('raw')
+                                            setRawInput(text)
+                                            resetManualInput()
+                                        }}
+                                    />
+                                </>
+                            ) : (
+                                <TextField
+                                    value={rawInput}
+                                    onChange={(e) => {
+                                        setRawInput(e.target.value)
+                                        resetManualInput()
+                                    }}
+                                    placeholder={t('manualRawKeyPlaceholder')}
+                                />
+                            )}
+                            <AuthTextButton
+                                onClick={() => {
+                                    setManualMode(manualMode === 'mnemonic' ? 'raw' : 'mnemonic')
+                                    resetManualInput()
                                 }}
-                                placeholder={t('masterKeyPlaceholder')}
-                            />
+                            >
+                                {manualMode === 'mnemonic' ? t('switchToRawKey') : t('switchToMasterKey')}
+                            </AuthTextButton>
                         </div>
 
                         {resolvedCCID && <Text style={authStyles.ccid}>{resolvedCCID}</Text>}
@@ -311,7 +460,12 @@ export const Login = () => {
                         )}
 
                         <Text style={authStyles.status}>
-                            {status || (mnemonic && !recoveryIdentity ? t('masterKeyInvalid') : '')}
+                            {status ||
+                                (mnemonic && !recoveryIdentity && !parsedSubkey
+                                    ? mnemonic.trim().startsWith('concrnt-subkey')
+                                        ? t('subkeyInvalid')
+                                        : t('masterKeyInvalid')
+                                    : '')}
                         </Text>
                     </div>
 
@@ -324,17 +478,25 @@ export const Login = () => {
                                 {busy ? t('checking') : t('loginWithThisServer')}
                             </AuthButton>
                         ) : (
-                            <AuthButton disabled={busy || !recoveryIdentity} onClick={() => startRecoveryLogin()}>
-                                {busy ? t('checking') : t('masterKeyLogin')}
+                            <AuthButton
+                                disabled={busy || (!recoveryIdentity && !parsedSubkey)}
+                                onClick={() => {
+                                    if (parsedSubkey) {
+                                        startSubkeyLogin(parsedSubkey.str, parsedSubkey.key)
+                                    } else {
+                                        startRecoveryLogin()
+                                    }
+                                }}
+                            >
+                                {busy ? t('checking') : parsedSubkey ? t('subkeyLogin') : t('masterKeyLogin')}
                             </AuthButton>
                         )}
                         <AuthTextButton
                             onClick={() => {
-                                setMnemonic('')
+                                setWords(Array(MNEMONIC_WORD_COUNT).fill(''))
+                                setRawInput('')
                                 setManualServer('')
-                                setNeedsServer(false)
-                                setResolvedCCID(undefined)
-                                setStatus('')
+                                resetManualInput()
                             }}
                         >
                             {t('clearInput')}

@@ -4,6 +4,7 @@ import { MfmMessageSchema } from '@concrnt/worldlib'
 import { Avatar, MfmRenderer } from '@concrnt/ui'
 
 import { MessageLayout } from './MessageLayout'
+import { MessageAuthor } from './MessageAuthor'
 import { TimeDiff } from '../TimeDiff'
 import { useNavigate } from 'react-router-dom'
 import { MessageFooter } from './Footer'
@@ -17,6 +18,7 @@ export const MfmMessage = (props: MessageProps<MfmMessageSchema>) => {
 
     return (
         <MessageLayout
+            detail={props.detail}
             onClick={() => {
                 navigate('/post/' + encodeURIComponent(message.uri))
             }}
@@ -24,21 +26,23 @@ export const MfmMessage = (props: MessageProps<MfmMessageSchema>) => {
                 <div
                     onClick={(e) => {
                         e.stopPropagation()
-                        navigate('/profile/' + message.author)
+                        navigate(
+                            '/profile/' +
+                                message.author +
+                                (message.authorProfileName && message.authorProfileName !== 'main'
+                                    ? '/' + message.authorProfileName
+                                    : '')
+                        )
                     }}
                 >
-                    <Avatar ccid={message.author} src={message.authorProfile?.avatar} />
+                    <Avatar
+                        ccid={message.author}
+                        src={message.authorProfile?.avatar}
+                        style={{ width: '48px', height: '48px' }}
+                    />
                 </div>
             }
-            headerLeft={
-                <div
-                    style={{
-                        fontWeight: 'bold'
-                    }}
-                >
-                    {message.authorProfile?.username || 'Anonymous'}
-                </div>
-            }
+            headerLeft={<MessageAuthor message={message} />}
             headerRight={<TimeDiff date={message.createdAt} />}
         >
             <CollapsibleBody forceExpanded={props.forceExpanded}>
@@ -46,7 +50,7 @@ export const MfmMessage = (props: MessageProps<MfmMessageSchema>) => {
                     <MfmRenderer messagebody={message.value.body} emojiDict={message.value.emojis ?? {}} />
                 </AutoSummary>
             </CollapsibleBody>
-            <MessageFooter message={message} />
+            <MessageFooter message={message} rerouted={props.rerouted} />
         </MessageLayout>
     )
 }

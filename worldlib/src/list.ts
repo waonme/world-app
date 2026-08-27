@@ -1,4 +1,4 @@
-import { CDID, Document, SignedDocument } from '@concrnt/client'
+import { CDID, Document, FetchOptions, SignedDocument } from '@concrnt/client'
 import { Client } from './client'
 import { ListSchema } from './schemas/list'
 import { CachedPromise } from './cachedPromise'
@@ -13,18 +13,21 @@ export class List {
     uri: string
 
     title: string
+    iconURL?: string
 
     toJSON() {
         return {
             uri: this.uri,
-            title: this.title
+            title: this.title,
+            iconURL: this.iconURL
         }
     }
 
     items = new CachedPromise<string[]>(async () => {
+        const prefix = this.uri.endsWith('/') ? this.uri : this.uri + '/'
         const items = await this.client.api.queryAll(
             {
-                prefix: this.uri
+                prefix
             },
             undefined,
             { cache: true }
@@ -56,25 +59,31 @@ export class List {
         })
     })
 
-    constructor(client: Client, uri: string, title: string) {
+    constructor(client: Client, uri: string, title: string, iconURL?: string) {
         this.client = client
         this.uri = uri
         this.title = title
+        this.iconURL = iconURL
     }
 
-    static async load(client: Client, uri: string, hint?: string): Promise<List | null> {
-        const res = await client.api.getDocument<ListSchema>(uri, hint)
+    static async load(
+        client: Client,
+        uri: string,
+        hint?: string,
+        opts?: FetchOptions<SignedDocument>
+    ): Promise<List | null> {
+        const res = await client.api.getDocument<ListSchema>(uri, hint, opts)
         if (!res) {
             return null
         }
-        const list = new List(client, uri, res.value.name)
+        const list = new List(client, uri, res.value.name, res.value.iconURL)
 
         return list
     }
 
     static async loadFromSD(client: Client, sd: SignedDocument): Promise<List> {
         const doc = JSON.parse(sd.document)
-        const list = new List(client, sd.cckv ?? sd.ccfs, doc.value.name)
+        const list = new List(client, sd.cckv ?? sd.ccfs, doc.value.name, doc.value.iconURL)
 
         return list
     }

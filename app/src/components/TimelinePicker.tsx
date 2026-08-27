@@ -10,7 +10,7 @@ import { IoMdAdd } from 'react-icons/io'
 import { useClient } from '../contexts/Client'
 import { Avatar, ListItem, Select } from '@concrnt/ui'
 import { CssVar } from '../types/Theme'
-import { hapticSelection } from '../utils/haptics'
+import { useHaptics } from '../contexts/Haptics'
 import { ProfileName } from './ProfileName'
 
 interface Props {
@@ -28,6 +28,7 @@ interface Props {
 export const TimelinePicker = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'components.timelinePicker' })
     const { client } = useClient()
+    const { hapticSelection } = useHaptics()
 
     const [profileSelectOpen, setProfileSelectOpen] = useState(false)
 
@@ -145,7 +146,7 @@ export const TimelinePicker = (props: Props) => {
                                 break
                             case 'Enter':
                                 if (options.length > 0 && focusedIdx >= 0 && focusedIdx < options.length) {
-                                    props.selected.push(props.keyFunc(options[focusedIdx]))
+                                    props.setSelected([...props.selected, props.keyFunc(options[focusedIdx])])
                                     inputRef.current?.blur()
                                 }
                                 break
@@ -199,7 +200,7 @@ export const TimelinePicker = (props: Props) => {
                                 backgroundColor: focusedIdx === options.indexOf(opt) ? CssVar.divider : 'transparent'
                             }}
                             onMouseDown={() => {
-                                props.selected.push(props.keyFunc(opt))
+                                props.setSelected([...props.selected, props.keyFunc(opt)])
                             }}
                         >
                             {props.labelFunc(opt)}

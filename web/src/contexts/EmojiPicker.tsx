@@ -4,7 +4,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import { CssVar } from '../types/Theme'
 import { usePersistent } from '../hooks/usePersistent'
 import { MdAccessTime, MdSearch, MdClose } from 'react-icons/md'
-import { CCImage, IconButton, CfmActionsProvider, useCfmActions } from '@concrnt/ui'
+import { useNavigate } from 'react-router-dom'
+import { Button, CCImage, HorizontalLayout, IconButton, CfmActionsProvider, useCfmActions } from '@concrnt/ui'
 import { useClient } from './Client'
 import { EMOJI_PACKAGE_SCHEMA, ensureEmojiPackageList } from '../utils/emojiPackages'
 import type { List, ListEntry } from '@concrnt/worldlib'
@@ -65,12 +66,15 @@ export const EmojiPickerProvider = (props: Props) => {
 
     const keyboard = useKeyboard()
     const isMobile = useIsMobile()
+    const navigate = useNavigate()
 
     const [frequentEmojis, setFrequentEmojis] = usePersistent<Emoji[]>('emojiPicker:frequent', [])
     const [query, setQuery] = useState('')
     const [activeTab, setActiveTab] = useState(0)
     // モバイルのみ: 検索欄フォーカス中(=キーボード表示中)は横一列ストリップ表示に切り替える
     const [searchBoxFocused, setSearchBoxFocused] = useState(false)
+    // デスクトップのみ: ホバー中の絵文字を下部フッターにプレビュー表示する
+    const [hoveredEmoji, setHoveredEmoji] = useState<Emoji | null>(null)
 
     const [emojiPackageList, setEmojiPackageList] = useState<List | null>(null)
     const [emojiPackageURLs, setEmojiPackageURLs] = useState<string[]>([])
@@ -210,6 +214,7 @@ export const EmojiPickerProvider = (props: Props) => {
         setIsOpen(false)
         setQuery('')
         setSearchBoxFocused(false)
+        setHoveredEmoji(null)
         onSelectedRef.current = null
     }, [])
 
@@ -357,7 +362,7 @@ export const EmojiPickerProvider = (props: Props) => {
                             <motion.div
                                 style={{
                                     position: 'fixed',
-                                    bottom: `${keyboard.height}px`,
+                                    bottom: 0,
                                     left: 0,
                                     right: 0,
                                     backgroundColor: CssVar.contentBackground,
@@ -365,9 +370,9 @@ export const EmojiPickerProvider = (props: Props) => {
                                     borderRadius: `${CssVar.round(1)} ${CssVar.round(1)} 0 0`,
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    maxHeight: '50vh',
+                                    height: searchBoxFocused ? 'auto' : `calc(50vh + ${keyboard.height}px)`,
                                     paddingBottom: keyboard.visible ? 0 : 'env(safe-area-inset-bottom)',
-                                    transition: `bottom ${keyboard.duration}s ease-out`,
+                                    transition: `height ${keyboard.duration}s ease-out`,
                                     zIndex: 1001
                                 }}
                                 initial={{ y: '100%' }}
@@ -395,11 +400,10 @@ export const EmojiPickerProvider = (props: Props) => {
                                 </div>
 
                                 {/* One-line emoji strip (キーボード表示中) */}
-                                <div
+                                <HorizontalLayout
                                     style={{
                                         display: searchBoxFocused ? 'flex' : 'none',
                                         alignItems: 'center',
-                                        overflowX: 'auto',
                                         overflowY: 'hidden',
                                         padding: `${CssVar.space(1)} ${CssVar.space(2)} 0`,
                                         flexShrink: 0
@@ -450,13 +454,12 @@ export const EmojiPickerProvider = (props: Props) => {
                                             {query.length > 0 ? t('noMatchingEmojis') : t('noEmojis')}
                                         </div>
                                     )}
-                                </div>
+                                </HorizontalLayout>
 
                                 {/* Tabs */}
-                                <div
+                                <HorizontalLayout
                                     style={{
                                         display: searchBoxFocused ? 'none' : 'flex',
-                                        overflowX: 'auto',
                                         gap: CssVar.space(1),
                                         padding: `0 ${CssVar.space(2)}`,
                                         flexShrink: 0
@@ -467,6 +470,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                             selected={effectiveActiveTab === 0}
                                             onClick={() => {
                                                 setActiveTab(0)
+                                                setHoveredEmoji(null)
                                                 gridRef.current?.scrollTo(0, 0)
                                             }}
                                         >
@@ -485,6 +489,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                             onClick={() => {
                                                 setQuery('')
                                                 setActiveTab(index + 1)
+                                                setHoveredEmoji(null)
                                                 gridRef.current?.scrollTo(0, 0)
                                             }}
                                         >
@@ -496,7 +501,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                             />
                                         </TabButton>
                                     ))}
-                                </div>
+                                </HorizontalLayout>
 
                                 {/* Divider */}
                                 <div
@@ -656,15 +661,23 @@ export const EmojiPickerProvider = (props: Props) => {
                                         ))
                                     )}
                                 </div>
+
+                                {/* キーボードの裏まで背景を敷くスペーサ */}
+                                <div
+                                    style={{
+                                        flexShrink: 0,
+                                        height: `${keyboard.height}px`,
+                                        transition: `height ${keyboard.duration}s ease-out`
+                                    }}
+                                />
                             </motion.div>
                         ) : (
                             /* Centered dialog */
                             <motion.div
                                 style={{
                                     position: 'fixed',
-                                    top: '50%',
-                                    left: '50%',
-                                    transform: 'translate(-50%, -50%)',
+                                    inset: 0,
+                                    margin: 'auto',
                                     backgroundColor: CssVar.contentBackground,
                                     color: CssVar.contentText,
                                     borderRadius: CssVar.round(2),
@@ -672,7 +685,8 @@ export const EmojiPickerProvider = (props: Props) => {
                                     flexDirection: 'column',
                                     width: '380px',
                                     maxWidth: '90vw',
-                                    maxHeight: '480px',
+                                    height: '480px',
+                                    maxHeight: '90vh',
                                     zIndex: 1001,
                                     overflow: 'hidden'
                                 }}
@@ -683,10 +697,8 @@ export const EmojiPickerProvider = (props: Props) => {
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 {/* Tabs */}
-                                <div
+                                <HorizontalLayout
                                     style={{
-                                        display: 'flex',
-                                        overflowX: 'auto',
                                         gap: CssVar.space(1),
                                         padding: `${CssVar.space(2)} ${CssVar.space(2)} 0`,
                                         flexShrink: 0
@@ -697,6 +709,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                             selected={effectiveActiveTab === 0}
                                             onClick={() => {
                                                 setActiveTab(0)
+                                                setHoveredEmoji(null)
                                                 gridRef.current?.scrollTo(0, 0)
                                             }}
                                         >
@@ -715,6 +728,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                             onClick={() => {
                                                 setQuery('')
                                                 setActiveTab(index + 1)
+                                                setHoveredEmoji(null)
                                                 gridRef.current?.scrollTo(0, 0)
                                             }}
                                         >
@@ -726,7 +740,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                             />
                                         </TabButton>
                                     ))}
-                                </div>
+                                </HorizontalLayout>
 
                                 {/* Divider */}
                                 <div
@@ -760,7 +774,10 @@ export const EmojiPickerProvider = (props: Props) => {
                                             type="text"
                                             placeholder={t('searchPlaceholder')}
                                             value={query}
-                                            onChange={(e) => setQuery(e.target.value)}
+                                            onChange={(e) => {
+                                                setQuery(e.target.value)
+                                                setHoveredEmoji(null)
+                                            }}
                                             style={{
                                                 flex: 1,
                                                 border: 'none',
@@ -851,6 +868,7 @@ export const EmojiPickerProvider = (props: Props) => {
                                                         onMouseOver={(e) => {
                                                             ;(e.currentTarget as HTMLElement).style.backgroundColor =
                                                                 `rgb(from ${CssVar.contentText} r g b / 0.1)`
+                                                            setHoveredEmoji(emoji)
                                                         }}
                                                         onMouseOut={(e) => {
                                                             ;(e.currentTarget as HTMLElement).style.backgroundColor =
@@ -872,6 +890,73 @@ export const EmojiPickerProvider = (props: Props) => {
                                             </div>
                                         ))
                                     )}
+                                </div>
+
+                                {/* Divider */}
+                                <div
+                                    style={{
+                                        height: '1px',
+                                        backgroundColor: CssVar.divider,
+                                        flexShrink: 0
+                                    }}
+                                />
+
+                                {/* Hover preview + add emojis */}
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: CssVar.space(1),
+                                        padding: `${CssVar.space(1)} ${CssVar.space(2)}`,
+                                        height: '52px',
+                                        flexShrink: 0
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: CssVar.space(1),
+                                            minWidth: 0
+                                        }}
+                                    >
+                                        {hoveredEmoji && (
+                                            <>
+                                                <CCImage
+                                                    src={hoveredEmoji.imageURL}
+                                                    maxHeight={128}
+                                                    alt={hoveredEmoji.shortcode}
+                                                    style={{
+                                                        width: '28px',
+                                                        height: '28px',
+                                                        flexShrink: 0
+                                                    }}
+                                                />
+                                                <span
+                                                    style={{
+                                                        fontSize: '12px',
+                                                        opacity: 0.6,
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    :{hoveredEmoji.shortcode}:
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => {
+                                            close()
+                                            navigate('/settings/emoji')
+                                        }}
+                                        style={{ flexShrink: 0 }}
+                                    >
+                                        {t('addEmojis')}
+                                    </Button>
                                 </div>
                             </motion.div>
                         )}

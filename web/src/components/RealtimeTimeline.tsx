@@ -15,14 +15,14 @@ import { useClient } from '../contexts/Client'
 import { useRefWithUpdate } from '../hooks/useRefWithUpdate'
 import { TimelineItemWithUpdate, TimelineReader } from '@concrnt/client'
 import { MessageContainer } from './message'
-import { Text, Avatar, CssVar, Divider } from '@concrnt/ui'
+import { QueryTimelineContext } from './QueryTimeline'
+import { Avatar, CssVar, Divider } from '@concrnt/ui'
 import { ErrorBoundary } from 'react-error-boundary'
 import { PullToRefresh } from './PullToRefresh'
 import { MessageSkeleton } from './message/MessageSkeleton'
 import { RenderError } from './message/RenderError'
 import { Loading } from './message/Loading'
 import { MdArrowUpward } from 'react-icons/md'
-import { usePreference } from '../contexts/Preference'
 
 interface NewArrivalIcon {
     id: string
@@ -241,6 +241,16 @@ export const RealtimeTimeline = (props: Props) => {
         }
     }, [reader])
 
+    // リアクション等のcommit後に、そのアイテムだけ再取得させる。
+    // socketのassociatedイベント任せだとcommit応答より遅れて届いたときに
+    // useOptimisticのrevertが先に走り、リアクションが一瞬消える
+    const itemUpdated = useCallback(
+        (href: string) => {
+            reader.current?.updateItem(href)
+        },
+        [reader]
+    )
+
     /** 新着バッジクリック時の処理 */
     const handleNewArrivalClick = useCallback(() => {
         setNewArrivals([])
@@ -291,10 +301,14 @@ export const RealtimeTimeline = (props: Props) => {
         }
 
         el.addEventListener('scroll', handleScroll)
+        // コンテンツがコンテナを満たしていないとscrollイベントが発生せず次ページが永遠に読まれないため、
+        // 読み込みが落ち着いた1秒後に一度だけ手動で判定する(不足していればreadMore→loadingが戻って再判定)
+        const fill = setTimeout(handleScroll, 1000)
         return () => {
             el.removeEventListener('scroll', handleScroll)
+            clearTimeout(fill)
         }
-    }, [scrollRef, reader, hasMoreData, initialLoaded])
+    }, [scrollRef, reader, hasMoreData, initialLoaded, loading])
 
     const maxDisplayAvatars = 4
     const displayedArrivals = newArrivals.slice(0, maxDisplayAvatars)
@@ -414,9 +428,11 @@ export const RealtimeTimeline = (props: Props) => {
                                 <MessageSkeleton />
                             </div>
                         ))}
-                    {reader.current?.body.map((item) => (
-                        <Cell key={item.href} item={item} lastUpdate={item.lastUpdate?.getTime() ?? 0} />
-                    ))}
+                    <QueryTimelineContext.Provider value={{ update: itemUpdated }}>
+                        {reader.current?.body.map((item) => (
+                            <Cell key={item.href} item={item} lastUpdate={item.lastUpdate?.getTime() ?? 0} />
+                        ))}
+                    </QueryTimelineContext.Provider>
                     {loading && <Loading message={'Loading...'} />}
                     {!hasMoreData && (
                         <div
@@ -446,8 +462,6 @@ interface CellProps {
 }
 
 const Cell = memo<CellProps>(({ item }: CellProps) => {
-    const [devmode] = usePreference('developerMode')
-
     return (
         <>
             <ErrorBoundary FallbackComponent={RenderError}>
@@ -463,7 +477,6 @@ const Cell = memo<CellProps>(({ item }: CellProps) => {
                     </Suspense>
                 </div>
             </ErrorBoundary>
-            {devmode && <Text variant="caption">{item.href}</Text>}
             <Divider />
         </>
     )
