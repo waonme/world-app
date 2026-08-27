@@ -194,11 +194,12 @@ spec:
               export COREPACK_HOME=/cache/corepack
               export PNPM_HOME=/cache/pnpm
               export NODE_OPTIONS=--max-old-space-size=1536
-              mkdir -p "\$HOME" "\$COREPACK_HOME" "\$PNPM_HOME" /tmp/corepack-bin
+              mkdir -p "\$HOME" "\$COREPACK_HOME" "\$PNPM_HOME" /cache/pnpm-store /tmp/corepack-bin
               corepack enable --install-directory /tmp/corepack-bin
               export PATH=/tmp/corepack-bin:\$PATH
+              pnpm config set store-dir /cache/pnpm-store
               pnpm install --frozen-lockfile
-              pnpm build
+              pnpm --workspace-concurrency=1 --filter web... build
               test -s web/dist/index.html
           resources:
             requests:
@@ -212,6 +213,9 @@ spec:
               mountPath: /workspace
             - name: cache
               mountPath: /cache
+            - name: deployment-home
+              mountPath: $base_dir
+              readOnly: true
       volumes:
         - name: workspace
           hostPath:
@@ -220,6 +224,10 @@ spec:
         - name: cache
           hostPath:
             path: $cache_dir
+            type: Directory
+        - name: deployment-home
+          hostPath:
+            path: $base_dir
             type: Directory
 YAML
 
