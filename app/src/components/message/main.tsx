@@ -5,6 +5,7 @@ import { HorizontalLayout, Text } from '@concrnt/ui'
 import {
     ApNoteSchema,
     AtprotoRecordSchema,
+    combineMuteMatches,
     Message,
     RerouteMessageSchema,
     Schemas,
@@ -62,23 +63,23 @@ export const MessageContainer = (props: Props): ReactNode | null => {
         timelines: message.distributes,
         isReroute: message.schema === Schemas.rerouteMessage
     })
-    const targetMute: MuteMatch | undefined =
-        !outerMute && target
-            ? checkMute({
-                  author: target.author,
-                  body: typeof target.value?.body === 'string' ? target.value.body : undefined,
-                  timelines: target.distributes,
-                  isReroute: target.schema === Schemas.rerouteMessage
-              })
-            : undefined
-    const mute = outerMute ?? targetMute
+    const targetMute: MuteMatch | undefined = target
+        ? checkMute({
+              author: target.author,
+              body: typeof target.value?.body === 'string' ? target.value.body : undefined,
+              timelines: target.distributes,
+              isReroute: target.schema === Schemas.rerouteMessage
+          })
+        : undefined
+    const combinedMute = combineMuteMatches([outerMute, targetMute])
+    const mute = combinedMute.match
 
     if (mute) {
-        // ブロックはミュートより強い意思表示なので、noticeも出さず完全に非表示にする
-        if (mute.reason === 'block' || mute.entry?.hidePlaceholder) return null
+        // 外側と参照先のどちらかが完全非表示なら、もう一方のnoticeから開示させない
+        if (combinedMute.fullyHidden) return null
         const muteKey = muteMatchKey(mute)
         if (revealedMuteKey !== muteKey) {
-            const matched = targetMute && target ? target : message
+            const matched = combinedMute.match === targetMute && target ? target : message
             return (
                 <>
                     {/* リプライがミュートされても会話の文脈(リプライ先)は残す */}

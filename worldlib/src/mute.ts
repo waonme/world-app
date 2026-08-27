@@ -35,6 +35,11 @@ export interface MuteTarget {
     isReroute?: boolean
 }
 
+export interface CombinedMuteMatches {
+    match?: MuteMatch
+    fullyHidden: boolean
+}
+
 // NFKC正規化で全角半角・半角カナの揺れを吸収してから比較する
 export const normalizeMuteText = (text: string): string => text.normalize('NFKC').toLowerCase()
 
@@ -58,6 +63,22 @@ export const muteMatchKey = (match: MuteMatch): string =>
         match.entry?.scope ?? '',
         match.entry?.reroutesOnly ? 'reroutesOnly' : ''
     ].join('\u0000')
+
+// 外側のassociationと参照先など、複数の判定境界を一つの表示にまとめる。
+// block / hidePlaceholder は別境界のrevealableなmuteで上書きされてはならない。
+export const combineMuteMatches = (matches: Array<MuteMatch | undefined>): CombinedMuteMatches => {
+    const present = matches.filter((match): match is MuteMatch => match !== undefined)
+    const priority: Record<MuteReason, number> = { block: 3, user: 2, word: 1, timeline: 0 }
+    const match = present.reduce<MuteMatch | undefined>(
+        (selected, candidate) =>
+            !selected || priority[candidate.reason] > priority[selected.reason] ? candidate : selected,
+        undefined
+    )
+    return {
+        match,
+        fullyHidden: present.some((candidate) => candidate.reason === 'block' || candidate.entry?.hidePlaceholder)
+    }
+}
 
 export const findMute = (
     target: MuteTarget,

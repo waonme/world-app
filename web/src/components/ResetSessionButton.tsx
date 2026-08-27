@@ -2,6 +2,7 @@ import { Button, Modal, Text } from '@concrnt/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LoadIdentity } from '@concrnt/client'
+import { V1_SUBKEY_PROVISION_MARKER } from '@concrnt/worldlib'
 import i18n from '../i18n'
 
 interface Props {
@@ -92,7 +93,7 @@ export const ResetSessionModalContent = (props: { ccid: string; onDone: () => vo
                         localStorage.removeItem('SubKey')
                         localStorage.removeItem('SelectedProfile')
                         localStorage.removeItem('V1EntityProofPending')
-                        localStorage.removeItem('V1SubkeyProvisionPending')
+                        localStorage.removeItem(V1_SUBKEY_PROVISION_MARKER)
                         props.onDone()
                     }}
                 >

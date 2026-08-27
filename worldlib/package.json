@@ -15,7 +15,9 @@
     "scripts": {
         "build": "npm run build:cjs && npm run build:esm",
         "build:cjs": "tsc -p tsconfig.cjs.json",
-        "build:esm": "tsc -p tsconfig.esm.json"
+        "build:esm": "tsc -p tsconfig.esm.json",
+        "test:fork": "npm run build:cjs && node --test test/*.test.cjs",
+        "test:mute": "npm run build:cjs && node --test test/mute.test.cjs"
     },
     "author": "",
     "license": "ISC",

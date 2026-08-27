@@ -1,6 +1,7 @@
 export * from './client'
 export * from './message'
 export * from './mute'
+export * from './forkCompatibility'
 export * from './list'
 export * from './user'
 export * from './timeline'

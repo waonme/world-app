@@ -155,7 +155,7 @@ export class Client {
     )
 
     blocks = new CachedPromise<string[]>(
-        async () => {
+        async (fresh) => {
             // ゲストクライアントにはブロックはない。ミュート判定から毎メッセージで参照されるため、
             // 読み込み失敗でもrejectさせない
             if (!this.ccid) return []
@@ -166,7 +166,7 @@ export class Client {
                         prefix: prefix
                     },
                     undefined,
-                    { cache: true }
+                    { cache: !fresh }
                 )
                 .catch((e) => {
                     console.error('Failed to load blocks:', e)
@@ -177,6 +177,9 @@ export class Client {
                             this.blocks.reload()
                         }, 30 * 1000)
                     }
+                    // refresh失敗時はCachedPromiseに既存値を維持させる。
+                    // 初回だけはタイムライン全体を止めないようfail-openで空配列を返す。
+                    if (fresh) throw e
                     return []
                 })
             return results.map((sd) => sd.cckv.substring(prefix.length))
@@ -184,7 +187,7 @@ export class Client {
         (a, b) => JSON.stringify(a) === JSON.stringify(b)
     )
 
-    mutes = new CachedPromise<MuteEntry[]>(async () => {
+    mutes = new CachedPromise<MuteEntry[]>(async (fresh) => {
         // ゲストクライアントにはミュートはない。また、読み込み失敗でタイムライン全体を
         // 巻き込まないよう、このPromiseはrejectさせない
         if (!this.ccid) return []
@@ -196,7 +199,7 @@ export class Client {
                     schema: Schemas.mute
                 },
                 undefined,
-                { cache: true }
+                { cache: !fresh }
             )
             .catch((e) => {
                 console.error('Failed to load mutes:', e)
@@ -207,6 +210,8 @@ export class Client {
                         this.mutes.reload()
                     }, 30 * 1000)
                 }
+                // refresh失敗時は既存のmuteを消さず、初回だけfail-openにする。
+                if (fresh) throw e
                 return []
             })
         const entries: MuteEntry[] = []
@@ -562,6 +567,7 @@ export class Client {
             this.acknowledging.refresh(),
             this.acknowledgers.refresh(),
             this.blocks.refresh(),
+            this.mutes.refresh(),
             this.notificationCounter.refresh()
         ])
         const pins = await this.pinnedLists.value().catch((): PinnedListItemClass[] => [])
@@ -717,13 +723,13 @@ export class Client {
             .then((message) => {
                 // 本文だけ取得できた部分成功は、React Suspenseが同じfulfilled promiseで
                 // 再開できるだけの短時間は保持し、その後の再描画で付帯APIを再試行する。
-                if (message && !message.ownAssociationsLoaded && this.messageCache[uri]?.data === msg) {
-                    this.messageCache[uri].expire = Date.now() + partialMessageCacheLifetime
+                if (message && !message.ownAssociationsLoaded && this.messageCache[cacheKey]?.data === msg) {
+                    this.messageCache[cacheKey].expire = Date.now() + partialMessageCacheLifetime
                 }
             })
             .catch(() => {
-                if (this.messageCache[uri]?.data === msg) {
-                    delete this.messageCache[uri]
+                if (this.messageCache[cacheKey]?.data === msg) {
+                    delete this.messageCache[cacheKey]
                 }
             })
         return msg

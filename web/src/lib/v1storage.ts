@@ -1,4 +1,5 @@
 import { ComputeCCID, LoadIdentity, LoadKey, LoadSubKey } from '@concrnt/client'
+import { V1_SUBKEY_PROVISION_MARKER } from '@concrnt/worldlib'
 
 // concrnt.worldでv1クライアント(concrnt-world)から差し替えられた際に残るlocalStorage等の移行。
 // v1はセッションキーをJSON.stringifyで保存し、SubKeyのプレフィックスもconcurrent-subkey
@@ -68,7 +69,7 @@ export const migrateV1Storage = (): void => {
                 // 通常のログアウトもPrivateKeyを残してSubKeyだけを消すため、この専用マーカーが
                 // 無いマスターキーのみの状態を自動発行すると、直後に再ログインしてしまう。
                 if (localStorage.getItem('SubKey') === null) {
-                    localStorage.setItem('V1SubkeyProvisionPending', 'true')
+                    localStorage.setItem(V1_SUBKEY_PROVISION_MARKER, 'true')
                 }
             } else {
                 // マスターキーは絶対に無警告で消さない: 判定側のバグや壊れ値でも生値を退避して残す

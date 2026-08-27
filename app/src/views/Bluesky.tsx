@@ -7,7 +7,15 @@ import { useClient } from '../contexts/Client'
 import { useStack } from '../layouts/Stack'
 import { BskyView } from './BskyView'
 import { NotFoundError } from '@concrnt/client'
-import { Schemas, semantics, type Timeline } from '@concrnt/worldlib'
+import {
+    bridgeEnabledAfterSaveFailure,
+    bridgeSettingsStatusAfterLoad,
+    canWriteBridgeSettings,
+    Schemas,
+    semantics,
+    type BridgeSettingsStatus,
+    type Timeline
+} from '@concrnt/worldlib'
 import { MdContentCopy, MdPlaylistAdd } from 'react-icons/md'
 import { Subscription } from '../components/Subscription'
 import { Drawer } from '../ui/Drawer'
@@ -51,15 +59,16 @@ export const Bluesky = () => {
     const [listenHome, setListenHome] = useState(true)
     const [listenProfile, setListenProfile] = useState('main')
     const [listenCommunities, setListenCommunities] = useState<string[]>([])
-    const [settingsLoaded, setSettingsLoaded] = useState(false)
-    const [settingsLoadFailed, setSettingsLoadFailed] = useState(false)
+    const [settingsStatus, setSettingsStatus] = useState<BridgeSettingsStatus>('loading')
     const [settingsSaving, setSettingsSaving] = useState(false)
     const [settingsSaveFailed, setSettingsSaveFailed] = useState(false)
+    const settingsLoaded = settingsStatus === 'ready'
+    const settingsLoadFailed = settingsStatus === 'load-failed'
 
     const homeTimelineRegex = new RegExp(`^cckv://${client.ccid}/concrnt\\.world/profiles/([^/]+)/home-timeline$`)
 
     const commitSettings = async (enabled: boolean, rollbackEnabled?: boolean) => {
-        if (!settingsLoaded) return
+        if (!canWriteBridgeSettings(settingsStatus, settingsSaving)) return
         setSettingsSaving(true)
         setSettingsSaveFailed(false)
         const listenTimelines = [
@@ -77,7 +86,7 @@ export const Bluesky = () => {
             })
         } catch (err) {
             console.log(err)
-            if (rollbackEnabled !== undefined) setBridgeEnabled(rollbackEnabled)
+            setBridgeEnabled(bridgeEnabledAfterSaveFailure(enabled, rollbackEnabled))
             setSettingsSaveFailed(true)
         } finally {
             setSettingsSaving(false)
@@ -136,15 +145,15 @@ export const Bluesky = () => {
                 if (homeProfile) setListenProfile(homeProfile)
                 setListenCommunities(timelines.filter((uri) => !homeTimelineRegex.test(uri)))
                 setBridgeEnabled(doc.value?.enabled ?? true)
-                setSettingsLoaded(true)
+                setSettingsStatus(bridgeSettingsStatusAfterLoad('found'))
             })
             .catch((err) => {
                 if (err instanceof NotFoundError) {
                     // 設定レコード無しは既定値を明示的に確定した状態。
-                    setSettingsLoaded(true)
+                    setSettingsStatus(bridgeSettingsStatusAfterLoad('missing'))
                 } else {
                     console.log(err)
-                    setSettingsLoadFailed(true)
+                    setSettingsStatus(bridgeSettingsStatusAfterLoad('error'))
                 }
             })
 

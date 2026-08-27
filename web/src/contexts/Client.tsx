@@ -1,7 +1,14 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Client, migrateLegacyProfilePolicies, semantics } from '@concrnt/worldlib'
+import {
+    Client,
+    decideStoredSessionAction,
+    migrateLegacyProfilePolicies,
+    semantics,
+    V1_SUBKEY_PROVISION_MARKER,
+    WEB_LOGOUT_STORAGE_KEYS
+} from '@concrnt/worldlib'
 import {
     Api,
     Document,
@@ -109,8 +116,14 @@ export const ClientProvider = (props: Props): ReactNode => {
                 const domain = readStoredString('Domain')
                 const masterKey = readStoredString('PrivateKey')
                 let subKey = readStoredString('SubKey')
+                const sessionAction = decideStoredSessionAction({
+                    domain,
+                    masterKey,
+                    subKey,
+                    v1SubkeyProvisionPending: localStorage.getItem(V1_SUBKEY_PROVISION_MARKER) !== null
+                })
 
-                if (!domain || (!masterKey && !subKey)) {
+                if (sessionAction === 'no-session') {
                     console.log('No web session found')
                     clientRef.current?.dispose()
                     clientRef.current = null
@@ -121,18 +134,18 @@ export const ClientProvider = (props: Props): ReactNode => {
                 // マスターキーのみのセッションは、v1移行時の専用マーカーがある場合に限り
                 // サブキーを自動発行する。通常のログアウトもPrivateKeyを残してSubKeyだけを
                 // 消すため、マーカー無しで自動発行するとログアウト直後に再ログインしてしまう。
-                if (masterKey && !subKey) {
-                    if (localStorage.getItem('V1SubkeyProvisionPending') === null) {
-                        console.log('Master-key-only session requires explicit re-enrollment')
-                        clientRef.current?.dispose()
-                        clientRef.current = null
-                        setClient(null)
-                        return
-                    }
+                if (sessionAction === 'explicit-reenrollment') {
+                    console.log('Master-key-only session requires explicit re-enrollment')
+                    clientRef.current?.dispose()
+                    clientRef.current = null
+                    setClient(null)
+                    return
+                }
+                if (sessionAction === 'provision-v1-subkey') {
                     try {
-                        subKey = await provisionSubkey(domain, masterKey)
+                        subKey = await provisionSubkey(domain!, masterKey!)
                         localStorage.setItem('SubKey', subKey)
-                        localStorage.removeItem('V1SubkeyProvisionPending')
+                        localStorage.removeItem(V1_SUBKEY_PROVISION_MARKER)
                         console.log('Provisioned a subkey for the migrated master key session')
                     } catch (err) {
                         console.error('Failed to provision subkey for master key session', err)
@@ -440,11 +453,7 @@ export const ClientProvider = (props: Props): ReactNode => {
         // ログアウトはサブキーの破棄のみ。接続先とマスターキー(PrivateKey/Mnemonic)は
         // 削除しない: 同じ鍵で他サーバーへ登録・再ログインできることがアカウントモデルの前提であり、
         // 鍵を消す操作はバックアップDLを強制するResetSessionButtonだけに限定する(app版のclear_sessionと同じ方針)
-        localStorage.removeItem('SubKey')
-        localStorage.removeItem('SelectedProfile')
-        localStorage.removeItem('V1EntityProofPending')
-        localStorage.removeItem('V1SubkeyProvisionPending')
-        localStorage.removeItem('composerDraft')
+        for (const key of WEB_LOGOUT_STORAGE_KEYS) localStorage.removeItem(key)
         await resourceCache.clear()
         await reload()
     }, [reload])

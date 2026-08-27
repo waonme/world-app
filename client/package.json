@@ -9,7 +9,7 @@
     "build": "npm run build:cjs && npm run build:esm",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:esm": "tsc -p tsconfig.esm.json",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run build:cjs && node --test test/*.test.cjs"
   },
   "author": "totegamma",
   "license": "MIT",
