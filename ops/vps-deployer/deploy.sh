@@ -22,6 +22,26 @@ logs_dir="$base_dir/logs"
 
 mkdir -p "$worktrees_dir" "$artifacts_dir" "$cache_dir/corepack" "$cache_dir/pnpm" "$cache_dir/buildkit" "$state_dir" "$logs_dir"
 
+wait_for_job() {
+  local job_namespace=$1
+  local job_name=$2
+  local timeout_seconds=$3
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    local status
+    status=$(microk8s kubectl -n "$job_namespace" get job "$job_name" -o json)
+    if [ "$(printf '%s' "$status" | jq -r '.status.succeeded // 0')" -ge 1 ]; then
+      return 0
+    fi
+    if [ "$(printf '%s' "$status" | jq -r '.status.failed // 0')" -ge 1 ]; then
+      return 1
+    fi
+    sleep 2
+  done
+  return 124
+}
+
 exec 9>"$state_dir/deploy.lock"
 if ! flock -n 9; then
   echo "another world-app deployment is already running"
@@ -174,9 +194,11 @@ spec:
               export COREPACK_HOME=/cache/corepack
               export PNPM_HOME=/cache/pnpm
               export NODE_OPTIONS=--max-old-space-size=1536
-              mkdir -p "\$HOME" "\$COREPACK_HOME" "\$PNPM_HOME"
-              corepack pnpm install --frozen-lockfile
-              corepack pnpm build
+              mkdir -p "\$HOME" "\$COREPACK_HOME" "\$PNPM_HOME" /tmp/corepack-bin
+              corepack enable --install-directory /tmp/corepack-bin
+              export PATH=/tmp/corepack-bin:\$PATH
+              pnpm install --frozen-lockfile
+              pnpm build
               test -s web/dist/index.html
           resources:
             requests:
@@ -201,7 +223,7 @@ spec:
             type: Directory
 YAML
 
-if ! microk8s kubectl -n "$namespace" wait --for=condition=complete "job/$build_job" --timeout=1800s; then
+if ! wait_for_job "$namespace" "$build_job" 1800; then
   microk8s kubectl -n "$namespace" logs "job/$build_job" --all-containers=true > "$logs_dir/$target_sha-pnpm.log" 2>&1 || true
   microk8s kubectl -n "$namespace" get pods -l "job-name=$build_job" -o wide || true
   tail -n 200 "$logs_dir/$target_sha-pnpm.log" || true
@@ -290,7 +312,7 @@ spec:
             type: Directory
 YAML
 
-if ! microk8s kubectl -n "$namespace" wait --for=condition=complete "job/$image_job" --timeout=900s; then
+if ! wait_for_job "$namespace" "$image_job" 900; then
   microk8s kubectl -n "$namespace" logs "job/$image_job" --all-containers=true > "$logs_dir/$target_sha-image.log" 2>&1 || true
   microk8s kubectl -n "$namespace" get pods -l "job-name=$image_job" -o wide || true
   tail -n 200 "$logs_dir/$target_sha-image.log" || true
