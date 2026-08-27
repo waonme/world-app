@@ -1,12 +1,23 @@
 import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { CssVar } from '../types/Theme'
 import {
+    combinePopoverMaxConstraint,
     getCenteredPopoverFallbackPlacement,
+    getPopoverFallbackRequirements,
     getPopoverFallbackPlacement,
+    isSamePopoverFallbackPlacement,
+    needsPopoverFallbackScrolling,
     type PopoverPlacement
 } from './popoverPlacement'
 
-export { getCenteredPopoverFallbackPlacement, getPopoverFallbackPlacement } from './popoverPlacement'
+export {
+    combinePopoverMaxConstraint,
+    getCenteredPopoverFallbackPlacement,
+    getPopoverFallbackPlacement,
+    getPopoverFallbackRequirements,
+    isSamePopoverFallbackPlacement,
+    needsPopoverFallbackScrolling
+} from './popoverPlacement'
 
 // トリガー側が style={{ anchorName: useAnchor()の返り値 }} で宣言し、Popoverのanchorに渡すアンカー名を生成する
 export const useAnchor = (): string => {
@@ -41,19 +52,32 @@ const resolveGap = (anchor: HTMLElement): number => {
 
 type FallbackPlacement = Partial<PopoverPlacement>
 
-const isSamePlacement = (current: FallbackPlacement | undefined, next: FallbackPlacement): boolean =>
-    current?.top === next.top && current.left === next.left && current.width === next.width
-
 export const Popover = (props: Props) => {
     const ref = useRef<HTMLDivElement>(null)
     const [fallbackPlacement, setFallbackPlacement] = useState<FallbackPlacement>()
     const anchorPositioningSupported = supportsAnchorPositioning()
     const anchorSizeSupported = supportsAnchorSize()
-    const needsPositionFallback = !anchorPositioningSupported
-    const needsWidthFallback =
-        Boolean(props.anchorRef) &&
-        Boolean(props.matchAnchorWidth) &&
-        (!anchorPositioningSupported || !anchorSizeSupported)
+    const { needsPositionFallback, needsWidthFallback } = getPopoverFallbackRequirements({
+        anchorPositioningSupported,
+        anchorSizeSupported,
+        hasAnchorRef: Boolean(props.anchorRef),
+        matchAnchorWidth: Boolean(props.matchAnchorWidth)
+    })
+    const fallbackMaxWidth = combinePopoverMaxConstraint(
+        fallbackPlacement?.maxWidth,
+        props.style?.maxWidth,
+        (value) => typeof CSS !== 'undefined' && CSS.supports('max-width', value)
+    )
+    const fallbackMaxHeight = combinePopoverMaxConstraint(
+        fallbackPlacement?.maxHeight,
+        props.style?.maxHeight,
+        (value) => typeof CSS !== 'undefined' && CSS.supports('max-height', value)
+    )
+    const addFallbackScrolling =
+        props.open &&
+        needsPositionFallback &&
+        fallbackPlacement?.maxHeight !== undefined &&
+        needsPopoverFallbackScrolling(props.style?.overflow, props.style?.overflowY)
 
     useLayoutEffect(() => {
         const el = ref.current
@@ -107,10 +131,17 @@ export const Popover = (props: Props) => {
                   })
                 : getCenteredPopoverFallbackPlacement({ popoverSize: popoverRect, viewport, gap })
             const next: FallbackPlacement = {
-                ...(needsPositionFallback ? { top: placement.top, left: placement.left } : {}),
+                ...(needsPositionFallback
+                    ? {
+                          top: placement.top,
+                          left: placement.left,
+                          ...(placement.maxWidth !== undefined ? { maxWidth: placement.maxWidth } : {}),
+                          ...(placement.maxHeight !== undefined ? { maxHeight: placement.maxHeight } : {})
+                      }
+                    : {}),
                 ...(placement.width !== undefined ? { width: placement.width } : {})
             }
-            setFallbackPlacement((current) => (isSamePlacement(current, next) ? current : next))
+            setFallbackPlacement((current) => (isSamePopoverFallbackPlacement(current, next) ? current : next))
         }
 
         const animationFrame = window.requestAnimationFrame(updatePlacement)
@@ -172,7 +203,19 @@ export const Popover = (props: Props) => {
                     ...(props.open && (needsPositionFallback || needsWidthFallback) && !fallbackPlacement
                         ? { visibility: 'hidden' }
                         : {}),
-                    ...(props.open && (needsPositionFallback || needsWidthFallback) ? fallbackPlacement : {})
+                    ...(props.open && (needsPositionFallback || needsWidthFallback) ? fallbackPlacement : {}),
+                    ...(props.open && fallbackPlacement?.maxWidth !== undefined ? { maxWidth: fallbackMaxWidth } : {}),
+                    ...(props.open && fallbackPlacement?.maxHeight !== undefined
+                        ? { maxHeight: fallbackMaxHeight }
+                        : {}),
+                    ...(addFallbackScrolling
+                        ? {
+                              overflowY: 'auto',
+                              ...(props.style?.overscrollBehavior === undefined
+                                  ? { overscrollBehavior: 'contain' }
+                                  : {})
+                          }
+                        : {})
                 } as CSSProperties
             }
         >
