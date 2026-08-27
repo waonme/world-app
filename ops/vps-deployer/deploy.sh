@@ -194,6 +194,7 @@ spec:
               export COREPACK_HOME=/cache/corepack
               export PNPM_HOME=/cache/pnpm
               export NODE_OPTIONS=--max-old-space-size=1536
+              export HUSKY=0
               mkdir -p "\$HOME" "\$COREPACK_HOME" "\$PNPM_HOME" /cache/pnpm-store /tmp/corepack-bin
               corepack enable --install-directory /tmp/corepack-bin
               export PATH=/tmp/corepack-bin:\$PATH
@@ -296,6 +297,8 @@ spec:
               memory: 1Gi
           securityContext:
             seccompProfile:
+              type: Unconfined
+            appArmorProfile:
               type: Unconfined
           volumeMounts:
             - name: context
