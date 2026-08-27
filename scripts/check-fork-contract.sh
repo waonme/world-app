@@ -31,6 +31,8 @@ require_match() {
 }
 
 require_file FORK.md
+require_file .github/workflows/upstream-status.yaml
+require_match "merge-base --is-ancestor upstream/main origin/main" .github/workflows/upstream-status.yaml
 for id in F-001 F-002 F-003 F-004 F-005 F-006; do
   require_match "$id" FORK.md
 done
@@ -76,8 +78,29 @@ require_match "onBackupComplete" app/src/components/ResetSessionButton.tsx
 require_match "resolverCCID" app/src/views/Welcome.tsx
 
 # F-005: immutable SHA image and deployed-commit smoke check.
+require_file ops/vps-deployer/deploy-lib.sh
+require_file ops/vps-deployer/test-deploy.sh
+require_file ops/vps-deployer/world-app-vps-deploy.service
+require_file scripts/test-prepare-upstream-sync.sh
 require_match 'expected_image="localhost/world-app:$target_sha"' ops/vps-deployer/deploy.sh
-require_match "/cc-info" ops/vps-deployer/deploy.sh
+require_match "/cc-info" ops/vps-deployer/deploy-lib.sh
+require_match "verify_exact_worktree" ops/vps-deployer/deploy.sh
+require_match "WORLD_APP_ALLOW_INITIAL_BOOTSTRAP" ops/vps-deployer/deploy.sh
+require_match "trap finish_deployment EXIT" ops/vps-deployer/deploy.sh
+require_match "verify_http_deployment_once" ops/vps-deployer/deploy.sh
+require_match "recover_inflight_deployment" ops/vps-deployer/deploy.sh
+require_match "create_deployment_transaction" ops/vps-deployer/deploy.sh
+require_match "commit_deployment_success" ops/vps-deployer/deploy.sh
+require_match "require_mirror_origin_repository" ops/vps-deployer/deploy.sh
+require_match "TimeoutStopSec=4min" ops/vps-deployer/world-app-vps-deploy.service
+require_match "TimeoutStartSec=60min" ops/vps-deployer/world-app-vps-deploy.service
+require_match "require_remote_repository origin waonme/world-app" scripts/prepare-upstream-sync.sh
+require_match "require_remote_repository upstream concrnt/world-app" scripts/prepare-upstream-sync.sh
+require_match 'git merge --no-ff "$upstream_sha"' scripts/prepare-upstream-sync.sh
+for path in .github/workflows/build-check.yaml ops/vps-deployer/deploy.sh; do
+  require_match "ops/vps-deployer/test-deploy.sh" "$path"
+  require_match "scripts/test-prepare-upstream-sync.sh" "$path"
+done
 
 # F-006: upstream UI refresh and legacy-WebKit compatibility guards.
 require_file web/src/views/postReplyDestinations.ts

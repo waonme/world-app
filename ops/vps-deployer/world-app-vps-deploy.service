@@ -10,6 +10,9 @@ Group=orange
 SupplementaryGroups=microk8s
 Environment=WORLD_APP_DEPLOY_BASE=/home/orange/world-app-deployer
 ExecStart=/home/orange/world-app-deployer/bin/deploy.sh
+TimeoutStartSec=60min
+TimeoutStopSec=4min
+KillMode=mixed
 Nice=10
 IOSchedulingClass=best-effort
 PrivateTmp=true

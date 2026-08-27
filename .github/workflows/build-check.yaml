@@ -38,6 +38,12 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            - name: Test deployment and upstream-sync guards
+              run: |
+                  bash -n ops/vps-deployer/deploy.sh ops/vps-deployer/deploy-lib.sh ops/vps-deployer/test-deploy.sh
+                  ops/vps-deployer/test-deploy.sh
+                  scripts/test-prepare-upstream-sync.sh
+
             - name: Check fork contract anchors
               run: scripts/check-fork-contract.sh
 

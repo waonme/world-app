@@ -37,7 +37,7 @@ require_remote_repository() {
   local remote_url
   local actual_repository
 
-  if ! remote_url=$(git remote get-url "$remote_name" 2>/dev/null); then
+  if ! remote_url=$(git config --get "remote.$remote_name.url" 2>/dev/null); then
     echo "$remote_name remote is missing" >&2
     return 1
   fi
@@ -57,7 +57,7 @@ prepare_upstream_sync() {
     echo "run this script inside the world-app repository" >&2
     return 1
   }
-  cd "$repository_root"
+  cd "$repository_root" || return
 
   if [ -n "$(git status --porcelain)" ]; then
     echo "working tree is not clean; commit or stash all tracked and untracked changes first" >&2
@@ -71,22 +71,22 @@ prepare_upstream_sync() {
     return 1
   fi
 
-  require_remote_repository origin waonme/world-app
+  require_remote_repository origin waonme/world-app || return
 
-  if ! git remote get-url upstream >/dev/null 2>&1; then
-    git remote add upstream https://github.com/concrnt/world-app.git
+  if ! git config --get remote.upstream.url >/dev/null 2>&1; then
+    git remote add upstream https://github.com/concrnt/world-app.git || return
   fi
-  require_remote_repository upstream concrnt/world-app
+  require_remote_repository upstream concrnt/world-app || return
 
   local origin_main
   local upstream_sha
   local upstream_short
-  git fetch --prune origin main
-  origin_main=$(git rev-parse 'origin/main^{commit}')
-  git fetch --prune upstream main
-  upstream_sha=$(git rev-parse 'upstream/main^{commit}')
-  upstream_short=$(git rev-parse --short=12 "$upstream_sha")
-  git merge --ff-only "$origin_main"
+  git fetch --prune origin main || return
+  origin_main=$(git rev-parse 'origin/main^{commit}') || return
+  git fetch --prune upstream main || return
+  upstream_sha=$(git rev-parse 'upstream/main^{commit}') || return
+  upstream_short=$(git rev-parse --short=12 "$upstream_sha") || return
+  git merge --ff-only "$origin_main" || return
 
   local local_main
   local_main=$(git rev-parse HEAD)
@@ -110,7 +110,7 @@ prepare_upstream_sync() {
     return 1
   fi
 
-  git switch -c "$integration_branch"
+  git switch -c "$integration_branch" || return
   if ! git merge --no-ff "$upstream_sha" -m "Merge upstream world-app through ${sync_date} (${upstream_short})"; then
     echo "resolve conflicts using FORK.md, then run the required gates before committing" >&2
     return 1

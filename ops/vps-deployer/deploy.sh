@@ -12,6 +12,10 @@ deployment_name="${WORLD_APP_DEPLOYMENT:-world-app}"
 container_name="${WORLD_APP_CONTAINER:-world-app}"
 node_image="node:22.22.1-bookworm@sha256:f90672bf4c76dfc077d17be4c115b1ae7731d2e8558b457d86bca42aeb193866"
 buildkit_image="moby/buildkit:v0.32.2-rootless@sha256:504731e577c20559c00f968f33219f30115e70be29ab96728d1d06e963fc494b"
+image_repository="localhost/world-app"
+jq_version="1.8.2"
+jq_amd64_sha256="b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f"
+jq_arm64_sha256="8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309"
 
 repo_dir="$base_dir/repository.git"
 worktrees_dir="$base_dir/worktrees"
@@ -19,28 +23,12 @@ artifacts_dir="$base_dir/artifacts"
 cache_dir="$base_dir/cache"
 state_dir="$base_dir/state"
 logs_dir="$base_dir/logs"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 mkdir -p "$worktrees_dir" "$artifacts_dir" "$cache_dir/corepack" "$cache_dir/pnpm" "$cache_dir/buildkit" "$state_dir" "$logs_dir"
 
-wait_for_job() {
-  local job_namespace=$1
-  local job_name=$2
-  local timeout_seconds=$3
-  local deadline=$((SECONDS + timeout_seconds))
-
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    local status
-    status=$(microk8s kubectl -n "$job_namespace" get job "$job_name" -o json)
-    if [ "$(printf '%s' "$status" | jq -r '.status.succeeded // 0')" -ge 1 ]; then
-      return 0
-    fi
-    if [ "$(printf '%s' "$status" | jq -r '.status.failed // 0')" -ge 1 ]; then
-      return 1
-    fi
-    sleep 2
-  done
-  return 124
-}
+# shellcheck source=deploy-lib.sh
+source "$script_dir/deploy-lib.sh"
 
 exec 9>"$state_dir/deploy.lock"
 if ! flock -n 9; then
@@ -50,21 +38,127 @@ fi
 
 target_sha=""
 deployment_succeeded=false
+deployment_mutated=false
+record_failure_on_exit=true
+rollback_attempted=false
+worktree_dir=""
+attempt_dir=""
+build_job=""
+image_job=""
 
-mark_failure() {
-  local exit_code=$?
-  if [ "$deployment_succeeded" != true ] && [ -n "$target_sha" ]; then
-    printf '%s\n' "$target_sha" > "$state_dir/last-failed-sha"
+rollback_once() {
+  if [ "$rollback_attempted" = true ]; then
+    return 0
   fi
+  rollback_attempted=true
+
+  echo "deployment verification failed; restoring the saved Deployment snapshot" >&2
+  if ! restore_deployment_transaction "$production_namespace" "$deployment_name" "$container_name" "$state_dir" "$image_repository"; then
+    echo "full Deployment rollback failed; inflight journal retained" >&2
+    return 1
+  fi
+  deployment_mutated=false
+}
+
+cleanup_attempt() {
+  local cleanup_failed=false
+
+  if [ -n "$build_job" ] || [ -n "$image_job" ]; then
+    if ! microk8s kubectl -n "$namespace" delete job "$build_job" "$image_job" --ignore-not-found=true --wait=true >/dev/null 2>&1; then
+      echo "failed to delete deployment build Jobs" >&2
+      cleanup_failed=true
+    fi
+  fi
+
+  if [ -n "$worktree_dir" ] && [ -e "$worktree_dir" ]; then
+    if ! git --git-dir="$repo_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1; then
+      echo "failed to unregister deployment worktree: $worktree_dir" >&2
+      cleanup_failed=true
+    fi
+    if [ -e "$worktree_dir" ] && ! safe_remove_deploy_path "$worktree_dir" "$worktrees_dir"; then
+      cleanup_failed=true
+    fi
+  fi
+
+  if [ -n "$attempt_dir" ]; then
+    if ! safe_remove_deploy_path "$attempt_dir" "$artifacts_dir"; then
+      cleanup_failed=true
+    fi
+  fi
+
+  if [ "$cleanup_failed" = true ]; then
+    mark_cleanup_issue "$state_dir" "current deployment attempt cleanup failed" || true
+    return 1
+  fi
+}
+
+finish_deployment() {
+  local exit_code=$?
+  trap - EXIT
+  trap '' INT TERM HUP
+  set +e
+  finish_deployment_actions "$exit_code"
+  exit_code=$?
   exit "$exit_code"
 }
-trap mark_failure EXIT
+trap finish_deployment EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+require_github_repository_url "$repository_url" waonme/world-app "WORLD_APP_REPOSITORY_URL"
 
 if [ ! -d "$repo_dir" ]; then
-  git clone --mirror "$repository_url" "$repo_dir"
+  for abandoned_clone in "$base_dir"/.repository.git.clone.*; do
+    [ -d "$abandoned_clone" ] || continue
+    case "${abandoned_clone##*/}" in
+      .repository.git.clone.?*) rm -rf -- "$abandoned_clone" ;;
+      *) echo "refusing unexpected mirror clone path: $abandoned_clone" >&2; exit 1 ;;
+    esac
+  done
+  mirror_clone_dir=$(mktemp -d "$base_dir/.repository.git.clone.XXXXXXXX")
+  if ! GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
+    git -c protocol.file.allow=never clone --mirror "$repository_url" "$mirror_clone_dir"; then
+    rm -rf -- "$mirror_clone_dir"
+    exit 1
+  fi
+  require_mirror_origin_repository "$mirror_clone_dir" waonme/world-app
+  mv "$mirror_clone_dir" "$repo_dir"
 fi
 
-git --git-dir="$repo_dir" fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
+if [ "$(git --git-dir="$repo_dir" rev-parse --is-bare-repository 2>/dev/null || true)" != true ]; then
+  echo "refusing incomplete or non-bare deployment mirror: $repo_dir" >&2
+  exit 1
+fi
+require_mirror_origin_repository "$repo_dir" waonme/world-app
+
+# Resolve any transaction left by TERM, SIGKILL, or power loss before starting
+# another build. A committed state is retained; an uncommitted state is fully
+# restored from its saved Deployment object.
+recover_inflight_deployment "$production_namespace" "$deployment_name" "$container_name" "$state_dir" "$image_repository"
+startup_cleanup_failed=false
+if ! cleanup_orphaned_transactions "$state_dir"; then
+  startup_cleanup_failed=true
+  mark_cleanup_issue "$state_dir" "orphaned deployment transaction cleanup failed" || true
+fi
+
+# Stop stale Jobs before reclaiming their hostPath worktrees and artifacts.
+microk8s kubectl create namespace "$namespace" --dry-run=client -o yaml | microk8s kubectl apply -f -
+if ! microk8s kubectl -n "$namespace" delete job -l "app.kubernetes.io/part-of=world-app" --ignore-not-found=true --wait=true; then
+  echo "failed to stop stale deployment build Jobs; refusing hostPath cleanup" >&2
+  exit 1
+fi
+if ! cleanup_stale_deploy_attempts "$repo_dir" "$worktrees_dir" "$artifacts_dir"; then
+  startup_cleanup_failed=true
+  echo "stale deployment directory cleanup is incomplete; continuing with a fresh isolated attempt" >&2
+  mark_cleanup_issue "$state_dir" "stale deployment directory cleanup failed" || true
+fi
+if [ "$startup_cleanup_failed" = false ]; then
+  rm -f -- "$state_dir/cleanup-required"
+fi
+
+GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
+  git -c protocol.file.allow=never --git-dir="$repo_dir" fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
 target_sha=$(git --git-dir="$repo_dir" rev-parse 'refs/remotes/origin/main^{commit}')
 if [[ ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "refusing invalid target commit: $target_sha" >&2
@@ -72,24 +166,20 @@ if [[ ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 current_image=$(microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o "jsonpath={.spec.template.spec.containers[?(@.name=='$container_name')].image}")
-deployed_sha=$(test -f "$state_dir/deployed-sha" && tr -d '\n' < "$state_dir/deployed-sha" || true)
+recorded_deployed_sha=$(test -f "$state_dir/deployed-sha" && tr -d '\n' < "$state_dir/deployed-sha" || true)
+if ! deployed_sha=$(resolve_deployed_sha "$recorded_deployed_sha" "$current_image" "$image_repository" "${WORLD_APP_ALLOW_INITIAL_BOOTSTRAP:-0}"); then
+  exit 1
+fi
+if [ -z "$recorded_deployed_sha" ] && [ -n "$deployed_sha" ]; then
+  record_sha_state "$state_dir/deployed-sha" "$deployed_sha"
+  recorded_deployed_sha=$deployed_sha
+fi
 expected_image="localhost/world-app:$target_sha"
 
 # A normal revert remains a descendant and is allowed. A reset/force-push is not:
 # production must never follow rewritten main history without an explicit operator recovery.
 if [ -n "$deployed_sha" ]; then
-  if [[ ! "$deployed_sha" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "refusing invalid deployed commit state: $deployed_sha" >&2
-    exit 1
-  fi
-  if ! git --git-dir="$repo_dir" cat-file -e "$deployed_sha^{commit}"; then
-    echo "refusing deployment because the recorded commit is unavailable: $deployed_sha" >&2
-    exit 1
-  fi
-  if ! git --git-dir="$repo_dir" merge-base --is-ancestor "$deployed_sha" "$target_sha"; then
-    echo "refusing non-fast-forward main update: $deployed_sha -> $target_sha" >&2
-    exit 1
-  fi
+  require_fast_forward_update "$repo_dir" "$deployed_sha" "$target_sha"
 fi
 
 if [ "$deployed_sha" = "$target_sha" ] && [ "$current_image" = "$expected_image" ]; then
@@ -98,30 +188,33 @@ if [ "$deployed_sha" = "$target_sha" ] && [ "$current_image" = "$expected_image"
   exit 0
 fi
 
-if [ -f "$state_dir/last-failed-sha" ] && [ "$(tr -d '\n' < "$state_dir/last-failed-sha")" = "$target_sha" ]; then
-  failed_at=$(stat -c %Y "$state_dir/last-failed-sha")
-  now=$(date +%s)
-  if [ $((now - failed_at)) -lt 600 ]; then
-    echo "deployment of $target_sha is in a 10 minute retry backoff"
-    deployment_succeeded=true
-    exit 0
+now=$(date +%s)
+if backoff_remaining=$(retry_backoff_remaining "$state_dir/last-failed-sha" "$target_sha" "$now" 600); then
+  echo "deployment of $target_sha is in retry backoff for another ${backoff_remaining}s" >&2
+  # This is an observable temporary failure. Do not rewrite last-failed-sha,
+  # because doing so would extend the retry window on every timer invocation.
+  record_failure_on_exit=false
+  exit 75
+else
+  backoff_status=$?
+  if [ "$backoff_status" -eq 2 ]; then
+    exit 1
   fi
 fi
 
 short_sha=${target_sha:0:12}
-worktree_dir="$worktrees_dir/$target_sha"
-artifact_dir="$artifacts_dir/$target_sha"
+attempt_dir=$(mktemp -d "$artifacts_dir/deploy-$short_sha.XXXXXXXX")
+attempt_name=$(basename "$attempt_dir")
+worktree_dir="$worktrees_dir/$attempt_name"
+artifact_dir="$attempt_dir"
 context_dir="$artifact_dir/context"
 image_archive="$artifact_dir/world-app-$target_sha.oci.tar"
-build_job="world-app-pnpm-$short_sha"
-image_job="world-app-image-$short_sha"
+build_job="world-app-pnpm-builder"
+image_job="world-app-image-builder"
 
-if [ ! -d "$worktree_dir/.git" ] && [ ! -f "$worktree_dir/.git" ]; then
-  rm -rf "$worktree_dir"
-  git --git-dir="$repo_dir" worktree add --detach "$worktree_dir" "$target_sha"
-fi
+git --git-dir="$repo_dir" worktree add --detach "$worktree_dir" "$target_sha"
+verify_exact_worktree "$repo_dir" "$worktree_dir" "$target_sha"
 
-microk8s kubectl create namespace "$namespace" --dry-run=client -o yaml | microk8s kubectl apply -f -
 cat <<YAML | microk8s kubectl apply -f -
 apiVersion: v1
 kind: ResourceQuota
@@ -169,7 +262,6 @@ spec:
         - {protocol: TCP, port: 80}
         - {protocol: TCP, port: 443}
 YAML
-microk8s kubectl -n "$namespace" delete job "$build_job" "$image_job" --ignore-not-found=true --wait=true
 
 cat <<YAML | microk8s kubectl apply -f -
 apiVersion: batch/v1
@@ -207,16 +299,41 @@ spec:
           args:
             - |
               set -Eeuo pipefail
-              export HOME=/tmp/home
               export COREPACK_HOME=/cache/corepack
               export PNPM_HOME=/cache/pnpm
+              export XDG_CONFIG_HOME=/tmp/world-app-xdg/config
+              export XDG_CACHE_HOME=/tmp/world-app-xdg/cache
+              export XDG_DATA_HOME=/tmp/world-app-xdg/data
               export NODE_OPTIONS=--max-old-space-size=1536
               export HUSKY=0
-              mkdir -p "\$HOME" "\$COREPACK_HOME" "\$PNPM_HOME" /cache/pnpm-store /tmp/corepack-bin
+              mkdir -p "\$COREPACK_HOME" "\$PNPM_HOME" "\$XDG_CONFIG_HOME" "\$XDG_CACHE_HOME" "\$XDG_DATA_HOME" /cache/pnpm-store /tmp/corepack-bin /tmp/world-app-tools
+              case "\$(uname -m)" in
+                x86_64)
+                  jq_asset=jq-linux-amd64
+                  jq_checksum=$jq_amd64_sha256
+                  ;;
+                aarch64 | arm64)
+                  jq_asset=jq-linux-arm64
+                  jq_checksum=$jq_arm64_sha256
+                  ;;
+                *)
+                  echo "unsupported architecture for pinned jq: \$(uname -m)" >&2
+                  exit 1
+                  ;;
+              esac
+              curl -fsSL --retry 3 --max-time 60 \
+                "https://github.com/jqlang/jq/releases/download/jq-$jq_version/\$jq_asset" \
+                -o /tmp/world-app-tools/jq
+              printf '%s  %s\n' "\$jq_checksum" /tmp/world-app-tools/jq | sha256sum -c -
+              chmod 0755 /tmp/world-app-tools/jq
               corepack enable --install-directory /tmp/corepack-bin
-              export PATH=/tmp/corepack-bin:\$PATH
+              export PATH=/tmp/world-app-tools:/tmp/corepack-bin:\$PATH
+              jq --version
               pnpm config set store-dir /cache/pnpm-store
               pnpm install --frozen-lockfile
+              bash -n ops/vps-deployer/deploy.sh ops/vps-deployer/deploy-lib.sh ops/vps-deployer/test-deploy.sh
+              ops/vps-deployer/test-deploy.sh
+              scripts/test-prepare-upstream-sync.sh
               scripts/check-fork-contract.sh
               pnpm --filter @concrnt/client test
               pnpm --filter @concrnt/worldlib test:fork
@@ -262,12 +379,14 @@ if ! wait_for_job "$namespace" "$build_job" 1800; then
 fi
 microk8s kubectl -n "$namespace" logs "job/$build_job" --all-containers=true > "$logs_dir/$target_sha-pnpm.log"
 
-rm -rf "$context_dir"
+# The build may create ignored outputs, but it must not alter tracked source or
+# move HEAD. This prevents a writable reused workspace from being mislabeled.
+verify_exact_worktree "$repo_dir" "$worktree_dir" "$target_sha"
+
 mkdir -p "$context_dir/web"
 cp "$worktree_dir/web/Dockerfile" "$context_dir/web/Dockerfile"
 cp "$worktree_dir/web/nginx.conf" "$context_dir/web/nginx.conf"
 cp -a "$worktree_dir/web/dist" "$context_dir/web/dist"
-rm -f "$image_archive"
 
 cat <<YAML | microk8s kubectl apply -f -
 apiVersion: batch/v1
@@ -357,15 +476,32 @@ test -s "$image_archive"
 microk8s ctr images import "$image_archive"
 microk8s ctr images ls -q | grep -Fx "$expected_image"
 
-previous_image="$current_image"
-printf '%s\n' "$previous_image" > "$state_dir/previous-image"
+# Re-read production immediately before mutation. The build can run for many
+# minutes; never roll back to a stale pre-build image/spec if an operator changed
+# production while it was building.
+prepatch_snapshot="$attempt_dir/prepatch-deployment.json"
+microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o json > "$prepatch_snapshot"
+prepatch_image=$(deployment_container_image "$prepatch_snapshot" "$container_name")
+prepatch_recorded_sha=""
+if [ -f "$state_dir/deployed-sha" ]; then
+  prepatch_recorded_sha=$(read_sha_state "$state_dir/deployed-sha")
+fi
+if ! prepatch_deployed_sha=$(resolve_deployed_sha "$prepatch_recorded_sha" "$prepatch_image" "$image_repository" "${WORLD_APP_ALLOW_INITIAL_BOOTSTRAP:-0}"); then
+  exit 1
+fi
+if [ "$prepatch_deployed_sha" != "$deployed_sha" ]; then
+  echo "production deployment state changed during the build; refusing stale rollout" >&2
+  exit 1
+fi
+if [ -z "$deployed_sha" ] && [ "$prepatch_image" != "$current_image" ]; then
+  echo "bootstrap source image changed during the build; refusing stale rollout" >&2
+  exit 1
+fi
+create_deployment_transaction "$state_dir" "$prepatch_snapshot" "$container_name" "$target_sha" "$prepatch_deployed_sha" >/dev/null
 
-rollback() {
-  echo "deployment verification failed; restoring $previous_image" >&2
-  microk8s kubectl -n "$production_namespace" set image "deployment/$deployment_name" "$container_name=$previous_image"
-  microk8s kubectl -n "$production_namespace" rollout status "deployment/$deployment_name" --timeout=180s
-}
-
+# Mark the Deployment as potentially changed before patching. From this point,
+# every non-successful exit is routed through finish_deployment and rollback_once.
+deployment_mutated=true
 microk8s kubectl -n "$production_namespace" patch deployment "$deployment_name" --type=strategic -p "$(cat <<JSON
 {
   "spec": {
@@ -410,31 +546,22 @@ JSON
 )"
 
 if ! microk8s kubectl -n "$production_namespace" rollout status "deployment/$deployment_name" --timeout=180s; then
-  rollback
   exit 1
 fi
 
 smoke_ok=false
 for attempt in $(seq 1 20); do
-  info=$(curl -fsS --max-time 10 https://arakoshi.com/cc-info 2>/dev/null || true)
-  version=$(printf '%s' "$info" | jq -r '.version // empty' 2>/dev/null || true)
-  if [ "$version" = "$target_sha" ] && curl -fsS --max-time 10 https://arakoshi.com/ >/dev/null; then
-    asset_path=$(curl -fsS --max-time 10 https://arakoshi.com/ | sed -n 's/.*src="\([^"]*\/assets\/[^"]*\.js\)".*/\1/p' | head -n 1)
-    if [ -n "$asset_path" ] && curl -fsS --max-time 10 "https://arakoshi.com$asset_path" >/dev/null; then
-      smoke_ok=true
-      break
-    fi
+  if verify_http_deployment_once https://arakoshi.com "$target_sha"; then
+    smoke_ok=true
+    break
   fi
   echo "smoke verification attempt $attempt did not observe $target_sha"
   sleep 3
 done
 
 if [ "$smoke_ok" != true ]; then
-  rollback
   exit 1
 fi
 
-printf '%s\n' "$target_sha" > "$state_dir/deployed-sha"
-rm -f "$state_dir/last-failed-sha"
-deployment_succeeded=true
+commit_deployment_success "$state_dir" "$target_sha"
 echo "world-app $target_sha deployed and verified"
