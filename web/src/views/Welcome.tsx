@@ -10,6 +10,7 @@ import { ProfileSchema, semantics } from '@concrnt/worldlib'
 import { useResetPreference } from '../contexts/Preference'
 import { LoadingFull } from '../components/LoadingFull'
 import { ResetSessionButton } from '../components/ResetSessionButton'
+import { provisionSubkey } from '../lib/subkey'
 import { AuthActions, AuthBrand, AuthButton, AuthHeader, AuthScreen, authStyles } from './authLayout'
 
 interface User {
@@ -35,7 +36,7 @@ export const WelcomeView = () => {
     const [user, setUser] = useState<User | null>(null)
     const [updater, setUpdater] = useState<number>(0)
     const reset = useResetPreference()
-    const [resolver, setResolver] = useState<string>(resolveEntrypoint())
+    const [resolver, setResolver] = useState<string>(() => readStoredString('Domain') ?? resolveEntrypoint())
 
     const masterKey = readStoredString('PrivateKey')
     const subKey = readStoredString('SubKey')
@@ -51,6 +52,29 @@ export const WelcomeView = () => {
 
     const [state, setState] = useState<'initial' | 'missing' | 'ready' | 'error'>('initial')
     const [loadError, setLoadError] = useState<string | null>(null)
+
+    const continueWithAccount = async () => {
+        const domain = user?.entity?.value.domain
+        if (!domain) {
+            setLoadError(t('loadFailed'))
+            setState('error')
+            return
+        }
+
+        try {
+            localStorage.setItem('Domain', domain)
+            // 通常ログアウト後のマスターキー単独状態では、利用者がこのボタンを押した時だけ
+            // 明示的にサブキーを再発行する。ClientProviderのv1自動移行とは分離する。
+            if (masterKey && !subKey) {
+                localStorage.setItem('SubKey', await provisionSubkey(domain, masterKey))
+            }
+            reset()
+            window.location.reload()
+        } catch (error) {
+            setLoadError(error instanceof Error ? error.message : String(error))
+            setState('error')
+        }
+    }
 
     useEffect(() => {
         if (!existingCCID) return
@@ -83,7 +107,7 @@ export const WelcomeView = () => {
                 profile
             })
             // ログアウト後はSubKeyが無くマスターキーだけが残る。その場合もreadyに落とし、
-            // 続行時にClientProviderのマスターキー単独パスがサブキーを再発行して復帰する
+            // 利用者が続行を選んだ時だけサブキーを再発行する
             setState(entity && (subKey || masterKey) ? 'ready' : 'missing')
         }
         load().catch((e) => {
@@ -193,15 +217,7 @@ export const WelcomeView = () => {
                         </Tilt>
                     </div>
                     <AuthActions fixedBottom>
-                        <AuthButton
-                            onClick={() => {
-                                if (user?.entity?.value.domain) localStorage.setItem('Domain', user.entity.value.domain)
-                                reset()
-                                window.location.reload()
-                            }}
-                        >
-                            {t('continueWithAccount')}
-                        </AuthButton>
+                        <AuthButton onClick={continueWithAccount}>{t('continueWithAccount')}</AuthButton>
                         <ResetSessionButton
                             ccid={user!.ccid}
                             onDone={() => {

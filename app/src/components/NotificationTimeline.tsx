@@ -20,8 +20,10 @@ import {
     LikeAssociationSchema,
     FollowAckSchema,
     AtprotoFollowNotifySchema,
-    ReadAccessRequestAssociationSchema
+    ReadAccessRequestAssociationSchema,
+    findMute
 } from '@concrnt/worldlib'
+import { usePreference } from '../contexts/Preference'
 import { MessageContainer } from './message'
 import { CCImage, Avatar, Button, CfmRenderer, CssVar, Divider, Text } from '@concrnt/ui'
 import { MessageSkeleton } from './message/MessageSkeleton'
@@ -77,6 +79,12 @@ const ICON_SIZE = 32
 
 export const NotificationTimeline = (props: Props) => {
     const { client } = useClient()
+    // summariseNotificationsはeffectから呼ばれるクロージャなので、refで常に最新値を参照する
+    const [muteBlockedUsers] = usePreference('muteBlockedUsers')
+    const muteBlockedUsersRef = useRef(muteBlockedUsers)
+    useEffect(() => {
+        muteBlockedUsersRef.current = muteBlockedUsers
+    }, [muteBlockedUsers])
 
     const loadingRef = useRef(true)
     const scrollPositionRef = useRef<number>(0)
@@ -111,9 +119,24 @@ export const NotificationTimeline = (props: Props) => {
         // 集約用 Map。key のサフィックスで summarised / normal を判別する
         const summarized = new Map<string, { items: Message<any>[]; href: string; source?: string }>()
 
+        // 集約種別(いいね・リアクション・フォロー等)はミュート相手の分を集約前に落とす。
+        // これで「〜さん他N人」の数にもミュート相手が混ざらない。
+        // normal種別(リプライ・メンション等)はMessageContainer側のミュート境界が
+        // 「ミュート中: ○○ [表示]」のnoticeに置き換えるため、ここでは落とさない
+        const [mutes, blocks] = await Promise.all([client.mutes.value(), client.blocks.value()])
+        const muteOptions = { blocks: muteBlockedUsersRef.current ? blocks : undefined }
+
         for (const { item, msg } of resolved) {
             if (!msg) continue
             if (!item.href) continue // href がないと集約キーや MessageContainer に渡せないのでスキップ
+
+            const isAggregatedKind =
+                msg.schema === Schemas.likeAssociation ||
+                msg.schema === Schemas.reactionAssociation ||
+                msg.schema === Schemas.followAck ||
+                msg.schema === Schemas.atprotoFollowNotify ||
+                msg.schema === Schemas.readAccessRequestAssociation
+            if (isAggregatedKind && findMute({ author: msg.author }, mutes, muteOptions)) continue
 
             let key: string
             switch (msg.schema) {

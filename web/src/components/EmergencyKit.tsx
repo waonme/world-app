@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { type FallbackProps } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 
@@ -20,10 +20,12 @@ const KitButton = (props: {
     variant?: 'contained' | 'outlined'
     danger?: boolean
     big?: boolean
+    disabled?: boolean
 }) => {
     return (
         <button
             onClick={props.onClick}
+            disabled={props.disabled}
             style={{
                 width: '100%',
                 minHeight: props.big ? 56 : 48,
@@ -34,7 +36,8 @@ const KitButton = (props: {
                 fontSize: props.big ? '1.125rem' : '1rem',
                 fontWeight: 700,
                 fontFamily: 'inherit',
-                cursor: 'pointer',
+                cursor: props.disabled ? 'not-allowed' : 'pointer',
+                opacity: props.disabled ? 0.55 : 1,
                 padding: '8px 16px'
             }}
         >
@@ -47,6 +50,10 @@ export function EmergencyKit({ error }: FallbackProps): ReactNode {
     const errorMessage = error instanceof Error ? error.message : String(error)
     const errorStack = error instanceof Error ? error.stack : undefined
     const { t } = useTranslation('', { keyPrefix: 'emergency' })
+    const recoveryKeys = Object.keys(localStorage).filter(
+        (key) => ['Domain', 'PrivateKey', 'Mnemonic', 'SubKey'].includes(key) || key.startsWith('EvacuatedKeys:')
+    )
+    const [recoveryBackupExported, setRecoveryBackupExported] = useState(recoveryKeys.length === 0)
 
     useEffect(() => {
         // do not refresh in 5 minutes
@@ -98,14 +105,24 @@ export function EmergencyKit({ error }: FallbackProps): ReactNode {
         window.location.replace('/')
     }
 
+    const backupRecoveryKeys = (): void => {
+        // 壊れた鍵がクラッシュ原因でも退避できるよう、ここではパースせず生値を保存する。
+        const values = Object.fromEntries(recoveryKeys.map((key) => [key, localStorage.getItem(key)]))
+        const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), values }, null, 2)], {
+            type: 'application/json;charset=utf-8'
+        })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `concrnt-emergency-keys-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+        anchor.click()
+        URL.revokeObjectURL(url)
+        setRecoveryBackupExported(true)
+    }
+
     const hardReset = (): void => {
-        // クラッシュ画面からでもマスターキーの削除はさせない(hard=ログアウト相当まで)。
-        // 鍵を消す操作はバックアップDLを強制するResetSessionButtonだけに限定する
-        for (const key in localStorage) {
-            if (['PrivateKey', 'Mnemonic'].includes(key)) continue
-            if (key.startsWith('EvacuatedKeys:')) continue
-            localStorage.removeItem(key)
-        }
+        if (!recoveryBackupExported || !window.confirm(t('confirmHardReset'))) return
+        localStorage.clear()
         window.location.replace('/')
     }
 
@@ -220,9 +237,17 @@ buildTime: ${buildTime.toLocaleString()}`
                     <KitButton variant="outlined" onClick={softReset}>
                         {t('softReset')}
                     </KitButton>
-                    <KitButton variant="outlined" danger onClick={hardReset}>
+                    {recoveryKeys.length > 0 && (
+                        <KitButton variant="outlined" onClick={backupRecoveryKeys}>
+                            {t('backupRecoveryKeys')}
+                        </KitButton>
+                    )}
+                    <KitButton variant="outlined" danger disabled={!recoveryBackupExported} onClick={hardReset}>
                         {t('hardReset')}
                     </KitButton>
+                    {!recoveryBackupExported && (
+                        <div style={{ opacity: 0.78, lineHeight: 1.7, textAlign: 'center' }}>{t('backupRequired')}</div>
+                    )}
                 </div>
                 <div
                     style={{

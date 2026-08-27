@@ -23,6 +23,7 @@ export class Message<T> implements Document<T> {
 
     associations: Array<Association<any>> = []
     ownAssociations: Array<Association<any>> = []
+    ownAssociationsLoaded: boolean = false
 
     associationCounts?: Record<string, number>
     reactionCounts?: Record<string, number>
@@ -96,14 +97,29 @@ export class Message<T> implements Document<T> {
             }
         }
 
-        message.ownAssociations = client.ccid
-            ? (await client.api.getAssociationsAll(uri, { author: client.ccid })).map((sd) =>
-                  Association.fromSignedDocument(sd)
-              )
-            : []
+        // 本文取得後の付帯情報は表示の必須条件ではない。v1専用サーバーや一時的な
+        // association API障害でも、取得できた本文までエラー表示に巻き込まない。
+        if (client.ccid) {
+            try {
+                message.ownAssociations = (await client.api.getAssociationsAll(uri, { author: client.ccid })).map(
+                    (sd) => Association.fromSignedDocument(sd)
+                )
+                message.ownAssociationsLoaded = true
+            } catch (_error) {
+                // 「取得済みで0件」と区別し、アクション側で重複commitを防ぐ。
+                message.ownAssociations = []
+                message.ownAssociationsLoaded = false
+            }
+        } else {
+            // ゲストは自分のassociationを持たず、書き込み操作も表示されない。
+            message.ownAssociations = []
+            message.ownAssociationsLoaded = true
+        }
 
-        message.associationCounts = await client.api.getAssociationCounts(uri)
-        message.reactionCounts = await client.api.getAssociationCounts(uri, Schemas.reactionAssociation)
+        message.associationCounts = await client.api.getAssociationCounts(uri).catch(() => ({}))
+        message.reactionCounts = await client.api
+            .getAssociationCounts(uri, Schemas.reactionAssociation)
+            .catch(() => ({}))
 
         if (res.associate) {
             message.associationTarget = await Message.load<any>(client, res.associate).catch(() => undefined)
@@ -113,6 +129,9 @@ export class Message<T> implements Document<T> {
     }
 
     async favorite(client: Client): Promise<SignedDocument> {
+        if (!this.ownAssociationsLoaded) {
+            throw new Error('cannot add favorite while own association state is unavailable')
+        }
         const authorDomain = await client.api.getEntity(this.author, this.hint).then((user) => user?.value.domain)
         console.log('fav author domain', authorDomain)
 
@@ -135,6 +154,9 @@ export class Message<T> implements Document<T> {
     }
 
     async reaction(client: Client, shortcode: string, imageUrl: string): Promise<SignedDocument> {
+        if (!this.ownAssociationsLoaded) {
+            throw new Error('cannot add reaction while own association state is unavailable')
+        }
         const authorDomain = await client.api.getEntity(this.author, this.hint).then((user) => user?.value.domain)
 
         const distributes = [

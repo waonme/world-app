@@ -1,10 +1,10 @@
 import { NotFoundError, ServerOfflineError } from '@concrnt/client'
-import { HorizontalLayout, Text } from '@concrnt/ui'
+import { Button, HorizontalLayout, Text } from '@concrnt/ui'
 import { useTranslation } from 'react-i18next'
 import { FallbackProps } from 'react-error-boundary'
 import { usePreference } from '../../contexts/Preference'
 
-export const RenderError = ({ error }: FallbackProps) => {
+export const RenderError = ({ error, resetErrorBoundary }: FallbackProps) => {
     const { t } = useTranslation('', { keyPrefix: 'components.renderError' })
     const [devmode] = usePreference('developerMode')
 
@@ -15,8 +15,9 @@ export const RenderError = ({ error }: FallbackProps) => {
                     padding: '0 8px'
                 }}
             >
-                <Text variant="caption">{t('messageDeleted')}</Text>
+                <Text variant="caption">{t('messageUnavailable')}</Text>
                 <Text variant="caption">{error.uri}</Text>
+                <Button onClick={resetErrorBoundary}>{t('retry')}</Button>
             </div>
         )
     }
@@ -45,6 +46,7 @@ export const RenderError = ({ error }: FallbackProps) => {
             >
                 <Text variant="caption">{t('serverOffline')}</Text>
                 <Text variant="caption">{offlineServer}</Text>
+                <Button onClick={resetErrorBoundary}>{t('retry')}</Button>
             </div>
         )
     }
@@ -57,6 +59,7 @@ export const RenderError = ({ error }: FallbackProps) => {
                 }}
             >
                 <Text variant="caption">{t('cannotDisplay')}</Text>
+                <Button onClick={resetErrorBoundary}>{t('retry')}</Button>
             </div>
         )
     }

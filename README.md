@@ -52,6 +52,7 @@ $ pnpm tauri ios build
 ```
 # システム
 cckv://<owner>/concrnt.world/settings
+cckv://<owner>/concrnt.world/mutes/<muteId>  # ミュートエントリ (private.jsonポリシー必須)
 
 # メイン
 cckv://<owner>/concrnt.world/profiles/main

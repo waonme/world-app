@@ -13,6 +13,8 @@ import { Subscription } from './Subscription'
 import { CCEditor } from './CCEditor'
 import { PolicyEditor } from './PolicyEditor'
 import { useMediaProxy } from '../contexts/MediaProxy'
+import { useSubscribe } from '../hooks/useSubscribe'
+import { MuteDurationSelect } from './MuteDurationSelect'
 
 interface Props {
     uri: string
@@ -36,8 +38,8 @@ interface InnerProps {
 
 const Inner = (props: InnerProps) => {
     const { t } = useTranslation('', { keyPrefix: 'components.timelineSettings' })
-    const { client } = useClient()
     const { getImageURL } = useMediaProxy()
+    const { client } = useClient()
     const timeline = use(props.timelinePromise)
     const isMobile = useIsMobile()
     const menuAnchor = useAnchor()
@@ -45,6 +47,10 @@ const Inner = (props: InnerProps) => {
     const [tab, setTab] = useState<'subscriptions' | 'settings'>('subscriptions')
     const [menuOpen, setMenuOpen] = useState(false)
     const [linkCopied, setLinkCopied] = useState(false)
+
+    const [mutes] = useSubscribe(client.mutes)
+    const isMuted = timeline ? mutes.some((entry) => entry.type === 'timeline' && entry.target === timeline.uri) : false
+    const [muteDurationOpen, setMuteDurationOpen] = useState(false)
 
     if (!timeline) {
         return <>Timeline not found.</>
@@ -133,8 +139,28 @@ const Inner = (props: InnerProps) => {
                         >
                             <Text>{linkCopied ? t('linkCopied') : t('copyLink')}</Text>
                         </ListItem>
-                    )
+                    ),
+                    <ListItem
+                        key="mute"
+                        onClick={() => {
+                            setMenuOpen(false)
+                            if (isMuted) {
+                                client.unmute('timeline', timeline.uri).catch(console.error)
+                            } else {
+                                setMuteDurationOpen(true)
+                            }
+                        }}
+                    >
+                        <Text>{isMuted ? t('unmuteTimeline') : t('muteTimeline')}</Text>
+                    </ListItem>
                 ]}
+            />
+            <MuteDurationSelect
+                open={muteDurationOpen}
+                onClose={() => setMuteDurationOpen(false)}
+                onSelect={(expiresAt) => {
+                    client.mute({ type: 'timeline', target: timeline.uri, expiresAt }).catch(console.error)
+                }}
             />
             <Tabs>
                 <Tab

@@ -50,6 +50,7 @@ export const MessageReactions = (props: Props) => {
 
     const handleReactionClick = async (imageUrl: string) => {
         if (!client) return
+        if (!props.message.ownAssociationsLoaded) return
         hapticLight()
 
         if (ownReactions[imageUrl]) {
@@ -131,6 +132,7 @@ export const MessageReactions = (props: Props) => {
                 return (
                     <ButtonBase
                         key={imageUrl}
+                        disabled={!props.message.ownAssociationsLoaded}
                         onClick={(e) => {
                             e.stopPropagation()
                             handleReactionClick(imageUrl)

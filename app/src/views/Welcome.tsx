@@ -72,6 +72,7 @@ export const WelcomeView = () => {
     // 端末に保存されている全アカウント(鍵)。エラー/登録なし画面で「どの鍵を見ているか」「他の鍵があるか」を
     // 見せて切り替えられるようにするための診断用。取得失敗は空扱いにして画面を止めない
     const [accounts, setAccounts] = useState<AccountSummary[]>([])
+    const [resolverCCID, setResolverCCID] = useState<string | null>(null)
 
     useEffect(() => {
         const load = async () => {
@@ -106,11 +107,12 @@ export const WelcomeView = () => {
             }
             setAccounts(accountList)
 
-            // resolverの初期化は一度きり(RecoveryViewの手入力によるsetResolverをloadが巻き戻さないため)。
-            // setResolverでeffectが再実行され、次周回で照会に進む
-            if (resolver === null) {
+            // アクティブアカウントが変わった時は、そのアカウントの保存domainでresolverを引き直す。
+            // RecoveryViewの手入力は同じCCIDの間は保持する。
+            if (resolver === null || resolverCCID !== ccid) {
                 const accountDomain = accountList.find((a) => a.ccid === ccid)?.domain ?? null
                 setResolver(accountDomain ?? resolveEntrypoint())
+                setResolverCCID(ccid)
                 return
             }
 
@@ -147,7 +149,7 @@ export const WelcomeView = () => {
             // get_active_ccid成功後の想定外の例外。鍵は読めているので、キーチェーン起因ではない。
             console.error('Unexpected error while preparing account view', e)
         })
-    }, [updater, resolver])
+    }, [updater, resolver, resolverCCID])
 
     const reload = () => {
         setUpdater((prev) => prev + 1)
@@ -265,6 +267,7 @@ export const WelcomeView = () => {
                     giveup={() => setState('signup')}
                     setDomain={(domain) => {
                         setResolver(domain)
+                        setResolverCCID(existingCCID)
                     }}
                 />
             )

@@ -4,11 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { Client, migrateLegacyProfilePolicies, semantics } from '@concrnt/worldlib'
 import {
     Api,
-    ComputeCKID,
     Document,
     Entity,
     ErrorCodeRegistrationNotFound,
-    GenerateIdentity,
     InMemoryAuthProvider,
     InMemoryKVS,
     NotFoundError,
@@ -24,6 +22,8 @@ import { defaultPreference, type Preference } from './Preference'
 import { resourceCache } from '../lib/cache'
 import { isPushEnabled, unregisterPush } from '../lib/push'
 import { SubkeyInvalidDrawer } from '../components/SubkeyInvalidDrawer'
+import { ResetSessionButton } from '../components/ResetSessionButton'
+import { provisionSubkey } from '../lib/subkey'
 
 export interface ClientContextState {
     client: Client
@@ -118,29 +118,21 @@ export const ClientProvider = (props: Props): ReactNode => {
                     return
                 }
 
-                // マスターキーのみのセッションはv1(concrnt-world)からの引き継ぎでしか発生しない
-                // (v2のログインは必ずsubkeyを発行する)。通常の書き込みはsubkey署名なので、
-                // ここでログインフローと同様にsubkeyを発行して揃える。失敗してもマスターキーのみで
-                // 続行する(読み取りは可能・次回起動で再試行される)
+                // マスターキーのみのセッションは、v1移行時の専用マーカーがある場合に限り
+                // サブキーを自動発行する。通常のログアウトもPrivateKeyを残してSubKeyだけを
+                // 消すため、マーカー無しで自動発行するとログアウト直後に再ログインしてしまう。
                 if (masterKey && !subKey) {
+                    if (localStorage.getItem('V1SubkeyProvisionPending') === null) {
+                        console.log('Master-key-only session requires explicit re-enrollment')
+                        clientRef.current?.dispose()
+                        clientRef.current = null
+                        setClient(null)
+                        return
+                    }
                     try {
-                        const masterProvider = new InMemoryAuthProvider(masterKey)
-                        const ccid = masterProvider.getCCID()
-                        const api = new Api(domain, masterProvider, new InMemoryKVS())
-                        const subIdentity = GenerateIdentity()
-                        const ckid = ComputeCKID(subIdentity.publicKey)
-                        const subkeyDoc: Document<any> = {
-                            kind: 'record',
-                            key: semantics.subkey(ccid, ckid),
-                            author: ccid,
-                            schema: 'https://schema.concrnt.net/subkey.json',
-                            value: { ckid },
-                            createdAt: new Date(),
-                            onUpdate: 'retain'
-                        }
-                        await api.commit(subkeyDoc, domain, { useMasterkey: true })
-                        subKey = `concrnt-subkey ${subIdentity.privateKey} ${ccid}@${domain} -`
+                        subKey = await provisionSubkey(domain, masterKey)
                         localStorage.setItem('SubKey', subKey)
+                        localStorage.removeItem('V1SubkeyProvisionPending')
                         console.log('Provisioned a subkey for the migrated master key session')
                     } catch (err) {
                         console.error('Failed to provision subkey for master key session', err)
@@ -445,13 +437,13 @@ export const ClientProvider = (props: Props): ReactNode => {
         if (current && isPushEnabled()) {
             await unregisterPush(current).catch(() => {})
         }
-        // ログアウトはセッション(サブキー/接続先)の破棄のみ。マスターキー(PrivateKey/Mnemonic)は
+        // ログアウトはサブキーの破棄のみ。接続先とマスターキー(PrivateKey/Mnemonic)は
         // 削除しない: 同じ鍵で他サーバーへ登録・再ログインできることがアカウントモデルの前提であり、
         // 鍵を消す操作はバックアップDLを強制するResetSessionButtonだけに限定する(app版のclear_sessionと同じ方針)
-        localStorage.removeItem('Domain')
         localStorage.removeItem('SubKey')
         localStorage.removeItem('SelectedProfile')
         localStorage.removeItem('V1EntityProofPending')
+        localStorage.removeItem('V1SubkeyProvisionPending')
         await resourceCache.clear()
         await reload()
     }, [reload])
@@ -590,6 +582,7 @@ export const ClientProvider = (props: Props): ReactNode => {
                 >
                     {t('logout')}
                 </Button>
+                <ResetSessionButton ccid="unknown" onDone={() => window.location.reload()} />
             </div>
         )
     }

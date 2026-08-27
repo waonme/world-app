@@ -71,6 +71,11 @@ export const followKey = (ccid: string, did: string): string => {
     return `cckv://${ccid}/atproto.concrnt.world/follows/${CDID.newFromStringX(did).toString()}`
 }
 
+// 2026-08以前のクライアントが使っていたDID直書きキー。既存フォローの検出・解除にのみ使う。
+export const legacyFollowKey = (ccid: string, did: string): string => {
+    return `cckv://${ccid}/atproto.concrnt.world/follows/${did}`
+}
+
 // atprotoブリッジのユーザー設定レコードキー(listenTimelines/enabled)。ブリッジが直接読む。
 export const bskySettingsKey = (ccid: string): string => {
     return `cckv://${ccid}/atproto.concrnt.world/settings`

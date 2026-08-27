@@ -71,6 +71,7 @@ export const MessageReactions = (props: Props) => {
     const handleReactionClick = async (imageUrl: string) => {
         if (!client) return
         if (client.ccid === '') return // ゲストはリアクション不可(表示のみ)
+        if (!props.message.ownAssociationsLoaded) return
         hapticLight()
 
         if (ownReactions[imageUrl]) {
@@ -176,6 +177,7 @@ export const MessageReactions = (props: Props) => {
                         }
                     >
                         <button
+                            disabled={client.ccid !== '' && !props.message.ownAssociationsLoaded}
                             onClick={(e) => {
                                 e.stopPropagation()
                                 handleReactionClick(imageUrl)
@@ -191,7 +193,8 @@ export const MessageReactions = (props: Props) => {
                                 borderRadius: CssVar.round(1),
                                 border: isOwn ? `1.5px solid ${CssVar.contentLink}` : `1px solid ${CssVar.divider}`,
                                 backgroundColor: isOwn ? `rgb(from ${CssVar.contentLink} r g b / 0.15)` : 'transparent',
-                                cursor: 'pointer',
+                                cursor:
+                                    client.ccid !== '' && !props.message.ownAssociationsLoaded ? 'default' : 'pointer',
                                 color: CssVar.contentText,
                                 fontSize: '1rem',
                                 WebkitTapHighlightColor: 'transparent'
