@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, no-undef */
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
@@ -9,7 +10,8 @@ const {
     bridgeSettingsStatusAfterLoad,
     canWriteBridgeSettings,
     decideStoredSessionAction,
-    legacyAtprotoFollowKey
+    legacyAtprotoFollowKey,
+    runAfterSuccessfulBackup
 } = require('../dist/cjs/forkCompatibility.js')
 
 test('stored session policy never auto-provisions an ordinary logged-out session', () => {
@@ -57,6 +59,41 @@ test('bridge settings stay read-only until a successful or missing-record load',
     assert.equal(bridgeEnabledAfterSaveFailure(true, false), false)
     assert.equal(bridgeEnabledAfterSaveFailure(false, true), true)
     assert.equal(bridgeEnabledAfterSaveFailure(true), true)
+})
+
+test('backup completion advances only after a confirmed successful save', async () => {
+    const events = []
+    let finishSave
+    const savePending = new Promise((resolve) => {
+        finishSave = () => {
+            events.push('saved')
+            resolve('saved-uri')
+        }
+    })
+
+    const resultPending = runAfterSuccessfulBackup(
+        () => savePending,
+        () => events.push('complete')
+    )
+
+    await Promise.resolve()
+    assert.deepEqual(events, [])
+
+    finishSave()
+    assert.equal(await resultPending, 'saved-uri')
+    assert.deepEqual(events, ['saved', 'complete'])
+
+    let completedAfterFailure = false
+    await assert.rejects(
+        runAfterSuccessfulBackup(
+            () => Promise.reject(new Error('Save cancelled')),
+            () => {
+                completedAfterFailure = true
+            }
+        ),
+        /Save cancelled/
+    )
+    assert.equal(completedAfterFailure, false)
 })
 
 test('current and legacy Bluesky follow keys remain distinct and addressable', () => {

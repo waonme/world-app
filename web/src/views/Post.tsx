@@ -29,6 +29,7 @@ import { FAB } from '../components/FAB'
 import { useComposer } from '../contexts/Composer'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { QueryTimelineContext } from '../components/QueryTimeline'
+import { reconcileReplyDestinations, ReplyDestinationState } from './postReplyDestinations'
 
 type PostTab = 'replies' | 'reroutes' | 'favorites' | 'reactions'
 
@@ -96,13 +97,19 @@ export const PostView = (props: Props) => {
         [message]
     )
 
-    // インラインのリプライ欄の投稿先。元メッセージ由来の値を初期値にしつつ、その場で編集できるようにする
-    // (元メッセージは非同期ロードなので、届いた時点および別メッセージに移った時点で差し替える)
-    const [destinations, setDestinations] = useState<string[]>(replyDestinations)
-    const [prevReplyDestinations, setPrevReplyDestinations] = useState(replyDestinations)
-    if (prevReplyDestinations !== replyDestinations) {
-        setPrevReplyDestinations(replyDestinations)
-        setDestinations(replyDestinations)
+    // インラインのリプライ欄の投稿先。元メッセージ由来の値を初期値にしつつ、その場で編集できるようにする。
+    // action後の再取得で同じdistributesが別配列になっても、ユーザーが編集した選択は上書きしない。
+    const [replyDestinationState, setReplyDestinationState] = useState<ReplyDestinationState>({
+        postUri: props.uri,
+        defaults: replyDestinations,
+        selected: replyDestinations
+    })
+    const nextReplyDestinationState =
+        message?.uri === props.uri
+            ? reconcileReplyDestinations(replyDestinationState, props.uri, replyDestinations)
+            : replyDestinationState
+    if (nextReplyDestinationState !== replyDestinationState) {
+        setReplyDestinationState(nextReplyDestinationState)
     }
 
     const fetchAssociations = useCallback(
@@ -260,7 +267,7 @@ export const PostView = (props: Props) => {
 
                     {!loading && tab === 'replies' && (
                         <>
-                            {message && !isMobile && (
+                            {message?.uri === props.uri && !isMobile && (
                                 <div
                                     style={{
                                         padding: CssVar.space(2),
@@ -271,9 +278,11 @@ export const PostView = (props: Props) => {
                                     <Composer
                                         mode="reply"
                                         targetMessage={message}
-                                        destinations={destinations}
-                                        setDestinations={setDestinations}
-                                        defaultDestinations={replyDestinations}
+                                        destinations={nextReplyDestinationState.selected}
+                                        setDestinations={(selected) =>
+                                            setReplyDestinationState((current) => ({ ...current, selected }))
+                                        }
+                                        defaultDestinations={nextReplyDestinationState.defaults}
                                         options={knownCommunities}
                                         onPost={() => fetchAssociations('replies')}
                                     />

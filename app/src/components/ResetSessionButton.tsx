@@ -23,7 +23,7 @@ export const ResetSessionModalContent = (props: { ccid: string; onDone: () => vo
 
             <BackupKeyButton
                 ccid={props.ccid}
-                onClick={() => {
+                onBackupComplete={() => {
                     setExported(true)
                 }}
             />

@@ -41,6 +41,7 @@ export const TimelinePicker = (props: Props) => {
     const [filter, setFilter] = useState('')
 
     const inputRef = useRef<HTMLInputElement>(null)
+    const dropdownAnchorRef = useRef<HTMLDivElement>(null)
 
     const options = useMemo(() => {
         const remains = props.items.filter((i) => !props.selected.includes(props.keyFunc(i)))
@@ -56,6 +57,7 @@ export const TimelinePicker = (props: Props) => {
 
     return (
         <div
+            ref={dropdownAnchorRef}
             style={
                 {
                     display: 'flex',
@@ -192,8 +194,9 @@ export const TimelinePicker = (props: Props) => {
                 onClose={() => {}}
                 mode="manual"
                 anchor={dropdownAnchor}
+                anchorRef={dropdownAnchorRef}
+                matchAnchorWidth
                 style={{
-                    width: 'anchor-size(width)',
                     padding: 0,
                     borderRadius: '4px',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',

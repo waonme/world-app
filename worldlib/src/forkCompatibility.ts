@@ -38,6 +38,15 @@ export const canWriteBridgeSettings = (status: BridgeSettingsStatus, saving: boo
 
 export const bridgeEnabledAfterSaveFailure = (current: boolean, rollback?: boolean): boolean => rollback ?? current
 
+export const runAfterSuccessfulBackup = async <T>(
+    save: () => Promise<T>,
+    onBackupComplete?: () => void
+): Promise<T> => {
+    const result = await save()
+    onBackupComplete?.()
+    return result
+}
+
 export const atprotoFollowKey = (ccid: string, did: string): string =>
     `cckv://${ccid}/atproto.concrnt.world/follows/${CDID.newFromStringX(did).toString()}`
 

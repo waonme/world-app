@@ -1,10 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
 import { Button, Text } from '@concrnt/ui'
+import { runAfterSuccessfulBackup } from '@concrnt/worldlib'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClient } from '../contexts/Client'
 
-export const BackupKeyButton = (props: { onClick?: () => void; ccid?: string }) => {
+export const BackupKeyButton = (props: { onBackupComplete?: () => void; ccid?: string }) => {
     const { t } = useTranslation('', { keyPrefix: 'app.backupKeyButton' })
     const clientContext = useClient()
     const client = clientContext?.client
@@ -25,15 +26,18 @@ export const BackupKeyButton = (props: { onClick?: () => void; ccid?: string }) 
             <Button
                 disabled={backingUp}
                 onClick={async () => {
-                    props.onClick?.()
                     setError(null)
                     setBackingUp(true)
                     try {
-                        await invoke('backup_masterkey', {
-                            ccid: props.ccid,
-                            filename: filename,
-                            template: t('fileTemplate', { domain: client?.server?.domain ?? 'N/A' })
-                        })
+                        await runAfterSuccessfulBackup(
+                            () =>
+                                invoke('backup_masterkey', {
+                                    ccid: props.ccid,
+                                    filename: filename,
+                                    template: t('fileTemplate', { domain: client?.server?.domain ?? 'N/A' })
+                                }),
+                            props.onBackupComplete
+                        )
                     } catch (err) {
                         console.error('Failed to backup masterkey', err)
                         setError(err instanceof Error ? err.message : String(err))
