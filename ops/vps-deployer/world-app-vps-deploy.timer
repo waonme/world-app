@@ -1,0 +1,13 @@
+[Unit]
+Description=Poll waonme/world-app main for VPS deployment
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+RandomizedDelaySec=10s
+Persistent=true
+Unit=world-app-vps-deploy.service
+
+[Install]
+WantedBy=timers.target
+
