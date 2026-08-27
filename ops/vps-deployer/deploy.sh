@@ -10,7 +10,7 @@ namespace="${WORLD_APP_BUILD_NAMESPACE:-concrnt-build}"
 production_namespace="${WORLD_APP_NAMESPACE:-concrnt}"
 deployment_name="${WORLD_APP_DEPLOYMENT:-world-app}"
 container_name="${WORLD_APP_CONTAINER:-world-app}"
-node_image="node:22.22.1-bookworm-slim@sha256:4f77a690f2f8946ab16fe1e791a3ac0667ae1c3575c3e4d0d4589e9ed5bfaf3d"
+node_image="node:22.22.1-bookworm@sha256:f90672bf4c76dfc077d17be4c115b1ae7731d2e8558b457d86bca42aeb193866"
 buildkit_image="moby/buildkit:v0.32.2-rootless@sha256:504731e577c20559c00f968f33219f30115e70be29ab96728d1d06e963fc494b"
 
 repo_dir="$base_dir/repository.git"
