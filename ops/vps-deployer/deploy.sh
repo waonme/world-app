@@ -17,7 +17,7 @@ jq_version="1.8.2"
 jq_amd64_sha256="b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f"
 jq_arm64_sha256="8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309"
 
-repo_dir="$base_dir/repository.git"
+repo_dir=""
 worktrees_dir="$base_dir/worktrees"
 artifacts_dir="$base_dir/artifacts"
 cache_dir="$base_dir/cache"
@@ -76,7 +76,8 @@ cleanup_attempt() {
   fi
 
   if [ -n "$worktree_dir" ] && [ -e "$worktree_dir" ]; then
-    if ! git --git-dir="$repo_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1; then
+    if [ -n "$repo_dir" ] && [ -d "$repo_dir" ] &&
+      ! run_trusted_git --git-dir="$repo_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1; then
       echo "failed to unregister deployment worktree: $worktree_dir" >&2
       cleanup_failed=true
     fi
@@ -111,32 +112,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-require_github_repository_url "$repository_url" waonme/world-app "WORLD_APP_REPOSITORY_URL"
-
-if [ ! -d "$repo_dir" ]; then
-  for abandoned_clone in "$base_dir"/.repository.git.clone.*; do
-    [ -d "$abandoned_clone" ] || continue
-    case "${abandoned_clone##*/}" in
-      .repository.git.clone.?*) rm -rf -- "$abandoned_clone" ;;
-      *) echo "refusing unexpected mirror clone path: $abandoned_clone" >&2; exit 1 ;;
-    esac
-  done
-  mirror_clone_dir=$(mktemp -d "$base_dir/.repository.git.clone.XXXXXXXX")
-  if ! run_isolated_git clone --mirror https://github.com/waonme/world-app.git "$mirror_clone_dir"; then
-    rm -rf -- "$mirror_clone_dir"
-    exit 1
-  fi
-  require_mirror_origin_repository "$mirror_clone_dir" waonme/world-app
-  require_mirror_without_url_rewrites "$mirror_clone_dir"
-  mv "$mirror_clone_dir" "$repo_dir"
-fi
-
-if [ "$(git --git-dir="$repo_dir" rev-parse --is-bare-repository 2>/dev/null || true)" != true ]; then
-  echo "refusing incomplete or non-bare deployment mirror: $repo_dir" >&2
+if [ "$repository_url" != https://github.com/waonme/world-app.git ]; then
+  echo "WORLD_APP_REPOSITORY_URL must be the canonical HTTPS URL: https://github.com/waonme/world-app.git" >&2
   exit 1
 fi
-require_mirror_origin_repository "$repo_dir" waonme/world-app
-require_mirror_without_url_rewrites "$repo_dir"
 
 # Resolve any transaction left by TERM, SIGKILL, or power loss before starting
 # another build. A committed state is retained; an uncommitted state is fully
@@ -154,7 +133,7 @@ if ! microk8s kubectl -n "$namespace" delete job -l "app.kubernetes.io/part-of=w
   echo "failed to stop stale deployment build Jobs; refusing hostPath cleanup" >&2
   exit 1
 fi
-if ! cleanup_stale_deploy_attempts "$repo_dir" "$worktrees_dir" "$artifacts_dir"; then
+if ! cleanup_stale_deploy_attempts "$base_dir/.no-persistent-source-repository" "$worktrees_dir" "$artifacts_dir"; then
   startup_cleanup_failed=true
   echo "stale deployment directory cleanup is incomplete; continuing with a fresh isolated attempt" >&2
   mark_cleanup_issue "$state_dir" "stale deployment directory cleanup failed" || true
@@ -163,14 +142,30 @@ if [ "$startup_cleanup_failed" = false ]; then
   rm -f -- "$state_dir/cleanup-required"
 fi
 
+attempt_dir=$(mktemp -d "$artifacts_dir/deploy-source.XXXXXXXX")
+repo_dir="$attempt_dir/repository.git"
+if ! run_isolated_git clone --mirror --no-tags \
+  https://github.com/waonme/world-app.git "$repo_dir"; then
+  exit 1
+fi
+if [ "$(run_trusted_git --git-dir="$repo_dir" rev-parse --is-bare-repository 2>/dev/null || true)" != true ]; then
+  echo "refusing incomplete or non-bare deployment mirror: $repo_dir" >&2
+  exit 1
+fi
+require_fresh_mirror_config "$repo_dir"
+require_mirror_origin_repository "$repo_dir" waonme/world-app
 require_mirror_without_url_rewrites "$repo_dir"
-run_isolated_git --git-dir="$repo_dir" fetch --no-tags --prune \
+require_mirror_without_object_indirection "$repo_dir"
+run_isolated_git --git-dir="$repo_dir" fetch --no-tags --no-recurse-submodules --prune \
     https://github.com/waonme/world-app.git '+refs/heads/main:refs/remotes/origin/main'
-target_sha=$(git --git-dir="$repo_dir" rev-parse 'refs/remotes/origin/main^{commit}')
+require_fresh_mirror_config "$repo_dir"
+require_mirror_without_object_indirection "$repo_dir"
+target_sha=$(run_trusted_git --git-dir="$repo_dir" rev-parse 'refs/remotes/origin/main^{commit}')
 if [[ ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "refusing invalid target commit: $target_sha" >&2
   exit 1
 fi
+run_trusted_git --git-dir="$repo_dir" fsck --full --strict --no-reflogs --no-dangling "$target_sha"
 
 current_image=$(microk8s kubectl -n "$production_namespace" get deployment "$deployment_name" -o "jsonpath={.spec.template.spec.containers[?(@.name=='$container_name')].image}")
 recorded_deployed_sha=""
@@ -213,7 +208,6 @@ else
 fi
 
 short_sha=${target_sha:0:12}
-attempt_dir=$(mktemp -d "$artifacts_dir/deploy-$short_sha.XXXXXXXX")
 attempt_name=$(basename "$attempt_dir")
 worktree_dir="$worktrees_dir/$attempt_name"
 artifact_dir="$attempt_dir"
@@ -222,7 +216,11 @@ image_archive="$artifact_dir/world-app-$target_sha.oci.tar"
 build_job="world-app-pnpm-builder"
 image_job="world-app-image-builder"
 
-git --git-dir="$repo_dir" worktree add --detach "$worktree_dir" "$target_sha"
+require_mirror_without_object_indirection "$repo_dir"
+require_fresh_mirror_config "$repo_dir"
+run_trusted_git --git-dir="$repo_dir" worktree add --detach "$worktree_dir" "$target_sha"
+require_fresh_mirror_config "$repo_dir"
+require_mirror_without_object_indirection "$repo_dir"
 verify_exact_worktree "$repo_dir" "$worktree_dir" "$target_sha"
 
 cat <<YAML | microk8s kubectl apply -f -

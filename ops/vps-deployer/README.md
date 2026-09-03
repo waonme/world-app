@@ -4,7 +4,7 @@
 
 The source build runs in an unprivileged Kubernetes Job with no service-account token and explicit CPU/memory limits. A separate rootless BuildKit Job creates an OCI archive, which the host imports into MicroK8s containerd. The Deployment is changed only after both Jobs succeed.
 
-Before building the web bundle, the Job verifies the documented fork anchors and runs focused mute, legacy-data, recovery, reply-destination, and legacy-WebKit placement tests. The host validates the mirror's raw origin, rejects repository-local Git URL rewrite rules, disables system/global/command URL overrides, and fetches the public fork through its canonical GitHub HTTPS URL. It also refuses to follow a rewritten/non-fast-forward `main`; an ordinary revert commit remains allowed.
+Before building the web bundle, the Job verifies the documented fork anchors and runs focused mute, legacy-data, recovery, reply-destination, and legacy-WebKit placement tests. Every invocation creates a new temporary mirror directly from the canonical GitHub HTTPS URL; the historical persistent mirror is not trusted as a source or cache. The host enforces a small local-config allowlist, rejects direct/included URL rewrites, worktree config, filters, replace refs, grafts, shallow/partial repositories, attributes and alternate object stores, and disables replacement/lazy objects plus system/global/command, proxy, and custom-CA overrides. It runs a full strict object check before creating the worktree, then compares each tracked file's raw bytes and executable mode with the canonical tree's blob ID before and after the source build. It refuses a rewritten/non-fast-forward `main`; an ordinary revert commit remains allowed.
 
 Production verification requires all of the following:
 
@@ -13,7 +13,7 @@ Production verification requires all of the following:
 - `/` is reachable;
 - the JavaScript asset referenced by `/` is reachable.
 
-Each invocation builds from a fresh detached worktree, verifies its exact HEAD and tracked contents before and after the source build, and uses fresh per-attempt artifacts. A retry first stops any build Job left by an interrupted invocation, so a writable old workspace or archive can never be relabeled as the new target SHA.
+Each invocation builds from a fresh detached worktree and per-attempt mirror, verifies its exact HEAD and raw tracked contents before and after the source build, and uses fresh per-attempt artifacts. A retry first stops any build Job left by an interrupted invocation, so a writable old workspace, mirror, config, filter, or archive can never be relabeled as the new target SHA.
 
 Immediately before patching, the deployer saves the complete live Deployment and the prior `deployed-sha` in a persistent `state/inflight` transaction. The patch is conditional on that snapshot's Kubernetes `resourceVersion` and carries a unique transaction annotation. On any catchable failure or TERM after the patch begins, the EXIT handler restores the saved Deployment object—including metadata, replicas, selector, strategy, pod-template annotations, probes, pull policy, image, and sidecars—and atomically restores the prior SHA state. If the live desired state no longer matches either the saved prepatch state or this transaction's exact postpatch response, automatic replacement is refused and the journal remains for operator recovery. The atomic `deployed-sha` update is the success commit point; signals are masked across that short transition. An interrupted transaction is completed or rolled back before the next build.
 
@@ -30,7 +30,7 @@ ops/vps-deployer/test-deploy.sh
 scripts/test-prepare-upstream-sync.sh
 ```
 
-They exercise all Job terminal states, exact-worktree and non-fast-forward rejection, full fake-Kubernetes rollback, TERM-safe state transitions, stale-attempt cleanup, non-extending backoff, one-fetch smoke verification, and mirror provenance/config isolation with hostile Git settings, temporary repositories, and fake commands. CI and the VPS source-build Job run both tests. The isolated source-build Job downloads an architecture-matched jq 1.8.2 binary and verifies its pinned SHA-256 before use; the test fails instead of skipping transaction coverage when jq is unavailable. CI also runs `bash -n` over every deployer shell file.
+They exercise all Job terminal states, exact-worktree and non-fast-forward rejection, replacement-tree and clean/smudge attacks, graft/shallow/alternate/FIFO/worktree-config rejection, raw blob verification, full fake-Kubernetes rollback, TERM-safe state transitions, stale-attempt cleanup, non-extending backoff, one-fetch smoke verification, and provenance/config isolation with hostile Git settings, temporary repositories, and fake commands. CI and the VPS source-build Job run both tests. The isolated source-build Job downloads an architecture-matched jq 1.8.2 binary and verifies its pinned SHA-256 before use; the test fails instead of skipping transaction coverage when jq is unavailable. CI also runs `bash -n` over every deployer shell file.
 
 ## Releasing a deployer change
 
@@ -38,7 +38,7 @@ The deployer must be bootstrapped before the `main` commit that depends on its n
 
 1. Stop `world-app-vps-deploy.timer` and wait for any active `world-app-vps-deploy.service` invocation to finish. Do not replace files while the timer can start the script.
 2. From the reviewed integration commit, run `bash -n ops/vps-deployer/deploy.sh ops/vps-deployer/deploy-lib.sh ops/vps-deployer/test-deploy.sh` and `ops/vps-deployer/test-deploy.sh`.
-3. Confirm GNU coreutils `timeout` is available. Copy `deploy-lib.sh` to a temporary file in `/home/orange/world-app-deployer/bin`, atomically rename it into place, then do the same for `deploy.sh`. Installing the library first ensures the new script never sees an old or missing library.
+3. Confirm GNU coreutils `timeout` is available. Copy `deploy-lib.sh` to a temporary file in `/home/orange/world-app-deployer/bin`, atomically rename it into place, then do the same for `deploy.sh`. Installing the library first ensures the new script never sees an old or missing library. The former persistent `repository.git` is no longer read by the deployer; preserve or move it aside until acceptance is complete, then archive it separately if desired.
 4. Install `world-app-vps-deploy.service` at `/etc/systemd/system/world-app-vps-deploy.service`, then run `systemctl daemon-reload`. Keep the timer stopped throughout this step so the six-minute rollback timeout and control-group signal behavior are active before the new script can run.
 5. Compare SHA-256 values of both installed scripts and the installed service unit with the reviewed source files. If any differs, keep the timer stopped and restore the old matched scripts and unit.
 6. Start `world-app-vps-deploy.service` once while `main` still points at the current deployed commit. It must report that the exact SHA is already deployed and leave no unresolved `state/inflight` transaction.

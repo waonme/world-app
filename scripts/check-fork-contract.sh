@@ -20,7 +20,7 @@ require_match() {
   local pattern=$1
   local path=$2
   if command -v rg >/dev/null 2>&1; then
-    rg --quiet --fixed-strings "$pattern" "$path" && return 0
+    rg --quiet --fixed-strings -- "$pattern" "$path" && return 0
   elif grep -Fq -- "$pattern" "$path"; then
     return 0
   fi
@@ -101,13 +101,33 @@ require_match "timeout --signal=TERM --kill-after=10s 210s" ops/vps-deployer/dep
 require_match '"resourceVersion": "$prepatch_resource_version"' ops/vps-deployer/deploy.sh
 require_match "world-app.waon.me/deploy-transaction" ops/vps-deployer/deploy.sh
 require_match "require_mirror_without_url_rewrites" ops/vps-deployer/deploy.sh
-require_match "run_isolated_git clone --mirror https://github.com/waonme/world-app.git" ops/vps-deployer/deploy.sh
+require_match "require_mirror_without_object_indirection" ops/vps-deployer/deploy.sh
+require_match "require_fresh_mirror_config" ops/vps-deployer/deploy.sh
+require_match "GIT_NO_REPLACE_OBJECTS=1" ops/vps-deployer/deploy-lib.sh
+require_match "core.attributesFile=/dev/null" ops/vps-deployer/deploy-lib.sh
+require_match "-u GIT_SSL_NO_VERIFY" ops/vps-deployer/deploy-lib.sh
+require_match "-u HTTPS_PROXY" ops/vps-deployer/deploy-lib.sh
+require_match "fsck --full --strict" ops/vps-deployer/deploy.sh
+require_match "run_isolated_git clone --mirror --no-tags" ops/vps-deployer/deploy.sh
+require_match "hash-object --no-filters" ops/vps-deployer/deploy-lib.sh
 require_match "require_remote_repository origin waonme/world-app" scripts/prepare-upstream-sync.sh
 require_match "require_remote_repository upstream concrnt/world-app" scripts/prepare-upstream-sync.sh
 require_match "require_no_local_url_rewrites" scripts/prepare-upstream-sync.sh
+require_match "require_safe_invocation_config" scripts/prepare-upstream-sync.sh
+require_match "require_no_local_object_indirection" scripts/prepare-upstream-sync.sh
+require_match "require_no_hidden_index_entries" scripts/prepare-upstream-sync.sh
+require_match "require_git_attribute_source_support" scripts/prepare-upstream-sync.sh
+require_match "GIT_NO_REPLACE_OBJECTS=1" scripts/prepare-upstream-sync.sh
+require_match "core.attributesFile=/dev/null" scripts/prepare-upstream-sync.sh
+require_match '|http\..*|' scripts/prepare-upstream-sync.sh
+require_match '|diff\..*|' scripts/prepare-upstream-sync.sh
+require_match "-u GIT_SSL_NO_VERIFY" scripts/prepare-upstream-sync.sh
+require_match "-u HTTPS_PROXY" scripts/prepare-upstream-sync.sh
+require_match 'GIT_ATTR_SOURCE=$attribute_source' scripts/prepare-upstream-sync.sh
 require_match "fetch_canonical_main origin https://github.com/waonme/world-app.git" scripts/prepare-upstream-sync.sh
 require_match "fetch_canonical_main upstream https://github.com/concrnt/world-app.git" scripts/prepare-upstream-sync.sh
-require_match 'git merge --no-ff "$upstream_sha"' scripts/prepare-upstream-sync.sh
+require_match 'run_trusted_merge_git "$local_main" merge --no-ff "$upstream_sha"' scripts/prepare-upstream-sync.sh
+require_match 'if [ "$merge_parents" != "$local_main $upstream_sha" ]' scripts/prepare-upstream-sync.sh
 for path in .github/workflows/build-check.yaml ops/vps-deployer/deploy.sh; do
   require_match "ops/vps-deployer/test-deploy.sh" "$path"
   require_match "scripts/test-prepare-upstream-sync.sh" "$path"

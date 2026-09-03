@@ -3,6 +3,51 @@
 # Shared, side-effect-limited helpers for deploy.sh. This file is sourced by the
 # production deployer and by test-deploy.sh.
 
+run_trusted_git() {
+  env -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_ATTR_SOURCE \
+    -u GIT_COMMON_DIR \
+    -u GIT_CONFIG \
+    -u GIT_CONFIG_COUNT \
+    -u GIT_CONFIG_PARAMETERS \
+    -u GIT_CONFIG_SYSTEM \
+    -u GIT_DIR \
+    -u GIT_EXEC_PATH \
+    -u GIT_GRAFT_FILE \
+    -u GIT_INDEX_FILE \
+    -u GIT_NAMESPACE \
+    -u GIT_OBJECT_DIRECTORY \
+    -u GIT_REPLACE_REF_BASE \
+    -u GIT_SHALLOW_FILE \
+    -u GIT_PROXY_COMMAND \
+    -u GIT_SSL_CAINFO \
+    -u GIT_SSL_CAPATH \
+    -u GIT_SSL_NO_VERIFY \
+    -u GIT_TEMPLATE_DIR \
+    -u GIT_WORK_TREE \
+    -u ALL_PROXY \
+    -u HTTPS_PROXY \
+    -u HTTP_PROXY \
+    -u NO_PROXY \
+    -u all_proxy \
+    -u https_proxy \
+    -u http_proxy \
+    -u no_proxy \
+    -u CURL_CA_BUNDLE \
+    -u SSL_CERT_DIR \
+    -u SSL_CERT_FILE \
+    GIT_ATTR_NOSYSTEM=1 \
+    GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_GLOBAL=/dev/null \
+    GIT_GRAFT_FILE=/dev/null/world-app-disabled \
+    GIT_NO_LAZY_FETCH=1 \
+    GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_SHALLOW_FILE=/dev/null/world-app-disabled \
+    GIT_TERMINAL_PROMPT=0 \
+    git -c core.attributesFile=/dev/null -c core.commitGraph=false \
+      -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"
+}
+
 wait_for_job() {
   local job_namespace=$1
   local job_name=$2
@@ -105,7 +150,7 @@ require_mirror_origin_repository() {
   local expected_repository=$2
   local origin_url
 
-  if ! origin_url=$(git --git-dir="$repository_git_dir" config --local --get remote.origin.url 2>/dev/null); then
+  if ! origin_url=$(run_trusted_git --git-dir="$repository_git_dir" config --local --no-includes --get remote.origin.url 2>/dev/null); then
     echo "deployment mirror origin is missing" >&2
     return 1
   fi
@@ -117,7 +162,7 @@ require_mirror_without_url_rewrites() {
   local rewrite_config
   local config_status
 
-  if rewrite_config=$(git --git-dir="$repository_git_dir" config --local --get-regexp '^url\..*\.(insteadof|pushinsteadof)$' 2>/dev/null); then
+  if rewrite_config=$(run_trusted_git --git-dir="$repository_git_dir" config --local --no-includes --get-regexp '^url\..*\.(insteadof|pushinsteadof)$' 2>/dev/null); then
     echo "deployment mirror contains forbidden Git URL rewrite rules:" >&2
     printf '%s\n' "$rewrite_config" >&2
     return 1
@@ -130,10 +175,74 @@ require_mirror_without_url_rewrites() {
   fi
 }
 
+require_mirror_without_object_indirection() {
+  local repository_git_dir=$1
+  local replacement_refs
+  local dangerous_config
+  local config_status
+  local forbidden_path
+
+  for forbidden_path in \
+    "$repository_git_dir/config.worktree" \
+    "$repository_git_dir/info/grafts" \
+    "$repository_git_dir/info/attributes" \
+    "$repository_git_dir/shallow" \
+    "$repository_git_dir/objects/info/alternates" \
+    "$repository_git_dir/objects/info/http-alternates"; do
+    if [ -e "$forbidden_path" ] || [ -L "$forbidden_path" ]; then
+      echo "deployment mirror contains forbidden Git object/worktree indirection: $forbidden_path" >&2
+      return 1
+    fi
+  done
+
+  replacement_refs=$(run_trusted_git --git-dir="$repository_git_dir" \
+    for-each-ref --format='%(refname)' refs/replace/) || return 1
+  if [ -n "$replacement_refs" ]; then
+    echo "deployment mirror contains forbidden Git replacement refs:" >&2
+    printf '%s\n' "$replacement_refs" >&2
+    return 1
+  fi
+
+  if dangerous_config=$(run_trusted_git --git-dir="$repository_git_dir" \
+    config --local --no-includes --get-regexp \
+      '^(include\.path|includeif\..*\.path|extensions\.(partialclone|worktreeconfig)|remote\..*\.promisor|core\.attributesfile|filter\..*|fsck\..*|fetch\.fsckobjects|receive\.fsck\..*|transfer\.fsckobjects)$' 2>/dev/null); then
+    echo "deployment mirror contains forbidden Git config indirection:" >&2
+    printf '%s\n' "$dangerous_config" >&2
+    return 1
+  else
+    config_status=$?
+  fi
+  if [ "$config_status" -ne 1 ]; then
+    echo "failed to inspect deployment mirror Git indirection config" >&2
+    return 1
+  fi
+}
+
+require_fresh_mirror_config() {
+  local repository_git_dir=$1
+  local config_keys
+  local config_key
+
+  config_keys=$(run_trusted_git --git-dir="$repository_git_dir" \
+    config --local --no-includes --name-only --list) || return 1
+  while IFS= read -r config_key; do
+    case "$config_key" in
+      core.repositoryformatversion | core.filemode | core.bare | core.ignorecase | \
+        core.precomposeunicode | core.logallrefupdates | remote.origin.url | \
+        remote.origin.fetch | remote.origin.tagopt | remote.origin.mirror) ;;
+      "") ;;
+      *)
+        echo "fresh deployment mirror contains unexpected local config: $config_key" >&2
+        return 1
+        ;;
+    esac
+  done <<EOF_CONFIG_KEYS
+$config_keys
+EOF_CONFIG_KEYS
+}
+
 run_isolated_git() {
-  env -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
-    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
-    git -c protocol.file.allow=never "$@"
+  run_trusted_git -c protocol.file.allow=never "$@"
 }
 
 require_fast_forward_update() {
@@ -145,15 +254,15 @@ require_fast_forward_update() {
     echo "refusing fast-forward check with invalid commit state: $deployed_sha -> $target_sha" >&2
     return 1
   fi
-  if ! git --git-dir="$repository_git_dir" cat-file -e "$deployed_sha^{commit}"; then
+  if ! run_trusted_git --git-dir="$repository_git_dir" cat-file -e "$deployed_sha^{commit}"; then
     echo "refusing deployment because the recorded commit is unavailable: $deployed_sha" >&2
     return 1
   fi
-  if ! git --git-dir="$repository_git_dir" cat-file -e "$target_sha^{commit}"; then
+  if ! run_trusted_git --git-dir="$repository_git_dir" cat-file -e "$target_sha^{commit}"; then
     echo "refusing deployment because the target commit is unavailable: $target_sha" >&2
     return 1
   fi
-  if ! git --git-dir="$repository_git_dir" merge-base --is-ancestor "$deployed_sha" "$target_sha"; then
+  if ! run_trusted_git --git-dir="$repository_git_dir" merge-base --is-ancestor "$deployed_sha" "$target_sha"; then
     echo "refusing non-fast-forward main update: $deployed_sha -> $target_sha" >&2
     return 1
   fi
@@ -332,7 +441,7 @@ cleanup_stale_deploy_attempts() {
 
   for stale_path in "$worktree_parent"/deploy-*; do
     [ -e "$stale_path" ] || [ -L "$stale_path" ] || continue
-    if [ -d "$repository_git_dir" ] && ! git --git-dir="$repository_git_dir" worktree remove --force "$stale_path" >/dev/null 2>&1; then
+    if [ -d "$repository_git_dir" ] && ! run_trusted_git --git-dir="$repository_git_dir" worktree remove --force "$stale_path" >/dev/null 2>&1; then
       echo "git could not unregister stale worktree; removing validated path directly: $stale_path" >&2
     fi
     if [ -e "$stale_path" ] || [ -L "$stale_path" ]; then
@@ -342,7 +451,7 @@ cleanup_stale_deploy_attempts() {
     fi
   done
 
-  if [ -d "$repository_git_dir" ] && ! git --git-dir="$repository_git_dir" worktree prune --expire=now; then
+  if [ -d "$repository_git_dir" ] && ! run_trusted_git --git-dir="$repository_git_dir" worktree prune --expire=now; then
     echo "failed to prune stale deployment worktree registrations" >&2
     cleanup_failed=true
   fi
@@ -739,8 +848,20 @@ verify_exact_worktree() {
   local worktree_path=$2
   local expected_sha=$3
   local actual_sha
+  local tree_listing
+  local tree_entry
+  local tree_metadata
+  local relative_path
+  local mode
+  local object_type_and_id
+  local object_type
+  local expected_object_id
+  local actual_object_id
+  local full_path
+  local parent_path
+  local next_parent
 
-  if ! actual_sha=$(git -C "$worktree_path" rev-parse 'HEAD^{commit}'); then
+  if ! actual_sha=$(run_trusted_git -C "$worktree_path" rev-parse 'HEAD^{commit}'); then
     echo "cannot resolve build worktree HEAD: $worktree_path" >&2
     return 1
   fi
@@ -748,15 +869,114 @@ verify_exact_worktree() {
     echo "build worktree is at the wrong commit: expected=$expected_sha actual=$actual_sha" >&2
     return 1
   fi
-  if ! git --git-dir="$repository_git_dir" cat-file -e "$expected_sha^{commit}"; then
+  if ! run_trusted_git --git-dir="$repository_git_dir" cat-file -e "$expected_sha^{commit}"; then
     echo "expected build commit is unavailable: $expected_sha" >&2
     return 1
   fi
-  if ! git -C "$worktree_path" diff --quiet "$expected_sha" --; then
+
+  tree_listing=$(mktemp "${TMPDIR:-/tmp}/world-app-tree.XXXXXXXX") || return 1
+  if ! run_trusted_git --git-dir="$repository_git_dir" \
+    ls-tree -rz --full-tree "$expected_sha" > "$tree_listing"; then
+    rm -f -- "$tree_listing"
+    return 1
+  fi
+
+  while IFS= read -r -d '' tree_entry; do
+    tree_metadata=${tree_entry%%$'\t'*}
+    relative_path=${tree_entry#*$'\t'}
+    if [ "$relative_path" = "$tree_entry" ]; then
+      echo "malformed Git tree entry while verifying $expected_sha" >&2
+      rm -f -- "$tree_listing"
+      return 1
+    fi
+    case "$relative_path" in
+      "" | /* | .. | ../* | */.. | */../* | .git | .git/*)
+        echo "unsafe path in build tree: $relative_path" >&2
+        rm -f -- "$tree_listing"
+        return 1
+        ;;
+    esac
+
+    mode=${tree_metadata%% *}
+    object_type_and_id=${tree_metadata#* }
+    object_type=${object_type_and_id%% *}
+    expected_object_id=${object_type_and_id#* }
+    full_path="$worktree_path/$relative_path"
+
+    parent_path=${relative_path%/*}
+    while [ "$parent_path" != "$relative_path" ] && [ -n "$parent_path" ] && [ "$parent_path" != . ]; do
+      if [ ! -d "$worktree_path/$parent_path" ] || [ -L "$worktree_path/$parent_path" ]; then
+        echo "unsafe or missing parent directory for tracked path: $relative_path" >&2
+        rm -f -- "$tree_listing"
+        return 1
+      fi
+      next_parent=${parent_path%/*}
+      [ "$next_parent" != "$parent_path" ] || break
+      parent_path=$next_parent
+    done
+
+    case "$mode:$object_type" in
+      100644:blob | 100755:blob)
+        if [ ! -f "$full_path" ] || [ -L "$full_path" ]; then
+          echo "tracked regular file is missing or has the wrong type: $relative_path" >&2
+          rm -f -- "$tree_listing"
+          return 1
+        fi
+        actual_object_id=$(run_trusted_git --git-dir="$repository_git_dir" \
+          hash-object --no-filters -- "$full_path") || {
+          rm -f -- "$tree_listing"
+          return 1
+        }
+        if [ "$actual_object_id" != "$expected_object_id" ]; then
+          echo "tracked file bytes differ from the canonical tree: $relative_path" >&2
+          rm -f -- "$tree_listing"
+          return 1
+        fi
+        if { [ "$mode" = 100755 ] && [ ! -x "$full_path" ]; } ||
+          { [ "$mode" = 100644 ] && [ -x "$full_path" ]; }; then
+          echo "tracked file mode differs from the canonical tree: $relative_path" >&2
+          rm -f -- "$tree_listing"
+          return 1
+        fi
+        ;;
+      120000:blob)
+        if [ ! -L "$full_path" ]; then
+          echo "tracked symlink is missing or has the wrong type: $relative_path" >&2
+          rm -f -- "$tree_listing"
+          return 1
+        fi
+        # Stream the link value without a record delimiter. Command substitution
+        # would strip trailing newlines that are part of a valid symlink target.
+        actual_object_id=$(readlink -n -- "$full_path" |
+          run_trusted_git --git-dir="$repository_git_dir" hash-object --stdin) || {
+          rm -f -- "$tree_listing"
+          return 1
+        }
+        if [ "$actual_object_id" != "$expected_object_id" ]; then
+          echo "tracked symlink differs from the canonical tree: $relative_path" >&2
+          rm -f -- "$tree_listing"
+          return 1
+        fi
+        ;;
+      160000:commit)
+        echo "submodules are not supported in the deployment source: $relative_path" >&2
+        rm -f -- "$tree_listing"
+        return 1
+        ;;
+      *)
+        echo "unsupported Git tree entry $mode:$object_type at $relative_path" >&2
+        rm -f -- "$tree_listing"
+        return 1
+        ;;
+    esac
+  done < "$tree_listing"
+  rm -f -- "$tree_listing"
+
+  if ! run_trusted_git -C "$worktree_path" diff --no-ext-diff --no-textconv --quiet "$expected_sha" --; then
     echo "build worktree has tracked content that differs from $expected_sha" >&2
     return 1
   fi
-  if [ -n "$(git -C "$worktree_path" status --porcelain --untracked-files=all)" ]; then
+  if [ -n "$(run_trusted_git -C "$worktree_path" status --porcelain --untracked-files=all)" ]; then
     echo "build worktree contains uncommitted or untracked content" >&2
     return 1
   fi

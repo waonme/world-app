@@ -74,7 +74,8 @@ git init -q "$test_repository"
 git -C "$test_repository" config user.email test@example.invalid
 git -C "$test_repository" config user.name "World App Test"
 printf 'first\n' > "$test_repository/tracked.txt"
-git -C "$test_repository" add tracked.txt
+ln -s canonical-target "$test_repository/tracked-link"
+git -C "$test_repository" add tracked.txt tracked-link
 git -C "$test_repository" commit -q -m first
 first_sha=$(git -C "$test_repository" rev-parse HEAD)
 verify_exact_worktree "$test_repository/.git" "$test_repository" "$first_sha"
@@ -89,6 +90,13 @@ if verify_exact_worktree "$test_repository/.git" "$test_repository" "$first_sha"
   fail "untracked build-source content must be rejected"
 fi
 rm -f "$test_repository/untracked.txt"
+
+rm -f "$test_repository/tracked-link"
+ln -s $'canonical-target\n' "$test_repository/tracked-link"
+if verify_exact_worktree "$test_repository/.git" "$test_repository" "$first_sha" >/dev/null 2>&1; then
+  fail "a symlink target with extra trailing bytes must be rejected"
+fi
+git -C "$test_repository" restore --source="$first_sha" tracked-link
 
 printf 'second\n' > "$test_repository/tracked.txt"
 git -C "$test_repository" add tracked.txt
@@ -112,6 +120,7 @@ git init -q --bare "$mirror_repository"
 git --git-dir="$mirror_repository" remote add origin git@github.com:waonme/world-app.git
 require_mirror_origin_repository "$mirror_repository" waonme/world-app
 require_mirror_without_url_rewrites "$mirror_repository"
+require_fresh_mirror_config "$mirror_repository"
 git --git-dir="$mirror_repository" config url.file:///tmp/lookalike.insteadOf https://github.com/waonme/world-app.git
 if require_mirror_without_url_rewrites "$mirror_repository" >/dev/null 2>&1; then
   fail "deployment mirror URL rewrite rules must be rejected"
@@ -131,11 +140,26 @@ mkdir -p "$isolated_git_bin"
 cat > "$isolated_git_bin/git" <<'FAKE_ISOLATED_GIT'
 #!/usr/bin/env bash
 [ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] || exit 11
+[ "${GIT_ATTR_NOSYSTEM:-}" = 1 ] || exit 10
 [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] || exit 12
 [ "${GIT_TERMINAL_PROMPT:-}" = 0 ] || exit 13
 [ -z "${GIT_CONFIG_COUNT+x}" ] || exit 14
 [ -z "${GIT_CONFIG_PARAMETERS+x}" ] || exit 15
-[ "${1:-}" = -c ] && [ "${2:-}" = protocol.file.allow=never ] || exit 16
+[ -z "${GIT_CONFIG+x}" ] || exit 24
+[ -z "${GIT_ATTR_SOURCE+x}" ] || exit 25
+[ "${GIT_NO_REPLACE_OBJECTS:-}" = 1 ] || exit 16
+[ "${GIT_NO_LAZY_FETCH:-}" = 1 ] || exit 17
+[ -z "${GIT_REPLACE_REF_BASE+x}" ] || exit 18
+[ -z "${GIT_OBJECT_DIRECTORY+x}" ] || exit 19
+[ -z "${GIT_ALTERNATE_OBJECT_DIRECTORIES+x}" ] || exit 20
+[ "${GIT_GRAFT_FILE:-}" = /dev/null/world-app-disabled ] || exit 22
+[ "${GIT_SHALLOW_FILE:-}" = /dev/null/world-app-disabled ] || exit 23
+[ -z "${GIT_SSL_NO_VERIFY+x}" ] || exit 26
+[ -z "${GIT_SSL_CAINFO+x}" ] || exit 27
+[ -z "${HTTPS_PROXY+x}" ] || exit 28
+[ -z "${https_proxy+x}" ] || exit 29
+[ -z "${CURL_CA_BUNDLE+x}" ] || exit 30
+[ "$*" = "-c core.attributesFile=/dev/null -c core.commitGraph=false -c core.fsmonitor=false -c core.hooksPath=/dev/null -c protocol.file.allow=never fetch canonical-sentinel" ] || exit 21
 printf '%s\n' "$*" > "$WORLD_APP_TEST_ISOLATED_GIT_LOG"
 FAKE_ISOLATED_GIT
 chmod +x "$isolated_git_bin/git"
@@ -148,11 +172,131 @@ chmod +x "$isolated_git_bin/git"
   export GIT_CONFIG_KEY_0=http.extraHeader
   export GIT_CONFIG_VALUE_0='Authorization: hostile-command-config'
   export GIT_CONFIG_PARAMETERS=hostile
+  export GIT_CONFIG="$task_test_dir/hostile-config"
+  export GIT_ATTR_SOURCE=hostile-attribute-tree
+  export GIT_REPLACE_REF_BASE=refs/hostile-replacements
+  export GIT_GRAFT_FILE="$task_test_dir/hostile-grafts"
+  export GIT_SHALLOW_FILE="$task_test_dir/hostile-shallow"
+  export GIT_OBJECT_DIRECTORY="$task_test_dir/hostile-objects"
+  export GIT_ALTERNATE_OBJECT_DIRECTORIES="$task_test_dir/hostile-alternates"
+  export GIT_SSL_NO_VERIFY=1
+  export GIT_SSL_CAINFO="$task_test_dir/hostile-ca.pem"
+  export HTTPS_PROXY=http://127.0.0.1:9
+  export https_proxy=http://127.0.0.1:9
+  export CURL_CA_BUNDLE="$task_test_dir/hostile-curl-ca.pem"
   export PATH="$isolated_git_bin:$PATH"
   run_isolated_git fetch canonical-sentinel
 ) || fail "deployment Git transport did not isolate hostile config sources"
-assert_equal "-c protocol.file.allow=never fetch canonical-sentinel" "$(cat "$isolated_git_log")" \
+assert_equal "-c core.attributesFile=/dev/null -c core.commitGraph=false -c core.fsmonitor=false -c core.hooksPath=/dev/null -c protocol.file.allow=never fetch canonical-sentinel" "$(cat "$isolated_git_log")" \
   "deployment Git transport must retain only its explicit protocol policy"
+
+# A replace ref can make a worktree contain a substitute tree while HEAD still
+# reports the canonical commit. Both the mirror gate and byte/tree verification
+# must reject that state, and trusted Git commands must ignore the replacement.
+replace_repository="$task_test_dir/replace-repository"
+replace_attacked_worktree="$task_test_dir/replace-attacked-worktree"
+replace_trusted_worktree="$task_test_dir/replace-trusted-worktree"
+git init -q "$replace_repository"
+git -C "$replace_repository" config user.email test@example.invalid
+git -C "$replace_repository" config user.name "World App Test"
+printf 'canonical\n' > "$replace_repository/payload.txt"
+git -C "$replace_repository" add payload.txt
+git -C "$replace_repository" commit -q -m canonical
+canonical_branch=$(git -C "$replace_repository" branch --show-current)
+canonical_sha=$(git -C "$replace_repository" rev-parse HEAD)
+git -C "$replace_repository" switch -q --orphan substitute
+printf 'substituted\n' > "$replace_repository/payload.txt"
+git -C "$replace_repository" add payload.txt
+git -C "$replace_repository" commit -q -m substitute
+substitute_sha=$(git -C "$replace_repository" rev-parse HEAD)
+git -C "$replace_repository" switch -q "$canonical_branch"
+git -C "$replace_repository" replace "$canonical_sha" "$substitute_sha"
+git --git-dir="$replace_repository/.git" worktree add -q --detach "$replace_attacked_worktree" "$canonical_sha"
+assert_equal substituted "$(tr -d '\n' < "$replace_attacked_worktree/payload.txt")" \
+  "held-out attack fixture must materialize the replacement tree"
+if verify_exact_worktree "$replace_repository/.git" "$replace_attacked_worktree" "$canonical_sha" >/dev/null 2>&1; then
+  fail "exact-worktree verification accepted a replacement tree under the canonical SHA"
+fi
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted refs/replace indirection"
+fi
+run_trusted_git --git-dir="$replace_repository/.git" worktree add -q --detach \
+  "$replace_trusted_worktree" "$canonical_sha"
+assert_equal canonical "$(tr -d '\n' < "$replace_trusted_worktree/payload.txt")" \
+  "trusted worktree creation must ignore replacement refs"
+run_trusted_git --git-dir="$replace_repository/.git" worktree remove --force "$replace_attacked_worktree"
+run_trusted_git --git-dir="$replace_repository/.git" worktree remove --force "$replace_trusted_worktree"
+git -C "$replace_repository" replace -d "$canonical_sha" >/dev/null
+
+mkdir -p "$replace_repository/.git/info" "$replace_repository/.git/objects/info"
+printf '%s\n' "$canonical_sha" > "$replace_repository/.git/info/grafts"
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted info/grafts ancestry rewriting"
+fi
+rm -f "$replace_repository/.git/info/grafts"
+mkfifo "$replace_repository/.git/info/grafts"
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted a FIFO graft source"
+fi
+rm -f "$replace_repository/.git/info/grafts"
+printf '%s\n' "$canonical_sha" > "$replace_repository/.git/shallow"
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted shallow ancestry"
+fi
+rm -f "$replace_repository/.git/shallow"
+printf '%s\n' /tmp/hostile-object-store > "$replace_repository/.git/objects/info/alternates"
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted an alternate object database"
+fi
+rm -f "$replace_repository/.git/objects/info/alternates"
+git -C "$replace_repository" config extensions.partialClone hostile
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted partial-clone object indirection"
+fi
+git -C "$replace_repository" config --unset extensions.partialClone
+git -C "$replace_repository" config include.path /tmp/hostile-deployment-config
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted included config indirection"
+fi
+git -C "$replace_repository" config --unset include.path
+
+filter_attributes="$task_test_dir/hostile-attributes"
+filter_worktree="$task_test_dir/filter-attacked-worktree"
+printf 'payload.txt filter=evil\n' > "$filter_attributes"
+git -C "$replace_repository" config core.attributesFile "$filter_attributes"
+git -C "$replace_repository" config filter.evil.smudge 'sed s/canonical/PWNED/'
+git -C "$replace_repository" config filter.evil.clean 'sed s/PWNED/canonical/'
+git --git-dir="$replace_repository/.git" worktree add -q --detach \
+  "$filter_worktree" "$canonical_sha"
+assert_equal PWNED "$(tr -d '\n' < "$filter_worktree/payload.txt")" \
+  "filter attack fixture must alter materialized bytes"
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted a local clean/smudge filter"
+fi
+if require_fresh_mirror_config "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "fresh mirror allowlist accepted a local clean/smudge filter"
+fi
+if verify_exact_worktree "$replace_repository/.git" "$filter_worktree" "$canonical_sha" >/dev/null 2>&1; then
+  fail "raw worktree oracle accepted bytes hidden by a clean filter"
+fi
+run_trusted_git --git-dir="$replace_repository/.git" worktree remove --force "$filter_worktree"
+git -C "$replace_repository" config --unset core.attributesFile
+git -C "$replace_repository" config --remove-section filter.evil
+
+git -C "$replace_repository" config extensions.worktreeConfig true
+printf '[url "https://lookalike.invalid/"]\n\tinsteadOf = https://github.com/\n' > \
+  "$replace_repository/.git/config.worktree"
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted worktree-scope config"
+fi
+rm -f "$replace_repository/.git/config.worktree"
+git -C "$replace_repository" config --unset extensions.worktreeConfig
+
+git -C "$replace_repository" config fsck.missingEmail ignore
+if require_mirror_without_object_indirection "$replace_repository/.git" >/dev/null 2>&1; then
+  fail "deployment mirror accepted local fsck weakening"
+fi
+git -C "$replace_repository" config --unset fsck.missingEmail
 
 stale_worktrees="$task_test_dir/worktrees"
 stale_artifacts="$task_test_dir/artifacts"
@@ -552,8 +696,12 @@ grep -Fq 'TimeoutStartSec=60min' "$service_unit" || fail "systemd must cover bot
 grep -Fq 'KillMode=control-group' "$service_unit" || fail "systemd must interrupt the active child so the deployer TERM trap runs promptly"
 grep -Fq 'wait_for_deployment_rollout "$production_namespace" "$deployment_name"' "$deploy_script" || fail "forward rollout must use the hard-bounded helper"
 grep -Fq 'timeout --signal=TERM --kill-after=10s 210s' "$deploy_library" || fail "rollout helper must hard-bound the complete kubectl process group"
-grep -Fq 'run_isolated_git clone --mirror https://github.com/waonme/world-app.git' "$deploy_script" || fail "mirror clone must use isolated canonical Git transport"
+grep -Fq 'run_isolated_git clone --mirror --no-tags' "$deploy_script" || fail "fresh mirror clone must use isolated canonical Git transport"
 grep -Fq 'run_isolated_git --git-dir="$repo_dir" fetch' "$deploy_script" || fail "mirror fetch must use isolated canonical Git transport"
+grep -Fq 'require_fresh_mirror_config "$repo_dir"' "$deploy_script" || fail "each deployment must enforce the fresh mirror config allowlist"
+grep -Fq 'require_mirror_without_object_indirection "$repo_dir"' "$deploy_script" || fail "deployment must reject replace, graft, shallow, and alternate object indirection"
+grep -Fq 'run_trusted_git --git-dir="$repo_dir" worktree add' "$deploy_script" || fail "worktree creation must disable replacement objects"
+grep -Fq 'hash-object --no-filters' "$deploy_library" || fail "worktree verification must compare raw bytes with canonical blob IDs"
 grep -Fq '"resourceVersion": "$prepatch_resource_version"' "$deploy_script" || fail "Deployment patch must be conditional on the prepatch resourceVersion"
 grep -Fq 'world-app.waon.me/deploy-transaction' "$deploy_script" || fail "Deployment patch must carry its transaction identity"
 
