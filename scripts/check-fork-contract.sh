@@ -77,6 +77,10 @@ require_match "disabled={!exported}" web/src/components/ResetSessionButton.tsx
 require_match "runAfterSuccessfulBackup" app/src/components/BackupKeyButton.tsx
 require_match "onBackupComplete" app/src/components/ResetSessionButton.tsx
 require_match "resolverCCID" app/src/views/Welcome.tsx
+require_match "Web は recovery data の生成とブラウザ管理 download の開始を成功境界とする。" FORK.md
+require_match "browser-managed download is initiated" .quality/contracts/upstream-friendly-fork.md
+require_match "anchor.click()" web/src/components/EmergencyKit.tsx
+require_match "anchor.click()" web/src/components/ResetSessionButton.tsx
 
 # F-005: immutable SHA image and deployed-commit smoke check.
 require_file ops/vps-deployer/deploy-lib.sh
