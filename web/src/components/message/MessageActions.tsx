@@ -287,9 +287,19 @@ export const MessageActions = (props: Props) => {
                     >
                         <Text>{sourceCopied ? t('linkCopied') : t('copySource')}</Text>
                     </ListItem>,
-                    <ListItem key="delete" onClick={() => setDeleteConfirmOpen(true)}>
-                        <Text>{t('deletePost')}</Text>
-                    </ListItem>,
+                    ...(props.message.author === client?.ccid
+                        ? [
+                              <ListItem
+                                  key="delete"
+                                  onClick={() => {
+                                      setMenuOpen(false)
+                                      setDeleteConfirmOpen(true)
+                                  }}
+                              >
+                                  <Text>{t('deletePost')}</Text>
+                              </ListItem>
+                          ]
+                        : []),
                     ...(props.message.author !== client?.ccid
                         ? [
                               <ListItem

@@ -477,6 +477,7 @@ const Body = (props: BodyProps) => {
                                         stack.push(
                                             <AcknowledgeListView
                                                 targetCcid={props.ccid}
+                                                targetDomain={props.user.domain}
                                                 initialTab="acknowledging"
                                                 title={profile.value.username}
                                             />
@@ -491,6 +492,7 @@ const Body = (props: BodyProps) => {
                                         stack.push(
                                             <AcknowledgeListView
                                                 targetCcid={props.ccid}
+                                                targetDomain={props.user.domain}
                                                 initialTab="acknowledgers"
                                                 title={profile.value.username}
                                             />
