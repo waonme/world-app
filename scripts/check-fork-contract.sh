@@ -54,10 +54,12 @@ for path in web/src/components/message/main.tsx app/src/components/message/main.
   require_match "combineMuteMatches" "$path"
 done
 for path in web/src/components/message/MessageActions.tsx app/src/components/message/MessageActions.tsx; do
+  require_match "messageAuthorMenuAction" "$path"
   require_match 'key="muteAuthor"' "$path"
   require_match "MuteDurationSelect" "$path"
   require_match ".mute({ type: 'user', target: props.message.author, expiresAt })" "$path"
 done
+require_match "message author menu offers delete to self and mute to another author" worldlib/test/mute.test.cjs
 
 # F-002: constrained v1 fallback and mutation guards after partial loads.
 require_match "/api/v1/message/" client/src/api.ts

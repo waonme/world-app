@@ -40,6 +40,13 @@ export interface CombinedMuteMatches {
     fullyHidden: boolean
 }
 
+export type MessageAuthorMenuAction = 'delete' | 'mute'
+
+// 投稿者本人には削除、それ以外にはフォーク固有のauthor muteを出す。
+// app/webの競合解消を同じ判定に固定する。
+export const messageAuthorMenuAction = (author: string, viewer?: string): MessageAuthorMenuAction =>
+    author === viewer ? 'delete' : 'mute'
+
 // NFKC正規化で全角半角・半角カナの揺れを吸収してから比較する
 export const normalizeMuteText = (text: string): string => text.normalize('NFKC').toLowerCase()
 

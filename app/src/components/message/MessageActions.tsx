@@ -1,6 +1,13 @@
 import { Button, Confirm, ListItem, Select, Text } from '@concrnt/ui'
 import { useTranslation } from 'react-i18next'
-import { Association, LikeAssociationSchema, Schemas, type Message, type RerouteMessageSchema } from '@concrnt/worldlib'
+import {
+    Association,
+    LikeAssociationSchema,
+    Schemas,
+    messageAuthorMenuAction,
+    type Message,
+    type RerouteMessageSchema
+} from '@concrnt/worldlib'
 import { useClient } from '../../contexts/Client'
 import { useComposer } from '../../contexts/Composer'
 import { usePostContext } from '../../contexts/PostContext'
@@ -50,6 +57,7 @@ export const MessageActions = (props: Props) => {
     const qt = useQueryTimelineContext()
     const { push } = useStack()
     const messageHref = props.message.key ?? props.message.uri
+    const authorMenuAction = messageAuthorMenuAction(props.message.author, client?.ccid)
 
     // シェア用URLはデプロイ先ホストに関わらずconcrnt.world固定(OGP対応がconcrnt.worldのみのため)
     const shareURL = 'https://concrnt.world/post/' + encodeURIComponent(props.message.uri)
@@ -271,7 +279,7 @@ export const MessageActions = (props: Props) => {
                     >
                         <Text>{t('copySource')}</Text>
                     </ListItem>,
-                    ...(props.message.author === client?.ccid
+                    ...(authorMenuAction === 'delete'
                         ? [
                               <ListItem
                                   key="delete"
@@ -284,7 +292,7 @@ export const MessageActions = (props: Props) => {
                               </ListItem>
                           ]
                         : []),
-                    ...(props.message.author !== client?.ccid
+                    ...(authorMenuAction === 'mute'
                         ? [
                               <ListItem
                                   key="muteAuthor"

@@ -6,10 +6,16 @@ const {
     combineMuteMatches,
     findMute,
     isMuteEntryExpired,
+    messageAuthorMenuAction,
     muteEntryId,
     normalizeMuteText,
     normalizeMuteWord
 } = require('../dist/cjs/mute.js')
+
+test('message author menu offers delete to self and mute to another author', () => {
+    assert.equal(messageAuthorMenuAction('cc1viewer', 'cc1viewer'), 'delete')
+    assert.equal(messageAuthorMenuAction('cc1author', 'cc1viewer'), 'mute')
+})
 
 test('combined message boundaries keep block and hard-hide matches unrevealable', () => {
     const outerWord = { reason: 'word', value: 'outer', entry: { type: 'word', target: 'outer' } }
