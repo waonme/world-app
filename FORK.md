@@ -11,7 +11,7 @@
 | `integrate/upstream-*` | upstream 取り込み、競合解決、検証、PR 用 |
 | `origin/dev` | 旧独自仕様の履歴参照。新規開発・配備には使わない |
 
-本統合の固定点は upstream `68e42e67d4a966365d43b9f47cd1682f7195e384`、旧仕様の参照点は `origin/dev` の `52dd8f82671a1eb0a083e642f71e71087ef108e1` です。
+本統合の固定点は upstream `2339365ce35516b8cd6869d5eff30f0b0186d9e1`、旧仕様の参照点は `origin/dev` の `52dd8f82671a1eb0a083e642f71e71087ef108e1` です。
 
 `.github/workflows/build-check.yaml` はPR実行時点の `concrnt/world-app` main がHEADに含まれることを必須検査します。`.github/workflows/upstream-status.yaml` は毎週 `origin/main` との差を再確認し、未取り込みcommitがあれば失敗として通知します。どちらも自動mergeは行いません。
 

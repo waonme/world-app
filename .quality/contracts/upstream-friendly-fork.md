@@ -4,7 +4,7 @@
 - Status: IMPLEMENTED / PRE-MERGE GATE
 - Risk tier: High
 - Source specification: user direction on 2026-08-27; [mute PR #2](https://github.com/waonme/world-app/pull/2); fork PRs #3-#15; production incident where the VPS moved from `dev` behavior to a `main` build without fork features; independent falsification review of upstream `75cc475` / `35a8f90`
-- Approved revision: integration branch based on production `85e58db`, frozen upstream cut `68e42e6`; final PR head is recorded by the review PR
+- Approved revision: integration branch based on production `85e58db`, frozen upstream cut `2339365`; final PR head is recorded by the review PR
 - Approved by: repository owner direction; final diff approval pending
 - Change boundary: branch policy, upstream integration workflow, production deployment contract, fork-specific web/app/client/worldlib behavior, regression tests and documentation
 
@@ -41,7 +41,7 @@ arakoshi.com keeps its documented mute, ActivityPub, legacy-content, session-rec
 
 - `main` is polled and deployed by `ops/vps-deployer`; `/cc-info` reports the deployed main commit.
 - The previous fork feature line is `origin/dev`; mute was merged there by PR #2 and never existed on the pre-sync `main`.
-- The integration branch contains the frozen upstream cut `68e42e6`; production `main` remains at `85e58db` until the reviewed PR is merged.
+- The integration branch contains the frozen upstream cut `2339365`; production `main` remains at `85e58db` until the reviewed PR is merged.
 - `origin/dev` contains additional mute, ActivityPub, legacy-v1, theme/style, and session/bridge changes, but its historical tests were not all retained through earlier upstream integrations.
 - The current production deployment at `85e58db` lacks the mute implementation.
 
