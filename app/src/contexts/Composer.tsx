@@ -11,16 +11,6 @@ import { useKeyboard } from './Keyboard'
 
 export type ComposerMode = 'normal' | 'reply' | 'reroute'
 
-export type EditorMode = 'plaintext' | 'markdown' | 'media'
-
-export interface DraftBuffer {
-    draftText: string
-    mediaDrafts: Array<{ file: File; flag?: string }>
-    emojiDict: Record<string, { imageURL: string }>
-    postHome: boolean
-    editorMode?: EditorMode
-}
-
 interface ComposerContextState {
     open: (
         destinations: string[],
@@ -52,7 +42,6 @@ export const ComposerProvider = (props: Props) => {
     const [mode, setMode] = useState<ComposerMode>('normal')
     const [targetMessage, setTargetMessage] = useState<Message<any> | undefined>(undefined)
     const [profile, setProfile] = useState<string | undefined>(undefined)
-    const [draftBuffer, setDraftBuffer] = useState<DraftBuffer | null>(null)
 
     const [knownCommunities] = useSubscribe(client.knownCommunities)
 
@@ -128,8 +117,6 @@ export const ComposerProvider = (props: Props) => {
                             options={options}
                             mode={mode}
                             targetMessage={targetMessage}
-                            draftBuffer={mode === 'normal' ? draftBuffer : null}
-                            onSaveDraft={mode === 'normal' ? setDraftBuffer : undefined}
                             initialProfile={profile}
                             onClosed={close}
                         />
@@ -148,8 +135,6 @@ const ComposerOverlay = (props: {
     options: Timeline[]
     mode: ComposerMode
     targetMessage?: Message<any>
-    draftBuffer?: DraftBuffer | null
-    onSaveDraft?: (buf: DraftBuffer) => void
     initialProfile?: string
     onClosed: () => void
 }) => {
@@ -178,11 +163,15 @@ const ComposerOverlay = (props: {
                 >
                     <div
                         style={{
-                            height: `calc(100dvh - ${keyboard.height}px - env(safe-area-inset-top))`,
+                            // disableInputAccessoryViewによりアクセサリービューが無いため、キーボードとの隙間を自前で確保する
+                            height: `calc(100dvh - ${keyboard.height}px - env(safe-area-inset-top) - ${
+                                keyboard.visible ? CssVar.space(2) : '0px'
+                            })`,
                             display: 'flex',
                             flexDirection: 'column',
-                            maxHeight: '50vh',
-                            transition: `height ${keyboard.duration || 0.1}s ease-out`
+                            maxHeight: '80vh',
+                            // iOSキーボードは立ち上がりの速いスプリングで動くため、ease-outだと追従が遅れて見える
+                            transition: `height ${keyboard.duration || 0.1}s cubic-bezier(0.22, 1, 0.36, 1)`
                         }}
                     >
                         <div
@@ -222,8 +211,6 @@ const ComposerOverlay = (props: {
                                 options={props.options}
                                 mode={props.mode}
                                 targetMessage={props.targetMessage}
-                                draftBuffer={props.draftBuffer}
-                                onSaveDraft={props.onSaveDraft}
                                 initialProfile={props.initialProfile}
                                 onPost={() => setWillClose(true)}
                             />

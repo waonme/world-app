@@ -14,8 +14,11 @@
         "reload": "Reload",
         "recoverTools": "Recovery Tools",
         "whenToUseTools": "If reloading doesn’t help after 3 tries ↓",
-        "softReset": "Reset everything except login info and reload",
-        "hardReset": "Reset everything (login info will also be lost)",
+    "softReset": "Reset everything except login info and reload",
+    "backupRecoveryKeys": "Back up login information",
+    "backupRequired": "Back up your login information before resetting everything.",
+    "confirmHardReset": "This removes all Concrnt data from this browser, including the login information you backed up. Continue?",
+    "hardReset": "Reset everything (login info will also be lost)",
         "support": "Support",
         "supportDesc": "If reloading doesn't resolve the issue, there may be a serious problem. Check the latest updates using the link below.",
         "reportFailed": "Failed to send report (Hint: This only works on official deployments)",
@@ -43,6 +46,7 @@
             "lists": "Lists",
             "media": "Media",
             "notifications": "Notifications",
+            "mute": "Mute",
             "migration": "Migration",
             "v1import": "Import from v1",
             "devTools": "Developer Tools",
@@ -64,6 +68,20 @@
         },
         "languageSettings": {
             "title": "Language"
+        },
+        "muteSettings": {
+            "title": "Mute",
+            "muteBlockedUsers": "Also hide blocked users",
+            "muteBlockedUsersDesc": "Hide posts from users you have blocked.",
+            "users": "Muted users",
+            "words": "Muted words",
+            "timelines": "Muted timelines",
+            "noEntries": "Nothing here yet",
+            "add": "Add",
+            "wordPlaceholder": "Word to mute",
+            "until": "until {{date}}",
+            "indefinite": "Indefinite",
+            "reroutesOnly": "reroutes only"
         },
         "themeSettings": {
             "title": "Theme",
@@ -299,6 +317,10 @@
             "unblockConfirmTitle": "Are you sure you want to unblock this user?",
             "unblockConfirmDescription": "Unblocking will allow this user to reply to you and react to your posts again.",
             "unblock": "Unblock",
+            "mute": "Mute",
+            "unmute": "Unmute",
+            "hideReroutes": "Hide reroutes",
+            "showReroutes": "Show reroutes",
             "noDescription": "No description yet",
             "followsYou": "Follows you",
             "following": "{{n}} Following",
@@ -311,7 +333,14 @@
             "createCommunity": "Create Community",
             "create": "Create",
             "name": "Name",
-            "description": "Description"
+            "description": "Description",
+            "addToList": "Add to list",
+            "doNotAddToList": "Do not add to a list",
+            "listUnavailable": "The selected list is unavailable",
+            "listLoadFailed": "Could not load lists. Please try again.",
+            "retryAddToList": "Retry adding to list",
+            "loading": "Loading...",
+            "retryLists": "Reload lists"
         },
         "dev": {
             "developerMode": "Developer Mode",
@@ -420,7 +449,9 @@
         "bluesky": {
             "title": "Bluesky Settings",
             "loading": "Loading...",
-            "unavailable": "Failed to communicate with the Bluesky bridge.",
+        "unavailable": "Failed to communicate with the Bluesky bridge.",
+        "settingsLoadFailed": "Saved Bluesky settings could not be loaded. Changes are temporarily disabled.",
+        "settingsSaveFailed": "Bluesky settings could not be saved. Please try again.",
             "enableIntro": "Let's enable Bluesky integration",
             "enableDescription": "Enabling integration lets you connect with the Bluesky (AT Protocol) network. You need a domain you own — it becomes your Bluesky handle.",
             "handleLabel": "Your handle (a domain you own)",
@@ -478,7 +509,15 @@
             "createList": "Create List",
             "create": "Create",
             "listTitle": "Title",
-            "openSettings": "List settings"
+            "openSettings": "List settings",
+            "noCommunities": "No communities",
+            "communitiesLoadFailed": "Could not load communities",
+            "retry": "Retry",
+            "communityUnavailable": "Community unavailable",
+            "pinOnCreate": "Pin it",
+            "creating": "Creating...",
+            "createFailed": "Failed to create the list. Please try again.",
+            "pinFailed": "The list was created, but pinning failed. You can pin it later from the list."
         }
     },
     "components": {
@@ -495,6 +534,7 @@
             "cannotPostOffline": "You can't post while offline",
             "resetDestination": "Reset destinations to default",
             "dropToUpload": "Drop to upload",
+            "mediaEditTitle": "Media preview and settings",
             "flagTitle": "Content flag (optional)",
             "flagNone": "None",
             "flagWarn": "Content Warning",
@@ -552,11 +592,28 @@
             "confirmDelete": "Really delete this post?",
             "delete": "Delete",
             "deletePost": "Delete post",
+            "muteAuthor": "Mute author",
             "report": "Report",
             "inspector": "Inspector",
             "share": "Share",
             "copyLink": "Copy link",
-            "linkCopied": "Copied"
+            "linkCopied": "Copied",
+            "copySource": "Copy source"
+        },
+        "muteNotice": {
+            "mutedByUser": "Post from a muted user",
+            "mutedByWord": "Post with a muted word",
+            "mutedByTimeline": "Post in a muted timeline",
+            "show": "Show",
+            "unmute": "Unmute"
+        },
+        "muteDurationSelect": {
+            "title": "Mute duration",
+            "for1hour": "1 hour",
+            "for1day": "24 hours",
+            "for1week": "1 week",
+            "for1month": "1 month",
+            "indefinite": "Indefinite"
         },
         "collapsibleBody": {
             "showMore": "Show more"
@@ -581,9 +638,10 @@
             "loading": "Loading..."
         },
         "renderError": {
-            "messageDeleted": "This message has been deleted",
+            "messageUnavailable": "This message could not be loaded",
             "serverOffline": "The server hosting this message is offline",
-            "cannotDisplay": "This message cannot be displayed"
+            "cannotDisplay": "This message cannot be displayed",
+            "retry": "Retry"
         },
         "replyAssociation": {
             "loading": "Loading..."
@@ -729,12 +787,22 @@
             "postProfile": "Posting profile",
             "addDestination": "Add destination"
         },
+        "serverChip": {
+            "codeOfConduct": "Code of Conduct",
+            "cocNotAvailable": "Code of Conduct is not available.",
+            "termsOfService": "Terms of Service"
+        },
         "timelineSettings": {
             "schema": "Schema",
             "attributes": "Attributes",
             "share": "Share",
             "copyLink": "Copy link",
-            "linkCopied": "Copied"
+            "linkCopied": "Copied",
+            "muteTimeline": "Mute this timeline",
+            "unmuteTimeline": "Unmute",
+            "deleteTimeline": "Delete Community",
+            "confirmDeleteTimeline": "Really delete this community?",
+            "confirmDeleteTimelineDescription": "This action cannot be undone."
         },
         "policyEditor": {
             "modeEditor": "Policy Editor",
@@ -914,6 +982,7 @@
         },
         "qrSetup": {
             "scanWithApp": "Scan the QR code with the Concrnt app",
+            "scanWithAppHint": "You can find the scanner in the app under Settings > ID Management",
             "usePasskeyTitle": "Use a passkey?",
             "usePasskeyDescription": "Passkeys are recommended, but may not be available on some devices or browsers.",
             "no": "No",

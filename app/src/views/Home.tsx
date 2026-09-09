@@ -21,6 +21,7 @@ import { ListName } from '../components/ListName'
 import { ProfileEditor } from '../components/ProfileEditor'
 import { useSubscribe } from '../hooks/useSubscribe'
 import { usePreference } from '../contexts/Preference'
+import { MuteScopeProvider } from '../contexts/Mute'
 import { sortByListOrder } from '../utils/listOrder'
 
 export const HomeView = (props: ScrollViewProps) => {
@@ -226,5 +227,9 @@ const Timeline = (props: { list: List; excludeSelf?: boolean; ref?: ScrollViewRe
         [self, items, props.excludeSelf]
     )
 
-    return <RealtimeTimeline ref={props.ref} timelines={timelines} />
+    return (
+        <MuteScopeProvider context="home">
+            <RealtimeTimeline ref={props.ref} timelines={timelines} />
+        </MuteScopeProvider>
+    )
 }

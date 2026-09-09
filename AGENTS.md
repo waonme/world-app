@@ -14,3 +14,11 @@
 - classNameを手書きの文字列で使わないでください。かわりに、style属性をつかい生のオブジェクトを渡してください。
 - 疑似クラスや@keyframesなど、インラインstyleで表現できないスタイルが必要な場合は、コンポーネントと1対1対応するCSS Modulesファイル(`Foo.tsx`に対して`Foo.module.css`)を隣に置いて使ってください。複数コンポーネントで共有するcssファイルは作らないでください。keyframes名もCSS Modulesのexport経由(`styles.spin`)で参照してください。
 - JSXへの`<style>`タグ埋め込みや、`document.head`へのstyle要素の注入は禁止です。
+
+## フォークの保守方針
+
+- `main` は arakoshi.com に自動配備される本番ブランチです。直接の実験、upstream への hard reset、force push を行わないでください。
+- upstream の取り込みは、最新の `origin/main` から `scripts/prepare-upstream-sync.sh` で作った `integrate/upstream-*` ブランチ上で行い、必須ゲートを通した PR だけを `main` にマージします。
+- 競合解決前に `FORK.md` を読み、`ours` / `theirs` を機械的に選ばず、安定 ID ごとのユーザー向け挙動を維持してください。
+- 独自仕様を追加・変更・廃止するときは、同じ PR で `FORK.md` の台帳、対応するテスト、必要なら `.quality/contracts/` の品質契約を更新してください。
+- `app` と `web` の共通機能は両方に反映し、プラットフォーム固有のルーティングや UI 以外は挙動を揃えてください。

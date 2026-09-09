@@ -1,0 +1,50 @@
+name: Upstream status
+
+on:
+    schedule:
+        # Monday 09:17 JST. A non-round minute avoids the busiest scheduler window.
+        - cron: '17 0 * * 1'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    upstream-status:
+        name: upstream-status
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+
+        steps:
+            - name: Checkout fork
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Fetch upstream main
+              run: |
+                  git remote add upstream https://github.com/concrnt/world-app.git
+                  git fetch --no-tags upstream +refs/heads/main:refs/remotes/upstream/main
+
+            - name: Check whether fork main contains upstream main
+              run: |
+                  git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+                  ahead=$(git rev-list --count upstream/main..origin/main)
+                  behind=$(git rev-list --count origin/main..upstream/main)
+
+                  {
+                    echo "## Upstream status"
+                    echo
+                    echo "Fork-only commits: ${ahead}"
+                    echo "Missing upstream commits: ${behind}"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+                  if git merge-base --is-ancestor upstream/main origin/main; then
+                    echo "Fork main already contains upstream main."
+                    exit 0
+                  fi
+
+                  echo "Fork main is missing ${behind} upstream commit(s)." >&2
+                  echo "Create an integration branch from fork main and merge upstream/main into it." >&2
+                  exit 1

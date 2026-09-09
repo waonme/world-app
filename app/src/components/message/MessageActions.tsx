@@ -1,6 +1,13 @@
 import { Button, Confirm, ListItem, Select, Text } from '@concrnt/ui'
 import { useTranslation } from 'react-i18next'
-import { Association, LikeAssociationSchema, Schemas, type Message, type RerouteMessageSchema } from '@concrnt/worldlib'
+import {
+    Association,
+    LikeAssociationSchema,
+    Schemas,
+    messageAuthorMenuAction,
+    type Message,
+    type RerouteMessageSchema
+} from '@concrnt/worldlib'
 import { useClient } from '../../contexts/Client'
 import { useComposer } from '../../contexts/Composer'
 import { usePostContext } from '../../contexts/PostContext'
@@ -17,6 +24,7 @@ import { MdMoreHoriz } from 'react-icons/md'
 import { MdAddReaction } from 'react-icons/md'
 import { Drawer } from '../../ui/Drawer'
 import { useEmojiPicker } from '../../contexts/EmojiPicker'
+import { MuteDurationSelect } from '../MuteDurationSelect'
 import { ReactionState } from './Footer'
 import { useQueryTimelineContext } from '../QueryTimeline'
 import { useStack } from '../../layouts/Stack'
@@ -44,10 +52,12 @@ export const MessageActions = (props: Props) => {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [reportOpen, setReportOpen] = useState(false)
     const [inspectorOpen, setInspectorOpen] = useState(false)
+    const [muteDurationOpen, setMuteDurationOpen] = useState(false)
     const emojiPicker = useEmojiPicker()
     const qt = useQueryTimelineContext()
     const { push } = useStack()
     const messageHref = props.message.key ?? props.message.uri
+    const authorMenuAction = messageAuthorMenuAction(props.message.author, client?.ccid)
 
     // シェア用URLはデプロイ先ホストに関わらずconcrnt.world固定(OGP対応がconcrnt.worldのみのため)
     const shareURL = 'https://concrnt.world/post/' + encodeURIComponent(props.message.uri)
@@ -71,11 +81,11 @@ export const MessageActions = (props: Props) => {
             // 再レンダリングがuse()する両方を再取得してtransition内で解決させる
             const rerouteHref = props.rerouted.key ?? props.rerouted.uri
             qt.update(rerouteHref)
-            await client?.getMessage(props.message.uri).catch(() => null)
-            await client?.getMessage(rerouteHref).catch(() => null)
+            await client?.getMessage(props.message.uri, props.message.hint).catch(() => null)
+            await client?.getMessage(rerouteHref, props.rerouted.hint).catch(() => null)
         } else {
             qt.update(messageHref)
-            await client?.getMessage(messageHref).catch(() => null)
+            await client?.getMessage(messageHref, props.message.hint).catch(() => null)
         }
     }
 
@@ -136,6 +146,7 @@ export const MessageActions = (props: Props) => {
             {/* いいねボタン */}
             <Button
                 variant="text"
+                disabled={!props.message.ownAssociationsLoaded}
                 onClick={(e) => {
                     e.stopPropagation()
                     if (!client) return
@@ -184,6 +195,7 @@ export const MessageActions = (props: Props) => {
             {/* リアクションボタン */}
             <Button
                 variant="text"
+                disabled={!props.message.ownAssociationsLoaded}
                 onClick={(e) => {
                     e.stopPropagation()
                     if (!client) return
@@ -255,9 +267,44 @@ export const MessageActions = (props: Props) => {
                     >
                         <Text>{t('share')}</Text>
                     </ListItem>,
-                    <ListItem key="delete" onClick={() => setDeleteConfirmOpen(true)}>
-                        <Text>{t('deletePost')}</Text>
+                    <ListItem
+                        key="copySource"
+                        onClick={() => {
+                            if (props.message.value.body) {
+                                navigator.clipboard?.writeText(props.message.value.body)
+                            }
+                            hapticSuccess()
+                            setMenuOpen(false)
+                        }}
+                    >
+                        <Text>{t('copySource')}</Text>
                     </ListItem>,
+                    ...(authorMenuAction === 'delete'
+                        ? [
+                              <ListItem
+                                  key="delete"
+                                  onClick={() => {
+                                      setMenuOpen(false)
+                                      setDeleteConfirmOpen(true)
+                                  }}
+                              >
+                                  <Text>{t('deletePost')}</Text>
+                              </ListItem>
+                          ]
+                        : []),
+                    ...(authorMenuAction === 'mute'
+                        ? [
+                              <ListItem
+                                  key="muteAuthor"
+                                  onClick={() => {
+                                      setMenuOpen(false)
+                                      setMuteDurationOpen(true)
+                                  }}
+                              >
+                                  <Text>{t('muteAuthor')}</Text>
+                              </ListItem>
+                          ]
+                        : []),
                     <ListItem key="abuse" onClick={() => setReportOpen(true)}>
                         {t('report')}
                     </ListItem>,
@@ -271,6 +318,16 @@ export const MessageActions = (props: Props) => {
                         <Text>{t('inspector')}</Text>
                     </ListItem>
                 ]}
+            />
+            <MuteDurationSelect
+                open={muteDurationOpen}
+                onClose={() => setMuteDurationOpen(false)}
+                onSelect={(expiresAt) => {
+                    client
+                        ?.mute({ type: 'user', target: props.message.author, expiresAt })
+                        .then(() => hapticSuccess())
+                        .catch(console.error)
+                }}
             />
             <Confirm
                 open={deleteConfirmOpen}

@@ -3,6 +3,8 @@ import type { CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     Button,
+    ButtonBase,
+    CircularProgress,
     IconButton,
     List,
     ListItem,
@@ -10,15 +12,18 @@ import {
     Select,
     Text,
     TextField,
+    Avatar,
     CfmRenderer,
     useAnchor
 } from '@concrnt/ui'
 import { useClient } from '../contexts/Client'
+import { MessageLayout } from './message/MessageLayout'
 import { isNonNullOrUndefined, Message, Schemas, semantics } from '@concrnt/worldlib'
 import { TimelinePicker } from './TimelinePicker'
 import { Timeline } from '@concrnt/worldlib'
 import { CssVar } from '../types/Theme'
-import { ComposerMode, DraftBuffer, EditorMode } from '../contexts/Composer'
+import { ComposerMode } from '../contexts/Composer'
+import { EditorMode, MediaDraft, useComposerDraft } from '../contexts/ComposerDraft'
 import {
     MdImage,
     MdClose,
@@ -43,12 +48,7 @@ import { useEmojiPicker, Emoji } from '../contexts/EmojiPicker'
 import { EmojiSuggestion } from './EmojiSuggestion'
 import { MdOutlineUploadFile } from 'react-icons/md'
 import { CDID } from '@concrnt/client'
-
-interface MediaDraft {
-    file: File
-    previewUrl?: string
-    flag?: string
-}
+import { ComposerMediaEditor } from './ComposerMediaEditor'
 
 const knownFlags = ['warn', 'nude', 'porn', 'hard']
 
@@ -74,8 +74,6 @@ interface Props {
     options?: Timeline[]
     mode: ComposerMode
     targetMessage?: Message<any>
-    draftBuffer?: DraftBuffer | null
-    onSaveDraft?: (buf: DraftBuffer) => void
     onPost?: () => void
     initialProfile?: string
     autoFocus?: boolean
@@ -85,8 +83,16 @@ export const Composer = (props: Props) => {
     const { t } = useTranslation('', { keyPrefix: 'components.composer' })
     const { client, isDomainOffline } = useClient()
     const { hapticSuccess } = useHaptics()
-    const [draft, setDraft] = useState<string>(props.draftBuffer?.draftText ?? '')
-    const [postHome, setPostHome] = useState<boolean>(props.draftBuffer?.postHome ?? true)
+    // 通常投稿はアプリ全体で共有される下書き(ComposerDraftProvider)を直接読み書きし、
+    // タブ切替・モーダル開閉・画面遷移をまたいで内容を保持する。リプライ/リルートはこのインスタンス限り
+    const sharedDraft = useComposerDraft()
+    const isShared = props.mode === 'normal'
+    const [localDraft, setLocalDraft] = useState<string>('')
+    const draft = isShared ? sharedDraft.draftText : localDraft
+    const setDraft = isShared ? sharedDraft.setDraftText : setLocalDraft
+    const [localPostHome, setLocalPostHome] = useState<boolean>(true)
+    const postHome = isShared ? sharedDraft.postHome : localPostHome
+    const setPostHome = isShared ? sharedDraft.setPostHome : setLocalPostHome
     const defaultDestinations = props.defaultDestinations ?? props.destinations
     const defaultProfile = props.initialProfile ?? client?.currentProfile ?? 'main'
     const [selectedProfile, setSelectedProfile] = useState<string>(defaultProfile)
@@ -102,27 +108,33 @@ export const Composer = (props: Props) => {
         props.destinations.some((dest, i) => dest !== defaultDestinations[i]) ||
         selectedProfile !== defaultProfile ||
         !postHome
-    const [mediaDrafts, setMediaDrafts] = useState<MediaDraft[]>(() => {
-        if (!props.draftBuffer || props.draftBuffer.mediaDrafts.length === 0) return []
-        return props.draftBuffer.mediaDrafts.map((m) => ({
-            file: m.file,
-            flag: m.flag,
-            previewUrl: m.file.type.startsWith('image/') ? URL.createObjectURL(m.file) : undefined
-        }))
-    })
+    const [localMediaDrafts, setLocalMediaDrafts] = useState<MediaDraft[]>([])
+    const mediaDrafts = isShared ? sharedDraft.mediaDrafts : localMediaDrafts
+    const setMediaDrafts = isShared ? sharedDraft.setMediaDrafts : setLocalMediaDrafts
     const [uploading, setUploading] = useState<boolean>(false)
+    // アップロード中のファイルごとの進捗(0〜1)。キーはアップロード対象配列のindex
+    const [uploadProgress, setUploadProgress] = useState<Record<number, number>>({})
     const [dragging, setDragging] = useState<boolean>(false)
-    const [editorMode, setEditorMode] = useState<EditorMode>(
-        props.draftBuffer?.editorMode ?? ((props.draftBuffer?.mediaDrafts.length ?? 0) > 0 ? 'media' : 'markdown')
-    )
+    const [localEditorMode, setLocalEditorMode] = useState<EditorMode>('markdown')
+    const editorMode = isShared ? sharedDraft.editorMode : localEditorMode
+    const setEditorMode = isShared ? sharedDraft.setEditorMode : setLocalEditorMode
     const [modeSelectOpen, setModeSelectOpen] = useState(false)
     const [flagMenuIndex, setFlagMenuIndex] = useState<number | null>(null)
-    const [emojiDict, setEmojiDict] = useState<Record<string, { imageURL: string }>>(props.draftBuffer?.emojiDict ?? {})
+    const [mediaEditorFile, setMediaEditorFile] = useState<File | null>(null)
+    const mediaEditorIndex =
+        mediaEditorFile === null ? -1 : mediaDrafts.findIndex((media) => media.file === mediaEditorFile)
+    const [localEmojiDict, setLocalEmojiDict] = useState<Record<string, { imageURL: string }>>({})
+    const emojiDict = isShared ? sharedDraft.emojiDict : localEmojiDict
+    const setEmojiDict = isShared ? sharedDraft.setEmojiDict : setLocalEmojiDict
     const [undoCache, setUndoCache] = useState<{
         draft: string
         emojiDict: Record<string, { imageURL: string }>
         mediaDrafts: MediaDraft[]
     } | null>(null)
+
+    useEffect(() => {
+        if (mediaEditorFile !== null && mediaEditorIndex === -1) setMediaEditorFile(null)
+    }, [mediaEditorFile, mediaEditorIndex])
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -134,29 +146,16 @@ export const Composer = (props: Props) => {
     // リプライ/リルート時はモードを外部から固定し、通常時はユーザーが選択したエディタモードを表示する
     const displayMode: EditorMode | 'reply' | 'reroute' = props.mode === 'normal' ? editorMode : props.mode
 
-    // アンマウント時の下書き保存とプレビューURL解放のために最新の状態を参照できるようにする
-    const stateRef = useRef({ draft, emojiDict, mediaDrafts, postHome, editorMode, onSaveDraft: props.onSaveDraft })
-    stateRef.current = { draft, emojiDict, mediaDrafts, postHome, editorMode, onSaveDraft: props.onSaveDraft }
-
-    useEffect(() => {
-        return () => {
-            const { draft, emojiDict, mediaDrafts, postHome, editorMode, onSaveDraft } = stateRef.current
-            onSaveDraft?.({
-                draftText: draft,
-                mediaDrafts: mediaDrafts.map((m) => ({ file: m.file, flag: m.flag })),
-                emojiDict,
-                postHome,
-                editorMode
-            })
-            mediaDrafts
-                .map((media) => media.previewUrl)
-                .filter(isNonNullOrUndefined)
-                .forEach((url) => URL.revokeObjectURL(url))
-        }
-    }, [])
-
     const getSubmitLabel = () => {
-        if (uploading) return t('sending')
+        if (uploading) {
+            // ファイル転送中は全体進捗のパーセントを添える(転送完了後のcommit待ちは表示しない)
+            const progressValues = Object.values(uploadProgress)
+            const overall = progressValues.reduce((a, b) => a + b, 0) / progressValues.length
+            if (progressValues.length > 0 && overall < 1) {
+                return `${t('sending')} ${Math.round(overall * 100)}%`
+            }
+            return t('sending')
+        }
         switch (props.mode) {
             case 'reply':
                 return t('submitReply')
@@ -202,10 +201,13 @@ export const Composer = (props: Props) => {
             if (props.mode === 'reply' || hasInlineMedia) {
                 if (!client || uploading) return
                 setUploading(true)
+                setUploadProgress(Object.fromEntries(selected.map((_, index) => [index, 0])))
                 try {
                     const tags = await Promise.all(
-                        selected.map(async (file) => {
-                            const [url, typ] = await uploadImage(client, file)
+                        selected.map(async (file, index) => {
+                            const [url, typ] = await uploadImage(client, file, (progress) => {
+                                setUploadProgress((prev) => ({ ...prev, [index]: progress }))
+                            })
                             return mediaToTag(url, typ, file.name)
                         })
                     )
@@ -222,6 +224,7 @@ export const Composer = (props: Props) => {
                     console.error('Upload error:', error)
                 } finally {
                     setUploading(false)
+                    setUploadProgress({})
                 }
                 return
             }
@@ -243,10 +246,13 @@ export const Composer = (props: Props) => {
                 // 添付済みメディアをアップロードしてインラインタグへ変換する
                 if (!client || uploading) return
                 setUploading(true)
+                setUploadProgress(Object.fromEntries(mediaDrafts.map((_, index) => [index, 0])))
                 try {
                     const tags = await Promise.all(
-                        mediaDrafts.map(async (media) => {
-                            const [url, typ] = await uploadImage(client, media.file)
+                        mediaDrafts.map(async (media, index) => {
+                            const [url, typ] = await uploadImage(client, media.file, (progress) => {
+                                setUploadProgress((prev) => ({ ...prev, [index]: progress }))
+                            })
                             return mediaToTag(url, typ, media.file.name)
                         })
                     )
@@ -256,6 +262,7 @@ export const Composer = (props: Props) => {
                     return
                 } finally {
                     setUploading(false)
+                    setUploadProgress({})
                 }
             }
             // plaintextへの切り替えではタグ変換できないため破棄する
@@ -269,6 +276,9 @@ export const Composer = (props: Props) => {
     }
 
     const removeMedia = (index: number) => {
+        // アップロード中は進捗表示のindexとズレるため添付の増減を禁止する
+        if (uploading) return
+        if (mediaDrafts[index]?.file === mediaEditorFile) setMediaEditorFile(null)
         setMediaDrafts((prev) => {
             const removed = prev[index]
             if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl)
@@ -296,6 +306,8 @@ export const Composer = (props: Props) => {
             .filter(isNonNullOrUndefined)
             .forEach((url) => URL.revokeObjectURL(url))
         setMediaDrafts([])
+        setFlagMenuIndex(null)
+        setMediaEditorFile(null)
         setEditorMode('markdown')
     }
 
@@ -349,7 +361,7 @@ export const Composer = (props: Props) => {
 
                     // リプライアソシエーションを作成
                     const targetAuthorDomain = await client
-                        .getUser(props.targetMessage.author)
+                        .getUser(props.targetMessage.author, props.targetMessage.hint)
                         .then((user) => user?.domain)
                     const notifyTimeline = semantics.notificationTimeline(props.targetMessage.author, 'main') // TODO: update main to specific
 
@@ -380,7 +392,8 @@ export const Composer = (props: Props) => {
                         key: newPostUri,
                         schema: Schemas.rerouteMessage,
                         value: {
-                            targetURI: props.targetMessage.uri
+                            targetURI: props.targetMessage.uri,
+                            rerouteMessageAuthor: props.targetMessage.author
                         },
                         author: client.ccid,
                         distributes,
@@ -391,7 +404,7 @@ export const Composer = (props: Props) => {
 
                     // リルートアソシエーションを作成
                     const targetAuthorDomain = await client
-                        .getUser(props.targetMessage.author)
+                        .getUser(props.targetMessage.author, props.targetMessage.hint)
                         .then((user) => user?.domain)
                     const notifyTimeline = semantics.notificationTimeline(props.targetMessage.author, 'main') // TODO: update main to specific
 
@@ -430,10 +443,13 @@ export const Composer = (props: Props) => {
                         }
                         case 'media': {
                             // 画像をアップロード
+                            setUploadProgress(Object.fromEntries(mediaDrafts.map((_, index) => [index, 0])))
                             const uploadedMedias = await Promise.all(
-                                mediaDrafts.map(async (media) => {
+                                mediaDrafts.map(async (media, index) => {
                                     const [[url, typ], blurhash] = await Promise.all([
-                                        uploadImage(client, media.file),
+                                        uploadImage(client, media.file, (progress) => {
+                                            setUploadProgress((prev) => ({ ...prev, [index]: progress }))
+                                        }),
                                         computeBlurhash(media.file)
                                     ])
                                     return {
@@ -484,6 +500,7 @@ export const Composer = (props: Props) => {
             console.error('Submit error:', error)
         } finally {
             setUploading(false)
+            setUploadProgress({})
         }
 
         // 失敗時は入力を保持したまま（コンテナも閉じない）
@@ -636,6 +653,7 @@ export const Composer = (props: Props) => {
                         flex: 1,
                         minHeight: '80px',
                         fontSize: '1.2rem',
+                        fontFamily: 'inherit',
                         boxSizing: 'border-box',
                         border: 'none',
                         outline: 'none',
@@ -672,19 +690,43 @@ export const Composer = (props: Props) => {
                 />
             )}
 
-            {/* テキストプレビュー（絵文字等のレンダリング確認用。plaintextはレンダリングされないため非表示） */}
+            {/* 投稿プレビュー（plaintextはレンダリングされないため非表示） */}
             {props.mode !== 'reroute' && displayMode !== 'plaintext' && draft.length > 0 && (
                 <>
                     <div style={{ borderTop: '1px dashed', borderColor: CssVar.divider }} />
-                    <div
-                        style={{
-                            fontSize: '0.85rem',
-                            opacity: 0.8,
-                            maxHeight: '80px',
-                            overflowY: 'auto'
-                        }}
-                    >
-                        <CfmRenderer messagebody={draft} emojiDict={emojiDict} />
+                    <div style={{ minHeight: 0, overflowY: 'auto' }}>
+                        <MessageLayout
+                            left={<Avatar ccid={client.ccid} src={client.profiles[selectedProfile]?.value.avatar} />}
+                            headerLeft={
+                                // 実投稿のMessageAuthorと同じ見た目(ユーザー名 + @alias)
+                                <span
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: CssVar.space(1),
+                                        overflow: 'hidden',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontWeight: 'bold',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis'
+                                        }}
+                                    >
+                                        {client.profiles[selectedProfile]?.value.username || 'Anonymous'}
+                                    </span>
+                                    {client.entity.alias && (
+                                        <span style={{ fontSize: '0.75rem', opacity: 0.7, flexShrink: 0 }}>
+                                            @{client.entity.alias}
+                                        </span>
+                                    )}
+                                </span>
+                            }
+                        >
+                            <CfmRenderer messagebody={draft} emojiDict={emojiDict} />
+                        </MessageLayout>
                     </div>
                 </>
             )}
@@ -698,49 +740,61 @@ export const Composer = (props: Props) => {
                             style={{
                                 position: 'relative',
                                 width: '80px',
-                                height: '80px',
-                                cursor: 'pointer'
+                                height: '80px'
                             }}
-                            onClick={() => setFlagMenuIndex(index)}
                         >
-                            {media.previewUrl ? (
-                                <img
-                                    src={media.previewUrl}
-                                    alt={`preview ${index}`}
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        objectFit: 'cover',
-                                        borderRadius: CssVar.round(2)
-                                    }}
-                                />
-                            ) : (
-                                <div
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        justifyContent: 'center',
-                                        alignItems: 'center',
-                                        backgroundColor: CssVar.uiBackground,
-                                        borderRadius: CssVar.round(2)
-                                    }}
-                                >
-                                    <MdOutlineUploadFile size={32} color={CssVar.uiText} />
-                                    <Text
+                            <ButtonBase
+                                disabled={uploading}
+                                aria-label={`${t(media.previewUrl ? 'mediaEditTitle' : 'flagTitle')}: ${media.file.name}`}
+                                onClick={() => {
+                                    if (media.previewUrl) setMediaEditorFile(media.file)
+                                    else setFlagMenuIndex(index)
+                                }}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    padding: 0,
+                                    overflow: 'hidden',
+                                    borderRadius: CssVar.round(2)
+                                }}
+                            >
+                                {media.previewUrl ? (
+                                    <img
+                                        src={media.previewUrl}
+                                        alt={`preview ${index}`}
                                         style={{
-                                            marginLeft: '4px',
-                                            fontSize: '12px',
-                                            color: CssVar.uiText
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover'
+                                        }}
+                                    />
+                                ) : (
+                                    <div
+                                        style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            backgroundColor: CssVar.uiBackground
                                         }}
                                     >
-                                        {media.file.name.length > 10
-                                            ? media.file.name.slice(0, 7) + '...' + media.file.name.split('.').pop()
-                                            : media.file.name}
-                                    </Text>
-                                </div>
-                            )}
+                                        <MdOutlineUploadFile size={32} color={CssVar.uiText} />
+                                        <Text
+                                            style={{
+                                                marginLeft: '4px',
+                                                fontSize: '12px',
+                                                color: CssVar.uiText
+                                            }}
+                                        >
+                                            {media.file.name.length > 10
+                                                ? media.file.name.slice(0, 7) + '...' + media.file.name.split('.').pop()
+                                                : media.file.name}
+                                        </Text>
+                                    </div>
+                                )}
+                            </ButtonBase>
                             <IconButton
                                 onClick={(e) => {
                                     e.stopPropagation()
@@ -779,12 +833,41 @@ export const Composer = (props: Props) => {
                                     <MdFlag size={16} />
                                 </div>
                             )}
+                            {/* アップロード中の進捗表示。転送完了後のcommit待ちはindeterminateで回す */}
+                            {uploading && (
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                                        borderRadius: CssVar.round(2),
+                                        color: 'white'
+                                    }}
+                                >
+                                    <CircularProgress
+                                        value={
+                                            (uploadProgress[index] ?? 0) < 1 ? (uploadProgress[index] ?? 0) : undefined
+                                        }
+                                    />
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* 添付ごとのフラグ設定メニュー(サムネイルタップで開く) */}
+            <ComposerMediaEditor
+                open={mediaEditorIndex !== -1}
+                media={mediaEditorIndex !== -1 ? mediaDrafts[mediaEditorIndex] : undefined}
+                onClose={() => setMediaEditorFile(null)}
+                onFlagChange={(flag) => {
+                    if (mediaEditorIndex !== -1) setMediaFlag(mediaEditorIndex, flag)
+                }}
+            />
+
             <Select
                 open={flagMenuIndex !== null}
                 onClose={() => setFlagMenuIndex(null)}

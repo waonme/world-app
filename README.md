@@ -2,6 +2,8 @@
 
 このレポジトリは、concrntバージョン2のモバイルアプリおよびウェブアプリのプロジェクトを管理しています。
 
+waonme fork の独自仕様、ブランチ運用、upstream 取り込み手順は [FORK.md](./FORK.md) を参照してください。
+
 ## 内訳
 - client: concrntのサーバーとやりとりするローレベルなクライアントコード
 - worldlib: concrntをSNSとして利用するため、clientをより高レベルなAPIでラップしたライブラリコード
@@ -52,6 +54,7 @@ $ pnpm tauri ios build
 ```
 # システム
 cckv://<owner>/concrnt.world/settings
+cckv://<owner>/concrnt.world/mutes/<muteId>  # ミュートエントリ (private.jsonポリシー必須)
 
 # メイン
 cckv://<owner>/concrnt.world/profiles/main
@@ -71,4 +74,3 @@ cckv://<owner>/concrnt.world/profiles/<profileID>/lists/<id>
 ```
 
 リストも全て完全にサブプロフィールで分離してしまう。
-

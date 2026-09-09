@@ -19,7 +19,8 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
     "dev": "vite build --watch",
-    "storybook": "storybook dev -p 6006"
+    "storybook": "storybook dev -p 6006",
+    "test:popover": "node --experimental-strip-types --test test/popover-placement.test.mjs"
   },
   "peerDependencies": {
     "react": "^19.2.0",

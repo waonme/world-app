@@ -5,7 +5,15 @@ import { useTranslation } from 'react-i18next'
 import { useClient } from '../contexts/Client'
 import { NotFoundError } from '@concrnt/client'
 import { useNavigate } from 'react-router-dom'
-import { Schemas, semantics, type Timeline } from '@concrnt/worldlib'
+import {
+    bridgeEnabledAfterSaveFailure,
+    bridgeSettingsStatusAfterLoad,
+    canWriteBridgeSettings,
+    Schemas,
+    semantics,
+    type BridgeSettingsStatus,
+    type Timeline
+} from '@concrnt/worldlib'
 import { MdContentCopy, MdPlaylistAdd } from 'react-icons/md'
 import { Subscription } from '../components/Subscription'
 import { Drawer } from '../components/Drawer'
@@ -51,16 +59,24 @@ export const Bluesky = () => {
     const [listenHome, setListenHome] = useState(true)
     const [listenProfile, setListenProfile] = useState('main')
     const [listenCommunities, setListenCommunities] = useState<string[]>([])
+    const [settingsStatus, setSettingsStatus] = useState<BridgeSettingsStatus>('loading')
+    const [settingsSaving, setSettingsSaving] = useState(false)
+    const [settingsSaveFailed, setSettingsSaveFailed] = useState(false)
+    const settingsLoaded = settingsStatus === 'ready'
+    const settingsLoadFailed = settingsStatus === 'load-failed'
 
     const homeTimelineRegex = new RegExp(`^cckv://${client.ccid}/concrnt\\.world/profiles/([^/]+)/home-timeline$`)
 
-    const commitSettings = (enabled: boolean) => {
+    const commitSettings = async (enabled: boolean, rollbackEnabled?: boolean) => {
+        if (!canWriteBridgeSettings(settingsStatus, settingsSaving)) return
+        setSettingsSaving(true)
+        setSettingsSaveFailed(false)
         const listenTimelines = [
             ...(listenHome ? [semantics.homeTimeline(client.ccid, listenProfile)] : []),
             ...listenCommunities
         ]
-        client.api
-            .commit({
+        try {
+            await client.api.commit({
                 kind: 'record' as const,
                 key: bskySettingsKey(client.ccid),
                 author: client.ccid,
@@ -68,9 +84,13 @@ export const Bluesky = () => {
                 value: { listenTimelines, enabled },
                 createdAt: new Date()
             })
-            .catch((err) => {
-                console.log(err)
-            })
+        } catch (err) {
+            console.log(err)
+            setBridgeEnabled(bridgeEnabledAfterSaveFailure(enabled, rollbackEnabled))
+            setSettingsSaveFailed(true)
+        } finally {
+            setSettingsSaving(false)
+        }
     }
 
     const [following, setFollowing] = useState<BskyProfile[]>([])
@@ -125,9 +145,16 @@ export const Bluesky = () => {
                 if (homeProfile) setListenProfile(homeProfile)
                 setListenCommunities(timelines.filter((uri) => !homeTimelineRegex.test(uri)))
                 setBridgeEnabled(doc.value?.enabled ?? true)
+                setSettingsStatus(bridgeSettingsStatusAfterLoad('found'))
             })
             .catch((err) => {
-                if (!(err instanceof NotFoundError)) console.log(err)
+                if (err instanceof NotFoundError) {
+                    // 設定レコード無しは既定値を明示的に確定した状態。
+                    setSettingsStatus(bridgeSettingsStatusAfterLoad('missing'))
+                } else {
+                    console.log(err)
+                    setSettingsStatus(bridgeSettingsStatusAfterLoad('error'))
+                }
             })
 
         client.api
@@ -275,43 +302,54 @@ export const Bluesky = () => {
                         <Text>{t('active')}</Text>
                         <Text>{t('yourHandle', { handle: info.entity.handle })}</Text>
                         <Text variant="caption">{info.entity.did}</Text>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between'
-                            }}
-                        >
-                            <Text>{t('enabledToggle')}</Text>
-                            <Switch
-                                checked={bridgeEnabled}
-                                onChange={(checked) => {
-                                    setBridgeEnabled(checked)
-                                    commitSettings(checked)
-                                }}
-                            />
-                        </div>
-                        <Divider />
-                        <Text>{t('forwardTimeline')}</Text>
-                        <Text>{t('forwardTimelineDesc')}</Text>
-                        <TimelinePicker
-                            items={[
-                                // リスト未登録だとknownCommunitiesに現れないため、自分のinboxは常に候補に出す
-                                { uri: inboxKey(client.ccid), name: 'Bluesky' },
-                                ...knownCommunities.filter(
-                                    (tl: Timeline) => !tl.uri.includes('/atproto.concrnt.world/')
-                                )
-                            ]}
-                            selected={listenCommunities}
-                            setSelected={setListenCommunities}
-                            keyFunc={(item: Timeline) => item.uri}
-                            labelFunc={(item: Timeline) => item.name ?? 'no name'}
-                            postHome={listenHome}
-                            setPostHome={setListenHome}
-                            selectedProfile={listenProfile}
-                            setSelectedProfile={setListenProfile}
-                        />
-                        <Button onClick={() => commitSettings(bridgeEnabled)}>{t('update')}</Button>
+                        {!settingsLoaded && !settingsLoadFailed && <Text>{t('loading')}</Text>}
+                        {settingsLoadFailed && <Text style={{ color: '#ff5b5b' }}>{t('settingsLoadFailed')}</Text>}
+                        {settingsSaveFailed && <Text style={{ color: '#ff5b5b' }}>{t('settingsSaveFailed')}</Text>}
+                        {settingsLoaded && (
+                            <>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between'
+                                    }}
+                                >
+                                    <Text>{t('enabledToggle')}</Text>
+                                    <Switch
+                                        checked={bridgeEnabled}
+                                        disabled={settingsSaving}
+                                        onChange={(checked) => {
+                                            const previous = bridgeEnabled
+                                            setBridgeEnabled(checked)
+                                            void commitSettings(checked, previous)
+                                        }}
+                                    />
+                                </div>
+                                <Divider />
+                                <Text>{t('forwardTimeline')}</Text>
+                                <Text>{t('forwardTimelineDesc')}</Text>
+                                <TimelinePicker
+                                    items={[
+                                        // リスト未登録だとknownCommunitiesに現れないため、自分のinboxは常に候補に出す
+                                        { uri: inboxKey(client.ccid), name: 'Bluesky' },
+                                        ...knownCommunities.filter(
+                                            (tl: Timeline) => !tl.uri.includes('/atproto.concrnt.world/')
+                                        )
+                                    ]}
+                                    selected={listenCommunities}
+                                    setSelected={setListenCommunities}
+                                    keyFunc={(item: Timeline) => item.uri}
+                                    labelFunc={(item: Timeline) => item.name ?? 'no name'}
+                                    postHome={listenHome}
+                                    setPostHome={setListenHome}
+                                    selectedProfile={listenProfile}
+                                    setSelectedProfile={setListenProfile}
+                                />
+                                <Button disabled={settingsSaving} onClick={() => void commitSettings(bridgeEnabled)}>
+                                    {t('update')}
+                                </Button>
+                            </>
+                        )}
                         <Divider />
                         <IconButton
                             onClick={(e) => {

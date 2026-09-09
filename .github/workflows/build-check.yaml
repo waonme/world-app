@@ -1,65 +1,75 @@
 name: Build check
+
 on:
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
+    pull_request:
+    workflow_dispatch:
+
+concurrency:
+    group: build-check-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
 
 jobs:
-  build-check:
-    name: build-check
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
-      issues: write
-    steps:
-      - uses: actions/checkout@v4
+    build-check:
+        name: build-check
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
+            - name: Verify current upstream is included
+              run: |
+                  git fetch --no-tags https://github.com/concrnt/world-app.git +refs/heads/main:refs/remotes/upstream/main
+                  if ! git merge-base --is-ancestor refs/remotes/upstream/main HEAD; then
+                    echo "PR head is missing the current concrnt/world-app main." >&2
+                    exit 1
+                  fi
 
-      - name: Install dependencies
-        run: pnpm install
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 10.33.0
+                  run_install: false
 
-      - name: Build
-        id: build
-        run: |
-          set -o pipefail
-          pnpm build 2>&1 | tee build.log
-        continue-on-error: true
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22.12.0
+                  cache: pnpm
 
-      - name: Post failure to PR
-        if: steps.build.outcome == 'failure'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const log = fs.readFileSync('build.log', 'utf8');
-            const truncated = log.length > 6500 ? log.slice(-6500) : log;
-            const comment = [
-              '🚨 **Build failed**',
-              '',
-              '```',
-              truncated,
-              '```'
-            ].join('\n');
-            
-            github.rest.issues.createComment({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: failure
-        if: steps.build.outcome == 'failure'
-        run: exit 1
+            - name: Test deployment and upstream-sync guards
+              run: |
+                  bash -n ops/vps-deployer/deploy.sh ops/vps-deployer/deploy-lib.sh ops/vps-deployer/test-deploy.sh
+                  ops/vps-deployer/test-deploy.sh
+                  scripts/test-prepare-upstream-sync.sh
+
+            - name: Check fork contract anchors
+              run: scripts/check-fork-contract.sh
+
+            - name: Test legacy client fallback
+              run: pnpm --filter @concrnt/client test
+
+            - name: Test fork world behavior
+              run: pnpm --filter @concrnt/worldlib test:fork
+
+            - name: Test legacy WebKit popover placement
+              run: pnpm --filter @concrnt/ui test:popover
+
+            - name: Test web fork state transitions
+              run: pnpm --filter web test:fork
+
+            - name: Build web deployment
+              run: pnpm --workspace-concurrency=1 --filter web... build
+
+            - name: Build desktop app
+              run: pnpm --workspace-concurrency=1 --filter world-app... build

@@ -81,45 +81,54 @@ export const RerouteMessage = (props: MessageProps<RerouteMessageSchema>) => {
                     </Text>
                 </span>
                 <div style={{ flex: 1 }} />
-                <IconButton
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        setMenuOpen(true)
-                    }}
-                    style={
-                        {
-                            padding: 0,
-                            margin: 0,
-                            width: '15px',
-                            height: '15px',
-                            anchorName: menuAnchor
-                        } as React.CSSProperties
-                    }
-                >
-                    <MdMoreHoriz size={15} />
-                </IconButton>
-                <Select
-                    open={menuOpen}
-                    onClose={() => setMenuOpen(false)}
-                    options={[
-                        <ListItem
-                            key="delete"
-                            onClick={() => {
-                                client.api.delete(props.message.uri).then(() => hapticSuccess())
-                                setMenuOpen(false)
+                {props.message.author === client.ccid && (
+                    <>
+                        <IconButton
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setMenuOpen(true)
                             }}
+                            style={
+                                {
+                                    padding: 0,
+                                    margin: 0,
+                                    width: '15px',
+                                    height: '15px',
+                                    anchorName: menuAnchor
+                                } as React.CSSProperties
+                            }
                         >
-                            <Text>{t('deleteReroute')}</Text>
-                        </ListItem>
-                    ]}
-                    anchor={menuAnchor}
-                />
+                            <MdMoreHoriz size={15} />
+                        </IconButton>
+                        <Select
+                            open={menuOpen}
+                            onClose={() => setMenuOpen(false)}
+                            options={[
+                                <ListItem
+                                    key="delete"
+                                    onClick={() => {
+                                        client.api.delete(props.message.uri).then(() => hapticSuccess())
+                                        setMenuOpen(false)
+                                    }}
+                                >
+                                    <Text>{t('deleteReroute')}</Text>
+                                </ListItem>
+                            ]}
+                            anchor={menuAnchor}
+                        />
+                    </>
+                )}
                 <div style={{ flexShrink: 0 }}>
                     <TimeDiff date={props.message.createdAt} />
                 </div>
             </OnelineMessageLayout>
             <ErrorBoundary FallbackComponent={RenderError}>
-                <MessageContainer uri={props.message.value.targetURI} rerouted={props.message} />
+                {/* rerouteした本人は元投稿が見えているはずなので、そのホームドメインを解決hintに使う */}
+                <MessageContainer
+                    uri={props.message.value.targetURI}
+                    hint={props.message.authorUser?.domain ?? props.message.hint}
+                    rerouted={props.message}
+                />
             </ErrorBoundary>
         </div>
     )

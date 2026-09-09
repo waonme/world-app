@@ -12,16 +12,6 @@ import { useKeyboard } from './Keyboard'
 
 export type ComposerMode = 'normal' | 'reply' | 'reroute'
 
-export type EditorMode = 'plaintext' | 'markdown' | 'media'
-
-export interface DraftBuffer {
-    draftText: string
-    mediaDrafts: Array<{ file: File; flag?: string }>
-    emojiDict: Record<string, { imageURL: string }>
-    postHome: boolean
-    editorMode?: EditorMode
-}
-
 interface ComposerContextState {
     open: (
         destinations: string[],
@@ -54,7 +44,6 @@ export const ComposerProvider = (props: Props) => {
     const [mode, setMode] = useState<ComposerMode>('normal')
     const [targetMessage, setTargetMessage] = useState<Message<any> | undefined>(undefined)
     const [profile, setProfile] = useState<string | undefined>(undefined)
-    const [draftBuffer, setDraftBuffer] = useState<DraftBuffer | null>(null)
 
     const [knownCommunities] = useSubscribe(client.knownCommunities)
 
@@ -120,8 +109,6 @@ export const ComposerProvider = (props: Props) => {
                                 options={options}
                                 mode={mode}
                                 targetMessage={targetMessage}
-                                draftBuffer={mode === 'normal' ? draftBuffer : null}
-                                onSaveDraft={mode === 'normal' ? setDraftBuffer : undefined}
                                 initialProfile={profile}
                                 onClosed={close}
                             />
@@ -133,8 +120,6 @@ export const ComposerProvider = (props: Props) => {
                                 options={options}
                                 mode={mode}
                                 targetMessage={targetMessage}
-                                draftBuffer={mode === 'normal' ? draftBuffer : null}
-                                onSaveDraft={mode === 'normal' ? setDraftBuffer : undefined}
                                 initialProfile={profile}
                                 onClosed={close}
                             />
@@ -153,14 +138,14 @@ interface ComposerOverlayProps {
     options: Timeline[]
     mode: ComposerMode
     targetMessage?: Message<any>
-    draftBuffer?: DraftBuffer | null
-    onSaveDraft?: (buf: DraftBuffer) => void
     initialProfile?: string
     onClosed: () => void
 }
 
 // モバイル用の全画面モーダルのchrome（背景・アニメーション・キャンセルボタン）を担当し、中身はComposerに任せる。
-// ソフトキーボードに合わせて高さを追従させる(app版と同じ式)
+// ソフトキーボードに合わせて高さを追従させる。
+// app版はdisableInputAccessoryViewでアクセサリービューが無いためキーボードとの隙間を式に足しているが、
+// webはブラウザのアクセサリーバーが健在でそれ自体が隙間になるので足さない(意図的な差分)
 const ComposerOverlayMobile = (props: ComposerOverlayProps) => {
     const { t } = useTranslation('', { keyPrefix: 'contexts.composer' })
     const [willClose, setWillClose] = useState(false)
@@ -189,8 +174,8 @@ const ComposerOverlayMobile = (props: ComposerOverlayProps) => {
                             height: `calc(100dvh - ${keyboard.height}px - env(safe-area-inset-top))`,
                             display: 'flex',
                             flexDirection: 'column',
-                            maxHeight: '50vh',
-                            transition: `height ${keyboard.duration || 0.1}s ease-out`
+                            maxHeight: '80vh',
+                            transition: `height ${keyboard.duration || 0.1}s cubic-bezier(0.22, 1, 0.36, 1)`
                         }}
                     >
                         <div
@@ -230,8 +215,6 @@ const ComposerOverlayMobile = (props: ComposerOverlayProps) => {
                                 options={props.options}
                                 mode={props.mode}
                                 targetMessage={props.targetMessage}
-                                draftBuffer={props.draftBuffer}
-                                onSaveDraft={props.onSaveDraft}
                                 initialProfile={props.initialProfile}
                                 onPost={() => setWillClose(true)}
                             />
@@ -325,8 +308,6 @@ const ComposerOverlayDesktop = (props: ComposerOverlayProps) => {
                             options={props.options}
                             mode={props.mode}
                             targetMessage={props.targetMessage}
-                            draftBuffer={props.draftBuffer}
-                            onSaveDraft={props.onSaveDraft}
                             initialProfile={props.initialProfile}
                             onPost={() => setWillClose(true)}
                         />

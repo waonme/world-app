@@ -1,7 +1,7 @@
 import { Document, Policy } from '@concrnt/client'
-import { Timeline } from '@concrnt/worldlib'
+import { Schemas, Timeline } from '@concrnt/worldlib'
 import { Text } from '@concrnt/ui'
-import { Button, CCWallpaper, CssVar, IconButton, ListItem, Select, Tab, Tabs, TextField } from '@concrnt/ui'
+import { Button, CCWallpaper, Confirm, CssVar, IconButton, ListItem, Select, Tab, Tabs, TextField } from '@concrnt/ui'
 import { MdMoreHoriz } from 'react-icons/md'
 import { shareText } from '../lib/share'
 
@@ -9,12 +9,16 @@ import { useClient } from '../contexts/Client'
 import { Suspense, use, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Subscription } from './Subscription'
+import { ServerChip } from './ServerChip'
 import { CCEditor } from './CCEditor'
 import { PolicyEditor } from './PolicyEditor'
 import { useMediaProxy } from '../contexts/MediaProxy'
+import { useSubscribe } from '../hooks/useSubscribe'
+import { MuteDurationSelect } from './MuteDurationSelect'
 
 interface Props {
     uri: string
+    onDeleted?: () => void
 }
 
 export const TimelineSettings = (props: Props) => {
@@ -24,23 +28,28 @@ export const TimelineSettings = (props: Props) => {
 
     return (
         <Suspense>
-            <Inner timelinePromise={timelinePromise} />
+            <Inner timelinePromise={timelinePromise} onDeleted={props.onDeleted} />
         </Suspense>
     )
 }
 
 interface InnerProps {
     timelinePromise: Promise<Timeline | null>
+    onDeleted?: () => void
 }
 
 const Inner = (props: InnerProps) => {
     const { t } = useTranslation('', { keyPrefix: 'components.timelineSettings' })
-    const { client } = useClient()
     const { getImageURL } = useMediaProxy()
+    const { client } = useClient()
     const timeline = use(props.timelinePromise)
 
     const [tab, setTab] = useState<'subscriptions' | 'settings'>('subscriptions')
     const [menuOpen, setMenuOpen] = useState(false)
+
+    const [mutes] = useSubscribe(client.mutes)
+    const isMuted = timeline ? mutes.some((entry) => entry.type === 'timeline' && entry.target === timeline.uri) : false
+    const [muteDurationOpen, setMuteDurationOpen] = useState(false)
 
     if (!timeline) {
         return <>Timeline not found.</>
@@ -86,6 +95,14 @@ const Inner = (props: InnerProps) => {
                                 <MdMoreHoriz size={24} />
                             </IconButton>
                         </div>
+                        <div
+                            style={{
+                                marginTop: CssVar.space(1),
+                                marginBottom: CssVar.space(1)
+                            }}
+                        >
+                            <ServerChip uri={timeline.uri} />
+                        </div>
                         <Text>{timeline.description}</Text>
                     </div>
                 </div>
@@ -102,8 +119,28 @@ const Inner = (props: InnerProps) => {
                         }}
                     >
                         <Text>{t('share')}</Text>
+                    </ListItem>,
+                    <ListItem
+                        key="mute"
+                        onClick={() => {
+                            setMenuOpen(false)
+                            if (isMuted) {
+                                client.unmute('timeline', timeline.uri).catch(console.error)
+                            } else {
+                                setMuteDurationOpen(true)
+                            }
+                        }}
+                    >
+                        <Text>{isMuted ? t('unmuteTimeline') : t('muteTimeline')}</Text>
                     </ListItem>
                 ]}
+            />
+            <MuteDurationSelect
+                open={muteDurationOpen}
+                onClose={() => setMuteDurationOpen(false)}
+                onSelect={(expiresAt) => {
+                    client.mute({ type: 'timeline', target: timeline.uri, expiresAt }).catch(console.error)
+                }}
             />
             <Tabs>
                 <Tab
@@ -135,7 +172,7 @@ const Inner = (props: InnerProps) => {
                 }}
             >
                 {tab === 'subscriptions' && <Subscription target={timeline.uri} />}
-                {tab === 'settings' && <TimelineEditor timeline={timeline} />}
+                {tab === 'settings' && <TimelineEditor timeline={timeline} onDeleted={props.onDeleted} />}
             </div>
         </div>
     )
@@ -143,6 +180,7 @@ const Inner = (props: InnerProps) => {
 
 interface EditorProps {
     timeline: Timeline
+    onDeleted?: () => void
 }
 
 const TimelineEditor = (props: EditorProps) => {
@@ -152,6 +190,7 @@ const TimelineEditor = (props: EditorProps) => {
     const [valueDraft, setValueDraft] = useState<any>()
     const [policyDraft, setPolicyDraft] = useState<Policy>()
     const [key, setKey] = useState<string>()
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
     useEffect(() => {
         client.api
@@ -217,6 +256,26 @@ const TimelineEditor = (props: EditorProps) => {
             <PolicyEditor policy={policyDraft} setPolicy={setPolicyDraft} />
 
             <Button onClick={handleSave}>Save</Button>
+
+            {/* homeタイムライン等を誤って消せないよう、削除はコミュニティタイムラインに限定する */}
+            {props.timeline.schema === Schemas.communityTimeline && (
+                <Button variant="outlined" onClick={() => setDeleteConfirmOpen(true)}>
+                    {t('deleteTimeline')}
+                </Button>
+            )}
+            <Confirm
+                open={deleteConfirmOpen}
+                onClose={() => setDeleteConfirmOpen(false)}
+                title={t('confirmDeleteTimeline')}
+                description={t('confirmDeleteTimelineDescription')}
+                confirmText={t('deleteTimeline')}
+                onConfirm={() => {
+                    client.api.delete(props.timeline.uri).then(() => {
+                        client.knownCommunities.reload()
+                        props.onDeleted?.()
+                    })
+                }}
+            />
         </div>
     )
 }

@@ -14,8 +14,11 @@
         "reload": "リロード",
         "recoverTools": "復旧ツール",
         "whenToUseTools": "3回くらい再読み込みしても解決しないなら↓",
-        "softReset": "ログイン情報以外をリセットして再読み込み",
-        "hardReset": "すべてリセットする(ログイン情報も失われます)",
+    "softReset": "ログイン情報以外をリセットして再読み込み",
+    "backupRecoveryKeys": "ログイン情報をバックアップ",
+    "backupRequired": "すべてリセットする前にログイン情報をバックアップしてください。",
+    "confirmHardReset": "バックアップ済みのログイン情報を含め、このブラウザのConcrntデータをすべて削除します。よろしいですか？",
+    "hardReset": "すべてリセットする(ログイン情報も失われます)",
         "support": "Support",
         "supportDesc": "リロードしても解決しない場合、何か重大な問題が発生中かもしれません。以下のリンクから最新情報を確認できます。",
         "reportFailed": "レポートの送信に失敗しました(ヒント: このレポートは公式で提供しているもののみ機能します)",
@@ -43,6 +46,7 @@
             "lists": "リスト",
             "media": "メディア",
             "notifications": "通知",
+            "mute": "ミュート",
             "migration": "引っ越し",
             "v1import": "v1からの移行",
             "devTools": "開発者ツール",
@@ -64,6 +68,20 @@
         },
         "languageSettings": {
             "title": "言語"
+        },
+        "muteSettings": {
+            "title": "ミュート",
+            "muteBlockedUsers": "ブロック中のユーザーも非表示",
+            "muteBlockedUsersDesc": "ブロックしたユーザーの投稿を非表示にします。",
+            "users": "ユーザーミュート",
+            "words": "ワードミュート",
+            "timelines": "タイムラインミュート",
+            "noEntries": "まだありません",
+            "add": "追加",
+            "wordPlaceholder": "ミュートしたい単語",
+            "until": "{{date}} まで",
+            "indefinite": "無期限",
+            "reroutesOnly": "リルートのみ"
         },
         "themeSettings": {
             "title": "テーマ設定",
@@ -299,6 +317,10 @@
             "unblockConfirmTitle": "本当にこのユーザーのブロックを解除しますか？",
             "unblockConfirmDescription": "ブロックを解除すると、このユーザーはあなたに対しリプライを送ったり、リアクションをつけたりすることが出来るようになります。",
             "unblock": "ブロック解除",
+            "mute": "ミュート",
+            "unmute": "ミュート解除",
+            "hideReroutes": "リルートを非表示",
+            "showReroutes": "リルートを再表示",
             "noDescription": "説明はまだありません",
             "followsYou": "フォローされています",
             "following": "{{n}} フォロー",
@@ -311,7 +333,14 @@
             "createCommunity": "コミュニティを作成",
             "create": "作成",
             "name": "名前",
-            "description": "説明"
+            "description": "説明",
+            "addToList": "リストに追加",
+            "doNotAddToList": "追加しない",
+            "listUnavailable": "追加先のリストを利用できません",
+            "listLoadFailed": "リストを読み込めませんでした。もう一度お試しください。",
+            "retryAddToList": "リストへの追加を再試行",
+            "loading": "読み込み中...",
+            "retryLists": "リストを再読み込み"
         },
         "dev": {
             "developerMode": "開発者モード",
@@ -419,7 +448,9 @@
         "bluesky": {
             "title": "Bluesky設定",
             "loading": "読み込み中...",
-            "unavailable": "Blueskyブリッジとの通信に失敗しました。",
+        "unavailable": "Blueskyブリッジとの通信に失敗しました。",
+        "settingsLoadFailed": "保存済みのBluesky設定を読み込めませんでした。設定の変更は一時的に無効です。",
+        "settingsSaveFailed": "Bluesky設定を保存できませんでした。もう一度お試しください。",
             "enableIntro": "Bluesky連携を有効化しましょう",
             "enableDescription": "連携を有効化すると、Bluesky(AT Protocol)のネットワークと繋がることができます。自分が所有しているドメインが必要です。ドメインがそのままBlueskyのハンドルになります。",
             "handleLabel": "ハンドル(自分が所有するドメイン)",
@@ -477,7 +508,15 @@
             "createList": "リストを作成",
             "create": "作成",
             "listTitle": "タイトル",
-            "openSettings": "リスト設定"
+            "openSettings": "リスト設定",
+            "noCommunities": "コミュニティはありません",
+            "communitiesLoadFailed": "コミュニティを読み込めませんでした",
+            "retry": "再試行",
+            "communityUnavailable": "コミュニティを取得できません",
+            "pinOnCreate": "ピン留めする",
+            "creating": "作成中...",
+            "createFailed": "リストの作成に失敗しました。もう一度お試しください。",
+            "pinFailed": "リストは作成されましたが、ピン留めに失敗しました。リスト一覧から後でピン留めできます。"
         }
     },
     "components": {
@@ -494,6 +533,7 @@
             "cannotPostOffline": "オフラインのため投稿できません",
             "resetDestination": "投稿先をデフォルトに戻す",
             "dropToUpload": "ドロップしてアップロード",
+            "mediaEditTitle": "メディアのプレビューと設定",
             "flagTitle": "フラグ設定(任意)",
             "flagNone": "なし",
             "flagWarn": "注意",
@@ -551,11 +591,28 @@
             "confirmDelete": "本当にこの投稿を削除しますか？",
             "delete": "削除",
             "deletePost": "投稿を削除",
+            "muteAuthor": "作者をミュート",
             "report": "通報",
             "inspector": "インスペクター",
             "share": "シェア",
             "copyLink": "リンクをコピー",
-            "linkCopied": "コピーしました"
+            "linkCopied": "コピーしました",
+            "copySource": "ソースをコピー"
+        },
+        "muteNotice": {
+            "mutedByUser": "ユーザーミュートした投稿",
+            "mutedByWord": "ワードミュートした投稿",
+            "mutedByTimeline": "タイムラインミュートした投稿",
+            "show": "表示",
+            "unmute": "解除"
+        },
+        "muteDurationSelect": {
+            "title": "ミュートする期間",
+            "for1hour": "1時間",
+            "for1day": "24時間",
+            "for1week": "1週間",
+            "for1month": "1ヶ月",
+            "indefinite": "無期限"
         },
         "collapsibleBody": {
             "showMore": "もっと見る"
@@ -580,9 +637,10 @@
             "loading": "読み込み中..."
         },
         "renderError": {
-            "messageDeleted": "このメッセージは削除されました",
+            "messageUnavailable": "このメッセージを取得できませんでした",
             "serverOffline": "メッセージの取得先サーバーはオフラインです",
-            "cannotDisplay": "このメッセージは表示できません"
+            "cannotDisplay": "このメッセージは表示できません",
+            "retry": "再試行"
         },
         "replyAssociation": {
             "loading": "読み込み中..."
@@ -728,12 +786,22 @@
             "postProfile": "投稿元プロフィール",
             "addDestination": "投稿先を追加"
         },
+        "serverChip": {
+            "codeOfConduct": "コード・オブ・コンダクト",
+            "cocNotAvailable": "コード・オブ・コンダクトはありません。",
+            "termsOfService": "利用規約"
+        },
         "timelineSettings": {
             "schema": "スキーマ",
             "attributes": "属性",
             "share": "シェア",
             "copyLink": "リンクをコピー",
-            "linkCopied": "コピーしました"
+            "linkCopied": "コピーしました",
+            "muteTimeline": "このタイムラインをミュート",
+            "unmuteTimeline": "ミュートを解除",
+            "deleteTimeline": "コミュニティを削除",
+            "confirmDeleteTimeline": "このコミュニティを削除しますか？",
+            "confirmDeleteTimelineDescription": "この操作は取り消せません。"
         },
         "policyEditor": {
             "modeEditor": "ポリシーエディタ",
@@ -913,6 +981,7 @@
         },
         "qrSetup": {
             "scanWithApp": "ConcrntアプリでQRコードをスキャンしてください",
+            "scanWithAppHint": "スキャナーはアプリの設定 > ID管理にあります",
             "usePasskeyTitle": "パスキーを利用しますか？",
             "usePasskeyDescription": "パスキーがおすすめですが、一部の端末やブラウザでは利用できない場合があります。",
             "no": "いいえ",

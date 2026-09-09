@@ -33,8 +33,10 @@ import { Timeline } from './timeline'
 import { semantics } from './semantics'
 import { Schemas } from './schemas'
 import { CachedPromise } from './cachedPromise'
+import { isMuteEntryExpired, muteEntryId, normalizeMuteWord, type MuteEntry, type MuteType } from './mute'
 
 const cacheLifetime = 5 * 60 * 1000
+const partialMessageCacheLifetime = 5 * 1000
 interface Cache<T> {
     data: T
     expire: number
@@ -93,6 +95,10 @@ export class Client {
     // (キャッシュの中身はPromiseなのでinvalidate時に同期的にrerouteか判定できない)
     private rerouteTargets: Record<string, string> = {}
 
+    // blocks/mutesの読み込み失敗時、空リストを成功として恒久キャッシュしないための再試行タイマー
+    private blocksRetryTimer: ReturnType<typeof setTimeout> | null = null
+    private mutesRetryTimer: ReturnType<typeof setTimeout> | null = null
+
     knownCommunities = new CachedPromise<Timeline[]>(async () => {
         const results = await this.api.queryAll(
             {
@@ -149,19 +155,83 @@ export class Client {
     )
 
     blocks = new CachedPromise<string[]>(
-        async () => {
+        async (fresh) => {
+            // ゲストクライアントにはブロックはない。ミュート判定から毎メッセージで参照されるため、
+            // 読み込み失敗でもrejectさせない
+            if (!this.ccid) return []
             const prefix = semantics.blocks(this.ccid) + '/'
-            const results = await this.api.queryAll(
-                {
-                    prefix: prefix
-                },
-                undefined,
-                { cache: true }
-            )
+            const results = await this.api
+                .queryAll(
+                    {
+                        prefix: prefix
+                    },
+                    undefined,
+                    { cache: !fresh }
+                )
+                .catch((e) => {
+                    console.error('Failed to load blocks:', e)
+                    // 空リストのままにせず、少し置いて再読込する
+                    if (!this.blocksRetryTimer) {
+                        this.blocksRetryTimer = setTimeout(() => {
+                            this.blocksRetryTimer = null
+                            this.blocks.reload()
+                        }, 30 * 1000)
+                    }
+                    // refresh失敗時はCachedPromiseに既存値を維持させる。
+                    // 初回だけはタイムライン全体を止めないようfail-openで空配列を返す。
+                    if (fresh) throw e
+                    return []
+                })
             return results.map((sd) => sd.cckv.substring(prefix.length))
         },
         (a, b) => JSON.stringify(a) === JSON.stringify(b)
     )
+
+    mutes = new CachedPromise<MuteEntry[]>(async (fresh) => {
+        // ゲストクライアントにはミュートはない。また、読み込み失敗でタイムライン全体を
+        // 巻き込まないよう、このPromiseはrejectさせない
+        if (!this.ccid) return []
+        const prefix = semantics.mutes(this.ccid) + '/'
+        const results = await this.api
+            .queryAll(
+                {
+                    prefix: prefix,
+                    schema: Schemas.mute
+                },
+                undefined,
+                { cache: !fresh }
+            )
+            .catch((e) => {
+                console.error('Failed to load mutes:', e)
+                // 空リストのままにせず、少し置いて再読込する
+                if (!this.mutesRetryTimer) {
+                    this.mutesRetryTimer = setTimeout(() => {
+                        this.mutesRetryTimer = null
+                        this.mutes.reload()
+                    }, 30 * 1000)
+                }
+                // refresh失敗時は既存のmuteを消さず、初回だけfail-openにする。
+                if (fresh) throw e
+                return []
+            })
+        const entries: MuteEntry[] = []
+        for (const sd of results) {
+            let entry: MuteEntry
+            try {
+                entry = (JSON.parse(sd.document) as Document<MuteEntry>).value
+            } catch (_) {
+                continue
+            }
+            if (typeof entry?.type !== 'string' || typeof entry?.target !== 'string') continue
+            if (isMuteEntryExpired(entry)) {
+                // 期限切れは読み込みついでに掃除する
+                this.api.delete(sd.cckv).catch(() => {})
+                continue
+            }
+            entries.push(entry)
+        }
+        return entries
+    })
 
     pinnedLists = new CachedPromise<PinnedListItemClass[]>(
         async (fresh) => {
@@ -497,6 +567,7 @@ export class Client {
             this.acknowledging.refresh(),
             this.acknowledgers.refresh(),
             this.blocks.refresh(),
+            this.mutes.refresh(),
             this.notificationCounter.refresh()
         ])
         const pins = await this.pinnedLists.value().catch((): PinnedListItemClass[] => [])
@@ -527,6 +598,35 @@ export class Client {
         const blockUri = semantics.block(this.ccid, target)
         await this.api.delete(blockUri)
         this.blocks.reload()
+    }
+
+    async mute(entry: MuteEntry): Promise<void> {
+        const normalized: MuteEntry =
+            entry.type === 'word' ? { ...entry, target: normalizeMuteWord(entry.target) } : entry
+        if (normalized.target.length === 0) return
+        const document: Document<MuteEntry> = {
+            kind: 'record',
+            key: semantics.mute(this.ccid, muteEntryId(normalized.type, normalized.target)),
+            schema: Schemas.mute,
+            value: normalized,
+            author: this.ccid,
+            createdAt: new Date(),
+            // ミュートリストは他者から読めてはいけない
+            policy: {
+                entries: [
+                    {
+                        url: 'https://policy.concrnt.world/private.json'
+                    }
+                ]
+            }
+        }
+        await this.api.commit(document)
+        this.mutes.reload()
+    }
+
+    async unmute(type: MuteType, target: string): Promise<void> {
+        await this.api.delete(semantics.mute(this.ccid, muteEntryId(type, target)))
+        this.mutes.reload()
     }
 
     async requestReadAccess(
@@ -599,7 +699,9 @@ export class Client {
     }
 
     getMessage<T>(uri: string, hint?: string): Promise<Message<T> | null> {
-        const cached = this.messageCache[uri]
+        // hintなしの失敗結果がhint付き呼び出しを巻き込まないよう、hint込みでキャッシュを分ける
+        const cacheKey = `${uri}\0${hint ?? ''}`
+        const cached = this.messageCache[cacheKey]
 
         if (cached && cached.expire > Date.now()) {
             return cached.data
@@ -611,19 +713,37 @@ export class Client {
             }
             return m
         })
-        this.messageCache[uri] = {
+        this.messageCache[cacheKey] = {
             data: msg,
             expire: Date.now() + cacheLifetime
         }
+        // 失敗したPromiseを5分間保持すると、再試行しても同じrejectが返り続ける。
+        // 成功結果だけをTTLキャッシュとして残し、失敗は直ちに再取得可能にする。
+        void msg
+            .then((message) => {
+                // 本文だけ取得できた部分成功は、React Suspenseが同じfulfilled promiseで
+                // 再開できるだけの短時間は保持し、その後の再描画で付帯APIを再試行する。
+                if (message && !message.ownAssociationsLoaded && this.messageCache[cacheKey]?.data === msg) {
+                    this.messageCache[cacheKey].expire = Date.now() + partialMessageCacheLifetime
+                }
+            })
+            .catch(() => {
+                if (this.messageCache[cacheKey]?.data === msg) {
+                    delete this.messageCache[cacheKey]
+                }
+            })
         return msg
     }
 
     // キャッシュ済みの結果(存在しなかった場合のnull含む)を破棄して次回getMessageを再取得させる。
     // rerouteメッセージの場合はネストされたMessageContainerが表示するtargetも古いので巻き込んで破棄する
     invalidateMessage(uri: string): void {
-        delete this.messageCache[uri]
         const target = this.rerouteTargets[uri]
-        if (target) delete this.messageCache[target]
+        for (const key of Object.keys(this.messageCache)) {
+            if (key.startsWith(`${uri}\0`) || (target && key.startsWith(`${target}\0`))) {
+                delete this.messageCache[key]
+            }
+        }
     }
 
     async getUser(id: CCID, hint?: string): Promise<User | null> {
@@ -671,20 +791,26 @@ export class Client {
         this.acknowledgingUsers.reload()
     }
 
-    async getAcknowledging(ccid: string): Promise<Document<Acknowledge>[]> {
+    // ack状態は片側ずつ別サーバーが持つ(CIP-10): from側はそのauthorのサーバー、
+    // to側はそのassociate ownerのサーバー。閲覧者のホームではなく対象ユーザーの
+    // ドメインに問い合わせる
+    private async domainOf(ccid: string, hint?: string): Promise<FQDN> {
+        if (ccid === this.ccid) return this.server.domain
+        const entity = await this.api.getEntity(ccid, hint)
+        return entity.value.domain
+    }
+
+    async getAcknowledging(ccid: string, hint?: string): Promise<Document<Acknowledge>[]> {
+        const domain = await this.domainOf(ccid, hint)
         const collected = new Map<string, SignedDocument>()
         let cursor: string | undefined
         while (true) {
-            const page = await this.api.requestConcrntApi<QueryResult>(
-                this.server.domain,
-                'net.concrnt.core.acknowledges',
-                {
-                    from: ccid,
-                    schema: Schemas.followAck,
-                    limit: '100',
-                    ...(cursor ? { until: cursor } : {})
-                }
-            )
+            const page = await this.api.requestConcrntApi<QueryResult>(domain, 'net.concrnt.core.acknowledges', {
+                from: ccid,
+                schema: Schemas.followAck,
+                limit: '100',
+                ...(cursor ? { until: cursor } : {})
+            })
             for (const sd of page.items) collected.set(sd.ccfs, sd)
             if (!page.next || page.next === cursor) break
             cursor = page.next
@@ -692,20 +818,17 @@ export class Client {
         return Array.from(collected.values()).map((sd) => JSON.parse(sd.document))
     }
 
-    async getAcknowledgers(ccid: string): Promise<Document<Acknowledge>[]> {
+    async getAcknowledgers(ccid: string, hint?: string): Promise<Document<Acknowledge>[]> {
+        const domain = await this.domainOf(ccid, hint)
         const collected = new Map<string, SignedDocument>()
         let cursor: string | undefined
         while (true) {
-            const page = await this.api.requestConcrntApi<QueryResult>(
-                this.server.domain,
-                'net.concrnt.core.acknowledges',
-                {
-                    to: ccid,
-                    schema: Schemas.followAck,
-                    limit: '100',
-                    ...(cursor ? { until: cursor } : {})
-                }
-            )
+            const page = await this.api.requestConcrntApi<QueryResult>(domain, 'net.concrnt.core.acknowledges', {
+                to: ccid,
+                schema: Schemas.followAck,
+                limit: '100',
+                ...(cursor ? { until: cursor } : {})
+            })
             for (const sd of page.items) collected.set(sd.ccfs, sd)
             if (!page.next || page.next === cursor) break
             cursor = page.next
