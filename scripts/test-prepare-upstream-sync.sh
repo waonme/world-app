@@ -37,7 +37,8 @@ fi
 
 if [ "${1:-}" = -c ] && [ "${2:-}" = protocol.file.allow=never ] &&
   [ "${3:-}" = fetch ] && [ "${4:-}" = --no-tags ] &&
-  [ "${5:-}" = --no-recurse-submodules ] && [ "${6:-}" = --prune ]; then
+  [ "${5:-}" = --no-recurse-submodules ] && [ "${6:-}" = --no-write-fetch-head ] &&
+  [ "${7:-}" = --no-prune ]; then
   [ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] || { echo "system Git config was not disabled" >&2; exit 3; }
   [ "${GIT_ATTR_NOSYSTEM:-}" = 1 ] || { echo "system Git attributes were not disabled" >&2; exit 3; }
   [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] || { echo "global Git config was not disabled" >&2; exit 3; }
@@ -58,13 +59,21 @@ if [ "${1:-}" = -c ] && [ "${2:-}" = protocol.file.allow=never ] &&
   [ -z "${HTTPS_PROXY+x}" ] || { echo "HTTPS proxy override was not removed" >&2; exit 3; }
   [ -z "${https_proxy+x}" ] || { echo "lowercase HTTPS proxy override was not removed" >&2; exit 3; }
   [ -z "${CURL_CA_BUNDLE+x}" ] || { echo "curl CA override was not removed" >&2; exit 3; }
-  case "${7:-}" in
+  case "${8:-}" in
     https://github.com/waonme/world-app.git) transport_repository=$WORLD_APP_TEST_ORIGIN_REPOSITORY ;;
     https://github.com/concrnt/world-app.git) transport_repository=$WORLD_APP_TEST_UPSTREAM_REPOSITORY ;;
-    *) echo "unexpected canonical fetch URL: ${7:-<missing>}" >&2; exit 2 ;;
+    *) echo "unexpected canonical fetch URL: ${8:-<missing>}" >&2; exit 2 ;;
   esac
-  exec "$WORLD_APP_TEST_REAL_GIT" -c protocol.file.allow=always fetch --no-tags --prune \
-    "$transport_repository" "${8:?missing fetch refspec}"
+  if [ "${WORLD_APP_TEST_MUTATE_DURING_FETCH_URL:-}" = "${8:-}" ]; then
+    "$WORLD_APP_TEST_REAL_GIT" -c protocol.file.allow=always fetch --no-tags \
+      --no-write-fetch-head --no-prune "$transport_repository" "${9:?missing fetch refspec}"
+    "$WORLD_APP_TEST_REAL_GIT" update-ref \
+      "${WORLD_APP_TEST_MUTATED_REF:?missing mutated ref}" \
+      "${WORLD_APP_TEST_MUTATED_REF_SHA:?missing mutated ref SHA}"
+    exit "${WORLD_APP_TEST_MUTATED_FETCH_STATUS:-0}"
+  fi
+  exec "$WORLD_APP_TEST_REAL_GIT" -c protocol.file.allow=always fetch --no-tags \
+    --no-write-fetch-head --no-prune "$transport_repository" "${9:?missing fetch refspec}"
 fi
 
 if [ -n "${WORLD_APP_TEST_CAPTURED_UPSTREAM_SHA:-}" ] &&
@@ -285,6 +294,114 @@ if (
   fail "a detached HEAD must be rejected before synchronization"
 fi
 git -C "$success_work" switch -q main
+
+# A remote-tracking ref can itself be a symbolic ref. Without a pre-fetch
+# guard, the forced destination refspec follows it and can rewrite the checked
+# out production branch before the local-vs-origin comparison is captured.
+symbolic_origin_work=$(create_sync_fixture symbolic-origin-ref merge)
+symbolic_origin_repository=$(git -C "$symbolic_origin_work" config --local --get worldAppTest.originRepository)
+symbolic_origin_advancer="$task_test_dir/symbolic-origin-ref/advancer"
+git clone -q "$symbolic_origin_repository" "$symbolic_origin_advancer"
+git -C "$symbolic_origin_advancer" config user.email test@example.invalid
+git -C "$symbolic_origin_advancer" config user.name "World App Sync Test"
+printf 'advanced origin\n' > "$symbolic_origin_advancer/origin-advance.txt"
+git -C "$symbolic_origin_advancer" add origin-advance.txt
+git -C "$symbolic_origin_advancer" commit -q -m advanced-origin
+git -C "$symbolic_origin_advancer" push -q origin main
+symbolic_origin_main=$(git -C "$symbolic_origin_work" rev-parse refs/heads/main)
+git -C "$symbolic_origin_work" update-ref -d refs/remotes/origin/main
+git -C "$symbolic_origin_work" symbolic-ref refs/remotes/origin/main refs/heads/main
+if (
+  cd "$symbolic_origin_work"
+  run_prepare_with_local_remotes
+) >/dev/null 2>&1; then
+  fail "a symbolic origin/main fetch destination must be rejected"
+fi
+[ "$(git -C "$symbolic_origin_work" rev-parse refs/heads/main)" = "$symbolic_origin_main" ] ||
+  fail "a rejected symbolic origin/main destination must not move local main"
+[ "$(git -C "$symbolic_origin_work" symbolic-ref --no-recurse refs/remotes/origin/main)" = refs/heads/main ] ||
+  fail "the symbolic origin/main attack fixture must remain intact"
+[ "$(git -C "$symbolic_origin_work" branch --show-current)" = main ] ||
+  fail "a rejected symbolic origin/main destination must not leave main"
+
+symbolic_upstream_work=$(create_sync_fixture symbolic-upstream-ref merge)
+symbolic_upstream_main=$(git -C "$symbolic_upstream_work" rev-parse refs/heads/main)
+git -C "$symbolic_upstream_work" symbolic-ref refs/remotes/upstream/main refs/heads/main
+if (
+  cd "$symbolic_upstream_work"
+  run_prepare_with_local_remotes
+) >/dev/null 2>&1; then
+  fail "a symbolic upstream/main fetch destination must be rejected"
+fi
+[ "$(git -C "$symbolic_upstream_work" rev-parse refs/heads/main)" = "$symbolic_upstream_main" ] ||
+  fail "a rejected symbolic upstream/main destination must not move local main"
+[ "$(git -C "$symbolic_upstream_work" symbolic-ref --no-recurse refs/remotes/upstream/main)" = refs/heads/main ] ||
+  fail "the symbolic upstream/main attack fixture must remain intact"
+[ "$(git -C "$symbolic_upstream_work" branch --show-current)" = main ] ||
+  fail "a rejected symbolic upstream/main destination must not leave main"
+
+# A filesystem symlink is not reported as a Git symbolic ref when its target
+# contains a direct object ID. Reject every loose-ref path component as well.
+filesystem_ref_work=$(create_sync_fixture filesystem-ref-symlink merge)
+filesystem_ref_main=$(git -C "$filesystem_ref_work" rev-parse refs/heads/main)
+filesystem_ref_git_dir=$(git -C "$filesystem_ref_work" rev-parse --path-format=absolute --git-common-dir)
+mkdir -p "$filesystem_ref_git_dir/refs/remotes/upstream"
+ln -s ../../heads/main "$filesystem_ref_git_dir/refs/remotes/upstream/main"
+if (
+  cd "$filesystem_ref_work"
+  run_prepare_with_local_remotes
+) >/dev/null 2>&1; then
+  fail "a filesystem-symlink upstream/main fetch destination must be rejected"
+fi
+[ "$(git -C "$filesystem_ref_work" rev-parse refs/heads/main)" = "$filesystem_ref_main" ] ||
+  fail "a rejected filesystem-symlink destination must not move local main"
+[ -L "$filesystem_ref_git_dir/refs/remotes/upstream/main" ] ||
+  fail "the filesystem-symlink attack fixture must remain intact"
+[ "$(git -C "$filesystem_ref_work" branch --show-current)" = main ] ||
+  fail "a rejected filesystem-symlink destination must not leave main"
+
+filesystem_parent_work=$(create_sync_fixture filesystem-parent-symlink merge)
+filesystem_parent_main=$(git -C "$filesystem_parent_work" rev-parse refs/heads/main)
+filesystem_parent_git_dir=$(git -C "$filesystem_parent_work" rev-parse --path-format=absolute --git-common-dir)
+mkdir -p "$filesystem_parent_git_dir/refs/remotes"
+ln -s ../heads "$filesystem_parent_git_dir/refs/remotes/upstream"
+if (
+  cd "$filesystem_parent_work"
+  run_prepare_with_local_remotes
+) >/dev/null 2>&1; then
+  fail "a filesystem-symlink fetch destination parent must be rejected"
+fi
+[ "$(git -C "$filesystem_parent_work" rev-parse refs/heads/main)" = "$filesystem_parent_main" ] ||
+  fail "a rejected filesystem-symlink parent must not move local main"
+[ -L "$filesystem_parent_git_dir/refs/remotes/upstream" ] ||
+  fail "the filesystem-symlink parent attack fixture must remain intact"
+[ "$(git -C "$filesystem_parent_work" branch --show-current)" = main ] ||
+  fail "a rejected filesystem-symlink parent must not leave main"
+
+# The fetch wrapper must verify ref invariants even when the transport reports
+# failure. This hook simulates a concurrent/untrusted writer changing another
+# ref just before a failed fetch returns.
+ref_snapshot_work=$(create_sync_fixture failed-fetch-ref-mutation merge)
+ref_snapshot_main=$(git -C "$ref_snapshot_work" rev-parse refs/heads/main)
+ref_snapshot_output="$task_test_dir/failed-fetch-ref-mutation/output"
+if (
+  cd "$ref_snapshot_work"
+  export WORLD_APP_TEST_MUTATE_DURING_FETCH_URL=https://github.com/waonme/world-app.git
+  export WORLD_APP_TEST_MUTATED_REF=refs/heads/unexpected-fetch-mutation
+  export WORLD_APP_TEST_MUTATED_REF_SHA="$ref_snapshot_main"
+  export WORLD_APP_TEST_MUTATED_FETCH_STATUS=42
+  run_prepare_with_local_remotes
+) >"$ref_snapshot_output" 2>&1; then
+  fail "a failed fetch that mutates another ref must be rejected"
+fi
+grep -Fq "canonical fetch changed a local ref outside refs/remotes/origin/main" "$ref_snapshot_output" ||
+  fail "failed-fetch ref mutation must be detected by the post-fetch snapshot"
+[ "$(git -C "$ref_snapshot_work" rev-parse refs/heads/main)" = "$ref_snapshot_main" ] ||
+  fail "failed-fetch ref mutation detection must preserve local main"
+git -C "$ref_snapshot_work" show-ref --verify --quiet refs/heads/unexpected-fetch-mutation ||
+  fail "the failed-fetch mutation fixture did not change its held-out ref"
+[ "$(git -C "$ref_snapshot_work" branch --show-current)" = main ] ||
+  fail "failed-fetch ref mutation detection must not leave main"
 
 (
   cd "$success_work"

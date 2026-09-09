@@ -240,6 +240,93 @@ require_no_hidden_index_entries() {
   rm -f -- "$index_listing"
 }
 
+require_direct_ref() {
+  local reference=$1
+  local description=$2
+  local symbolic_target
+  local symbolic_status
+
+  if symbolic_target=$(run_trusted_git symbolic-ref --quiet --no-recurse "$reference" 2>/dev/null); then
+    echo "$description must be a direct ref, not a symbolic ref to $symbolic_target" >&2
+    return 1
+  else
+    symbolic_status=$?
+  fi
+  if [ "$symbolic_status" -ne 1 ]; then
+    echo "failed to inspect whether $description is symbolic" >&2
+    return 1
+  fi
+}
+
+require_ref_path_without_symlinks() {
+  local reference=$1
+  local description=$2
+  local common_git_dir
+  local relative_path
+  local current_path
+  local component
+  local saved_ifs
+
+  common_git_dir=$(run_trusted_git rev-parse --path-format=absolute --git-common-dir) || return 1
+  if ! run_trusted_git check-ref-format "$reference"; then
+    echo "$description has an invalid ref name: $reference" >&2
+    return 1
+  fi
+  relative_path=$reference
+  current_path=$common_git_dir
+  saved_ifs=$IFS
+  IFS=/
+  for component in $relative_path; do
+    current_path="$current_path/$component"
+    if [ -L "$current_path" ]; then
+      IFS=$saved_ifs
+      echo "$description uses a symbolic filesystem path: $current_path" >&2
+      return 1
+    fi
+  done
+  IFS=$saved_ifs
+}
+
+snapshot_refs_except() {
+  local excluded_reference=$1
+  local refs
+  local ref_line
+
+  refs=$(run_trusted_git for-each-ref --format='%(refname):%(objectname):%(symref)') || return 1
+  while IFS= read -r ref_line; do
+    [ -n "$ref_line" ] || continue
+    case "$ref_line" in
+      "$excluded_reference":*) ;;
+      *) printf '%s\n' "$ref_line" ;;
+    esac
+  done <<EOF_REFS
+$refs
+EOF_REFS
+}
+
+require_checked_out_main() {
+  local head_target
+  local head_sha
+  local main_sha
+
+  if ! head_target=$(run_trusted_git symbolic-ref --quiet --no-recurse HEAD); then
+    echo "upstream synchronization requires a symbolic HEAD at refs/heads/main" >&2
+    return 1
+  fi
+  if [ "$head_target" != refs/heads/main ]; then
+    echo "run this script from local main (current ref: $head_target)" >&2
+    return 1
+  fi
+  require_direct_ref refs/heads/main "local main" || return 1
+  require_ref_path_without_symlinks refs/heads/main "local main" || return 1
+  head_sha=$(run_trusted_git rev-parse 'HEAD^{commit}') || return 1
+  main_sha=$(run_trusted_git rev-parse 'refs/heads/main^{commit}') || return 1
+  if [ "$head_sha" != "$main_sha" ]; then
+    echo "HEAD and refs/heads/main do not resolve to the same commit" >&2
+    return 1
+  fi
+}
+
 require_git_attribute_source_support() {
   local captured_main=$1
   local impossible_source=refs/world-app/attribute-source-probe-must-not-exist
@@ -261,10 +348,60 @@ require_git_attribute_source_support() {
 fetch_canonical_main() {
   local remote_name=$1
   local canonical_url=$2
+  local destination_ref
+  local head_target
+  local head_sha
+  local refs_before
+  local fetch_status=0
+  local head_target_after
+  local head_sha_after
+  local refs_after
+
+  case "$remote_name" in
+    origin | upstream) ;;
+    *)
+      echo "unsupported canonical fetch destination: $remote_name" >&2
+      return 1
+      ;;
+  esac
+  destination_ref="refs/remotes/$remote_name/main"
 
   require_no_local_url_rewrites || return
-  run_trusted_git -c protocol.file.allow=never fetch --no-tags --no-recurse-submodules --prune "$canonical_url" \
-      "+refs/heads/main:refs/remotes/$remote_name/main"
+  require_direct_ref "$destination_ref" "$remote_name/main fetch destination" || return
+  require_ref_path_without_symlinks "$destination_ref" "$remote_name/main fetch destination" || return
+  if ! head_target=$(run_trusted_git symbolic-ref --quiet --no-recurse HEAD); then
+    echo "canonical fetch requires a checked-out direct branch" >&2
+    return 1
+  fi
+  if [ "$head_target" = "$destination_ref" ]; then
+    echo "canonical fetch destination must not be the checked-out branch" >&2
+    return 1
+  fi
+  require_direct_ref "$head_target" "checked-out branch" || return
+  require_ref_path_without_symlinks "$head_target" "checked-out branch" || return
+  head_sha=$(run_trusted_git rev-parse 'HEAD^{commit}') || return
+  refs_before=$(snapshot_refs_except "$destination_ref") || return
+
+  run_trusted_git -c protocol.file.allow=never fetch --no-tags --no-recurse-submodules \
+    --no-write-fetch-head --no-prune "$canonical_url" \
+    "+refs/heads/main:$destination_ref" || fetch_status=$?
+
+  require_direct_ref "$destination_ref" "$remote_name/main fetch destination" || return 1
+  require_ref_path_without_symlinks "$destination_ref" "$remote_name/main fetch destination" || return 1
+  if ! head_target_after=$(run_trusted_git symbolic-ref --quiet --no-recurse HEAD); then
+    echo "HEAD stopped naming the checked-out branch during canonical fetch" >&2
+    return 1
+  fi
+  head_sha_after=$(run_trusted_git rev-parse 'HEAD^{commit}') || return 1
+  refs_after=$(snapshot_refs_except "$destination_ref") || return 1
+  if [ "$head_target_after" != "$head_target" ] || [ "$head_sha_after" != "$head_sha" ] ||
+    [ "$refs_after" != "$refs_before" ]; then
+    echo "canonical fetch changed a local ref outside $destination_ref; refusing synchronization" >&2
+    return 1
+  fi
+  if [ "$fetch_status" -ne 0 ]; then
+    return "$fetch_status"
+  fi
 }
 
 prepare_upstream_sync() {
@@ -286,11 +423,17 @@ prepare_upstream_sync() {
   fi
 
   local current_branch
+  local origin_main
+  local local_main
+  local upstream_sha
+  local upstream_short
   current_branch=$(run_trusted_git branch --show-current)
   if [ "$current_branch" != "main" ]; then
     echo "run this script from local main (current: ${current_branch:-detached HEAD})" >&2
     return 1
   fi
+  require_checked_out_main || return
+  local_main=$(run_trusted_git rev-parse 'refs/heads/main^{commit}') || return
 
   require_remote_repository origin waonme/world-app || return
 
@@ -299,15 +442,14 @@ prepare_upstream_sync() {
   fi
   require_remote_repository upstream concrnt/world-app || return
 
-  local origin_main
-  local local_main
-  local upstream_sha
-  local upstream_short
   fetch_canonical_main origin https://github.com/waonme/world-app.git || return
   require_no_local_object_indirection "$repository_root" || return
   require_no_hidden_index_entries || return
   origin_main=$(run_trusted_git rev-parse 'origin/main^{commit}') || return
-  local_main=$(run_trusted_git rev-parse HEAD) || return
+  if [ "$(run_trusted_git rev-parse 'refs/heads/main^{commit}')" != "$local_main" ]; then
+    echo "local main changed while fetching canonical origin" >&2
+    return 1
+  fi
   if [ "$local_main" != "$origin_main" ]; then
     echo "local main must exactly match origin/main before an upstream integration" >&2
     return 1
@@ -317,6 +459,10 @@ prepare_upstream_sync() {
   fetch_canonical_main upstream https://github.com/concrnt/world-app.git || return
   require_no_local_object_indirection "$repository_root" || return
   require_no_hidden_index_entries || return
+  if [ "$(run_trusted_git rev-parse 'refs/heads/main^{commit}')" != "$local_main" ]; then
+    echo "local main changed while fetching canonical upstream" >&2
+    return 1
+  fi
   upstream_sha=$(run_trusted_git rev-parse 'upstream/main^{commit}') || return
   upstream_short=$(run_trusted_git rev-parse --short=12 "$upstream_sha") || return
 

@@ -125,6 +125,10 @@ require_match "require_no_local_url_rewrites" scripts/prepare-upstream-sync.sh
 require_match "require_safe_invocation_config" scripts/prepare-upstream-sync.sh
 require_match "require_no_local_object_indirection" scripts/prepare-upstream-sync.sh
 require_match "require_no_hidden_index_entries" scripts/prepare-upstream-sync.sh
+require_match "require_direct_ref" scripts/prepare-upstream-sync.sh
+require_match "require_ref_path_without_symlinks" scripts/prepare-upstream-sync.sh
+require_match "snapshot_refs_except" scripts/prepare-upstream-sync.sh
+require_match "require_checked_out_main" scripts/prepare-upstream-sync.sh
 require_match "require_git_attribute_source_support" scripts/prepare-upstream-sync.sh
 require_match "GIT_NO_REPLACE_OBJECTS=1" scripts/prepare-upstream-sync.sh
 require_match "core.attributesFile=/dev/null" scripts/prepare-upstream-sync.sh
@@ -132,11 +136,17 @@ require_match '|http\..*|' scripts/prepare-upstream-sync.sh
 require_match '|diff\..*|' scripts/prepare-upstream-sync.sh
 require_match "-u GIT_SSL_NO_VERIFY" scripts/prepare-upstream-sync.sh
 require_match "-u HTTPS_PROXY" scripts/prepare-upstream-sync.sh
+require_match "--no-write-fetch-head --no-prune" scripts/prepare-upstream-sync.sh
 require_match 'GIT_ATTR_SOURCE=$attribute_source' scripts/prepare-upstream-sync.sh
 require_match "fetch_canonical_main origin https://github.com/waonme/world-app.git" scripts/prepare-upstream-sync.sh
 require_match "fetch_canonical_main upstream https://github.com/concrnt/world-app.git" scripts/prepare-upstream-sync.sh
 require_match 'run_trusted_merge_git "$local_main" merge --no-ff "$upstream_sha"' scripts/prepare-upstream-sync.sh
 require_match 'if [ "$merge_parents" != "$local_main $upstream_sha" ]' scripts/prepare-upstream-sync.sh
+require_match "symbolic-origin-ref" scripts/test-prepare-upstream-sync.sh
+require_match "symbolic-upstream-ref" scripts/test-prepare-upstream-sync.sh
+require_match "filesystem-ref-symlink" scripts/test-prepare-upstream-sync.sh
+require_match "filesystem-parent-symlink" scripts/test-prepare-upstream-sync.sh
+require_match "failed-fetch-ref-mutation" scripts/test-prepare-upstream-sync.sh
 for path in .github/workflows/build-check.yaml ops/vps-deployer/deploy.sh; do
   require_match "ops/vps-deployer/test-deploy.sh" "$path"
   require_match "scripts/test-prepare-upstream-sync.sh" "$path"

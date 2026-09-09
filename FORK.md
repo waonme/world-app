@@ -43,7 +43,7 @@ F-001 の表示境界は Concrnt message envelope の `author` / `body` / `distr
 
 ## upstream 取り込み手順
 
-1. clean なローカル `main` で `scripts/prepare-upstream-sync.sh` を実行します。スクリプトは root 解決前の `core.worktree`、`origin/main` と一致しない状態、lookalike remote、local/include経由のURL rewrite、local HTTP/TLS transport、replace ref、graft、shallow/alternate object store、hidden index flags、local diff / merge driver / rerere / merge options を拒否します。proxy・CA環境を除去し、merge時のattributesを取得済み`main`のtreeへ固定してsystem/user-global attributesを無効化したうえで、正規GitHub URLから取得した固定 upstream SHA と正確な2親を持つ統合ブランチを作ります。
+1. clean なローカル `main` で `scripts/prepare-upstream-sync.sh` を実行します。スクリプトは root 解決前の `core.worktree`、`origin/main` と一致しない状態、lookalike remote、local/include経由のURL rewrite、local HTTP/TLS transport、replace ref、graft、shallow/alternate object store、hidden index flags、local diff / merge driver / rerere / merge options を拒否します。さらに fetch 先の remote-tracking ref が Git symbolic ref または filesystem symlink なら fetch 前に拒否し、意図した1 ref以外の全refと checked-out HEAD が各 fetch の成功・失敗をまたいで不変であることを照合します。proxy・CA環境を除去し、merge時のattributesを取得済み`main`のtreeへ固定してsystem/user-global attributesを無効化したうえで、正規GitHub URLから取得した固定 upstream SHA と正確な2親を持つ統合ブランチを作ります。
 2. 競合をこの台帳の ID 単位で解消します。新しい upstream が同等の挙動を持つ場合は、古い実装ではなく新しい実装を採用し、台帳を更新します。
 3. 次を実行します。
 
